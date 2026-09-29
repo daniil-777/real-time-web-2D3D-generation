@@ -222,8 +222,8 @@
    ]
   }
  },
- "n_anchors": 588,
- "anchor_iou_mean": 0.9382153033804731,
+ "n_anchors": 582,
+ "anchor_iou_mean": 0.9378390034364255,
  "decoder_params": 1311108,
  "bytes": {
   "decoder.bin.gz": 1164127,
@@ -244,5 +244,37 @@
   "sources.json": 128617,
   "meta.json": 100814
  },
- "first_load_bytes": 1505460
+ "first_load_bytes": 1505460,
+ "dropped_anchors": [
+  {
+   "uid": "b2cf1d7d284f46e4b90def4889c4da24",
+   "cls": "bicycle",
+   "name": "2D Bike | Downloadable for first 10 users"
+  },
+  {
+   "uid": "73a36cae82004672a024f83d409cf334",
+   "cls": "race_car",
+   "name": "Lamborghini Huracan GT3 - Squadra Corse SDC"
+  },
+  {
+   "uid": "5ea65e6a2f0a4ba0a0e72b9f5ad36139",
+   "cls": "wolf",
+   "name": "Abstact Painted Wolf"
+  },
+  {
+   "uid": "8f0b5e8e255c43229f853565feb57970",
+   "cls": "cathedral",
+   "name": "Piazza del Duomo v8"
+  },
+  {
+   "uid": "391b1ce9e5914e328be9127e77c6d5a0",
+   "cls": "classic_car",
+   "name": "Retro Delorean"
+  },
+  {
+   "uid": "b1c0265a579a4d39b84406ca49c7b5b2",
+   "cls": "dolphin",
+   "name": "CUTE SHARK"
+  }
+ ]
 }
