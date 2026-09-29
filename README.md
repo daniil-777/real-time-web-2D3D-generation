@@ -21,6 +21,17 @@ Two neural networks that run entirely on your device (TensorFlow.js with WebGPU 
 
 Everything is static: any static file host serves it as it is.
 
+## Flags (3D)
+
+| URL | effect |
+|---|---|
+| `?spin` or `?spin=1` | the object always rotates — also while paused and with the system's "reduce motion" on (the **spin** button and the `r` key toggle it) |
+| `?spin=2` | rotates twice as fast (any rate from 0 to 8) |
+| `?spin=0` | never rotates |
+
+The site passes its URL on to the app, so https://daniil-777.github.io/real-time-web-2D3D-generation/?spin=1#objects works.
+The frame rate is always shown in the top-right corner of the 3D view.
+
 ## Credits and licences
 
 - 3D shapes: [Objaverse](https://objaverse.allenai.org) models under CC-BY / CC0, re-encoded by the network — authors and

@@ -32,6 +32,14 @@
   #hint { position: absolute; left: 10px; bottom: 8px; color: var(--muted); font-size: 11px; transition: opacity 1.2s; pointer-events: none; }
   #dbg { position: absolute; left: 8px; top: 8px; margin: 0; padding: 8px 10px; font: 11px/1.45 ui-monospace, Menlo, monospace;
          color: #e8e8e8; background: rgba(20, 20, 24, 0.82); border-radius: 6px; white-space: pre-wrap; z-index: 2; pointer-events: none; }
+  #fpsBadge { position: absolute; top: 10px; right: 10px; z-index: 2; display: flex; align-items: center; gap: 6px; padding: 4px 10px 4px 8px;
+              border-radius: 980px; font: 500 12px/1.2 system-ui, -apple-system, sans-serif; font-variant-numeric: tabular-nums; color: #1d1d1f;
+              background: rgba(255, 255, 255, 0.72); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+              box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 4px 14px rgba(0, 0, 0, 0.08); pointer-events: none; }
+  #fpsBadge::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #34c759; }
+  #fpsBadge[data-q=ok]::before { background: #ff9f0a; }
+  #fpsBadge[data-q=low]::before { background: #ff3b30; }
+  #fpsBadge[hidden] { display: none; }
   #label { font-size: 20px; letter-spacing: .06em; min-height: 1.4em; text-transform: lowercase; text-align: center; }
   #progress { width: min(360px, 70vw); height: 1px; background: var(--line); margin-top: -6px; }
   #progress i { display: block; height: 1px; width: 0; background: var(--ink); }
@@ -200,6 +208,7 @@ html :focus-visible { outline: 3px solid rgba(0, 113, 227, 0.5); outline-offset:
     <div id="msg">loading…</div>
     <div id="hint">drag to orbit · scroll to zoom · click the map to travel</div>
     <pre id="dbg" hidden></pre>
+    <div id="fpsBadge" hidden aria-hidden="true"></div>
   </div>
   <div id="label"></div>
   <div id="progress" aria-hidden="true"><i></i></div>
@@ -209,6 +218,7 @@ html :focus-visible { outline: 3px solid rgba(0, 113, 227, 0.5); outline-offset:
     <label>style <select id="style" title="rendering style"><option value="lit">lit</option><option value="dots">dots</option><option value="mono">ink dots</option></select></label>
     <button id="back" type="button" class="wide" title="previous object (←)">‹ back</button>
     <button id="pause" type="button" title="pause (space)">pause</button>
+    <button id="spin" type="button" aria-pressed="false" title="always rotate the object (r)">spin</button>
     <button id="next" type="button" title="next object (→)">next ›</button>
     <label class="wide">find <input id="find" list="classes" size="10" placeholder="a class…" autocomplete="off" aria-label="find a class"></label>
     <datalist id="classes"></datalist>
@@ -239,7 +249,7 @@ html :focus-visible { outline: 3px solid rgba(0, 113, 227, 0.5); outline-offset:
   pairs. The bottom-up sweep halves the debris again. The map is a t-SNE of the latents, so distances on it are approximate.</p>
   <h3>keys</h3>
   <p class="muted"><kbd>space</kbd> pause · <kbd>→</kbd> next · <kbd>←</kbd> back · <kbd>1</kbd>–<kbd>6</kbd> walks ·
-  <kbd>s</kbd> save png · <kbd>/</kbd> find · <kbd>m</kbd> map · <kbd>i</kbd> about · <kbd>d</kbd> debug</p>
+  <kbd>s</kbd> save png · <kbd>/</kbd> find · <kbd>m</kbd> map · <kbd>r</kbd> spin · <kbd>i</kbd> about · <kbd>d</kbd> debug</p>
   <h3>credits</h3>
   <p class="muted" id="aboutCredit"></p>
 </dialog>

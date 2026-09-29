@@ -37,6 +37,8 @@
       $('back').addEventListener('click', () => { this.back(); this.touched(); });
       $('pause').addEventListener('click', () => app.setPaused(!app.paused));
       app.onpause = (p) => { $('pause').textContent = p ? 'play' : 'pause'; };
+      $('spin').setAttribute('aria-pressed', String(!!app.spin));
+      $('spin').addEventListener('click', () => this.toggleSpin());
       app.oninteract = () => this.fadeHint();
       if (matchMedia('(pointer: coarse)').matches) $('hint').textContent = 'drag to orbit · pinch to zoom';
       // find: the class labels; committing travels to a loaded object of that class not seen lately
@@ -92,6 +94,13 @@
     }
 
     style() { return this.styleEl.value; }
+    toggleSpin() {                                        // spin button / r: always turn (at the last rate) <-> the default
+      const app = this.app, on = !app.spin;
+      if (app.spin) this.lastSpin = app.spin;
+      app.setSpin(on ? this.lastSpin || 1 : null);
+      $('spin').setAttribute('aria-pressed', String(on));
+      this.touched();
+    }
     setMap(v) { this.map.show(v); $('mapBtn').setAttribute('aria-pressed', String(v)); }
     fadeHint() { $('hint').style.opacity = '0'; }
     firstFrame() {
@@ -112,6 +121,7 @@
       p.set('walk', this.app.walker.mode);
       if (this.style() !== 'lit') p.set('style', this.style()); else p.delete('style');
       if (this.app.speed !== 1) p.set('speed', String(this.app.speed)); else p.delete('speed');
+      if (this.app.spin !== null) p.set('spin', String(this.app.spin)); else p.delete('spin');
       history.replaceState(null, '', u);
     }
 
@@ -153,6 +163,8 @@
         $('msg').textContent = p && p.total && p.got < p.total ? `loading the decoder… ${(p.got / 2 ** 20).toFixed(1)} / ${(p.total / 2 ** 20).toFixed(1)} MB` : 'decoding the first shape…';
         return;
       }
+      const fb = $('fpsBadge');                           // always-on frame-rate badge (green >= 50, orange >= 30, red below)
+      fb.hidden = false; fb.textContent = `${st.fps} fps`; fb.dataset.q = st.fps >= 50 ? 'good' : st.fps >= 30 ? 'ok' : 'low';
       $('status').textContent = `${meta.classes.length} classes · ${model.nLoaded}/${meta.anchors.length} objects · ${(st.decoderParams / 1e6).toFixed(2)} M weights · ` +
         `decoded live on your gpu (${st.backend}${st.glgrid ? ' shaders' : ''} · ${st.keyHz.toFixed(0)} shapes/s · ${st.fps} fps)`;
     }
@@ -195,6 +207,7 @@
       else if (e.key === 's') this.save();
       else if (e.key === '/') { e.preventDefault(); $('find').focus(); }
       else if (e.key === 'm') this.setMap(!this.map.visible);
+      else if (e.key === 'r') this.toggleSpin();
       else if (e.key === 'i') this.about();
       else if (e.key === 'd') $('dbg').hidden = !$('dbg').hidden;
       else return;

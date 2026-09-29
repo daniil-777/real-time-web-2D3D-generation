@@ -241,6 +241,11 @@
     // ---- camera ----
     if (rm.addEventListener) rm.addEventListener('change', () => { walker.reduced = rm.matches; });
     const cam = { az: num('az', 0.6, -1e4, 1e4) % 6.2832, el: num('el', 0.32, -0.2, 1.2), dist: 4.4, fov: 0.52, key: [0, 0, 0], eye: [0, 0, 0], rot: new Float32Array(9) };
+    // turntable: null = the default (turns unless paused or the system asks for reduced motion); ?spin / ?spin=1 (or the
+    // spin button) = always turns, also paused and with reduced motion, at spin x the normal rate (?spin=2 twice as
+    // fast); ?spin=0 = never. Dragging always holds it.
+    let spin = qs.has('spin') ? num('spin', 1, 0, 8) : null;
+    st.spin = spin;
     function camera() {
       const ce = Math.cos(cam.el), port = canvas.width < canvas.height ? canvas.height / canvas.width : 1;
       const d = cam.dist * Math.min(1.6, port), e = [d * ce * Math.sin(cam.az), d * Math.sin(cam.el), d * ce * Math.cos(cam.az)];
@@ -311,7 +316,8 @@
       const tail = queue[queue.length - 1];
       if (tauDisp > tail.tau) { if (!paused) starve[tail.spec.still ? 'hold' : 'morph'] += ((tauDisp - tail.tau) / speed) * 1000; tauDisp = tail.tau; }
       while (queue.length >= 2 && queue[1].tau <= tauDisp) drop(queue.shift().vol);
-      if (!drag && !paused && !rm.matches) cam.az += dt * 0.22;
+      const turn = spin === null ? (paused || rm.matches ? 0 : 1) : spin;
+      if (!drag && turn) cam.az += dt * 0.22 * turn;
       const s0 = shown(), style = ui.style();
       // an unchanged frame (paused, reduced motion) is not traced again: the canvas keeps its last image
       const oneVol = s0.A.vol === s0.B.vol, tt = oneVol ? 0 : s0.t, fl = oneVol ? s0.A.vol.floor ?? -0.9 : floorAt(s0.A, s0.B, s0.t);
@@ -347,8 +353,9 @@
 
     const app = M.app = {
       st, meta, map, model, walker, R3, qs, dir: F.dir, lastA: null, lastB: null,
-      get tau() { return tauDisp; }, get paused() { return paused; }, get speed() { return speed; },
+      get tau() { return tauDisp; }, get paused() { return paused; }, get speed() { return speed; }, get spin() { return spin; }, cam,
       shown, setPaused, loadChunks,
+      setSpin(v) { spin = st.spin = v === null ? null : clamp(+v, 0, 8); },
       setSpeed(x) { speed = st.speed = clamp(x, 0.25, 3); },
       setMode(m) { if (!M.isWalk(m)) return; retarget((tr) => walker.setMode(tr, m)); st.walk = walker.mode; },
       next() { retarget((tr) => walker.next(tr)); },
