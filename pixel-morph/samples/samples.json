@@ -1,0 +1,60 @@
+{
+ "note": "Best settled scenes of the current model in dots mode (colour when the model has it, plus a black-dots variant), canvas only, captured by test/save_samples.js",
+ "generated": "2026-09-27T08:44:08.648Z",
+ "samples": [
+  {
+   "file": "best-1.png",
+   "scene": "airliner",
+   "colour": true,
+   "dot_coverage": 0.1066,
+   "clip_recognisability": 1,
+   "seed": 16,
+   "anchors": [
+    22
+   ],
+   "photo": {
+    "title": "File:Airbus A320-200 Airbus Industries (AIB) 'House colors' F-WWBA - MSN 001 (10276181983) crop.jpg",
+    "author": "Laurent ERRERA from L'Union, France, derivative work Lämpel",
+    "license": "CC BY-SA 2.0",
+    "url": "https://commons.wikimedia.org/wiki/File:Airbus_A320-200_Airbus_Industries_(AIB)_%27House_colors%27_F-WWBA_-_MSN_001_(10276181983)_crop.jpg"
+   },
+   "black_file": "best-1-black.png"
+  },
+  {
+   "file": "best-2.png",
+   "scene": "windmill",
+   "colour": true,
+   "dot_coverage": 0.1149,
+   "clip_recognisability": 1,
+   "seed": 15,
+   "anchors": [
+    87
+   ],
+   "photo": {
+    "title": "File:At Long Island 2023 237.jpg",
+    "author": "Photograph by Mike Peel (www.mikepeel.net).",
+    "license": "CC BY-SA 4.0",
+    "url": "https://commons.wikimedia.org/wiki/File:At_Long_Island_2023_237.jpg"
+   },
+   "black_file": "best-2-black.png"
+  },
+  {
+   "file": "best-3.png",
+   "scene": "lighthouse",
+   "colour": true,
+   "dot_coverage": 0.1196,
+   "clip_recognisability": 0.9988,
+   "seed": 13,
+   "anchors": [
+    71
+   ],
+   "photo": {
+    "title": "File:Ponta Verde Lighthouse landscape - Maceió, Brazil (edited).jpg",
+    "author": "Original:  André Lage Freitas\nDerivative work:  Wilfredor\nDerivative work:  Aristeas",
+    "license": "CC BY-SA 4.0",
+    "url": "https://commons.wikimedia.org/wiki/File:Ponta_Verde_Lighthouse_landscape_-_Macei%C3%B3,_Brazil_(edited).jpg"
+   },
+   "black_file": "best-3-black.png"
+  }
+ ]
+}

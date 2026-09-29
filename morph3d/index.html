@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>if (/[?&]embed=1(&|$)/.test(location.search)) document.documentElement.classList.add('embed');</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pixel morph · 3d</title>
+<meta name="description" content="Walk through the latent space of a neural 3D decoder: 516 real objects in 86 classes, and every shape in between, generated live on your GPU.">
+<meta property="og:title" content="pixel morph · 3d">
+<meta property="og:description" content="A neural 3D decoder running live in the browser: six ways of walking through its latent space.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='black'/%3E%3C/svg%3E">
+<style>
+  :root { --bg: #ffffff; --ink: #000000; --muted: #6b6b6b; --line: #d8d8d8; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #wrap { display: flex; flex-direction: column; align-items: center; min-height: 100vh; gap: 10px; padding: 12px 16px 16px; box-sizing: border-box; }
+  #top { width: min(96vw, 1200px); display: flex; gap: 14px; align-items: baseline; color: var(--muted); font-size: 12px; }
+  #views { display: flex; gap: 10px; }
+  #views a { color: var(--muted); text-decoration: none; padding: 2px 0; }
+  #views a[aria-current] { color: var(--ink); text-decoration: underline; text-underline-offset: 4px; }
+  #views a:hover { color: var(--ink); }
+  #stage { position: relative; width: min(96vw, 1200px); height: clamp(260px, calc(100svh - 250px), 76vw); }
+  #c { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; outline: none; }
+  #c:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+  #c:active { cursor: grabbing; }
+  #map { position: absolute; right: 8px; bottom: 8px; width: 190px; height: 190px; border: 1px solid var(--line); border-radius: 6px;
+         background: rgba(255,255,255,0.86); cursor: crosshair; touch-action: none; }
+  @media (max-width: 1000px) { #map { width: 150px; height: 150px; } }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  #maptip { position: absolute; pointer-events: none; font-size: 11px; color: var(--ink); background: rgba(255,255,255,0.92);
+            border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; white-space: nowrap; transform: translate(-50%, -140%); }
+  #msg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--muted); text-align: center; max-width: 80%; }
+  #hint { position: absolute; left: 10px; bottom: 8px; color: var(--muted); font-size: 11px; transition: opacity 1.2s; pointer-events: none; }
+  #dbg { position: absolute; left: 8px; top: 8px; margin: 0; padding: 8px 10px; font: 11px/1.45 ui-monospace, Menlo, monospace;
+         color: #e8e8e8; background: rgba(20, 20, 24, 0.82); border-radius: 6px; white-space: pre-wrap; z-index: 2; pointer-events: none; }
+  #label { font-size: 20px; letter-spacing: .06em; min-height: 1.4em; text-transform: lowercase; text-align: center; }
+  #progress { width: min(360px, 70vw); height: 1px; background: var(--line); margin-top: -6px; }
+  #progress i { display: block; height: 1px; width: 0; background: var(--ink); }
+  #hud { color: var(--muted); font-size: 12px; display: flex; gap: 12px 14px; flex-wrap: wrap; justify-content: center; align-items: center; max-width: min(96vw, 1200px); }
+  #hud label { display: flex; gap: 6px; align-items: center; }
+  #hud input[type=range] { width: 80px; accent-color: var(--ink); }
+  #hud button, #hud select, #hud input:not([type=range]) { font: inherit; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 2px 8px; }
+  #hud button[aria-pressed=true] { border-color: var(--ink); }
+  #hud button:hover, #hud select:hover { border-color: #9a9a9a; }
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  #walkhint, #status, #credit { color: var(--muted); font-size: 12px; min-height: 1.2em; text-align: center; max-width: min(760px, 94vw); }
+  #walkhint { color: var(--ink); }
+  #credit a, #status a, dialog a { color: inherit; }
+  dialog { max-width: min(620px, 92vw); border: 1px solid var(--line); border-radius: 8px; padding: 18px 22px; color: var(--ink); font-size: 13px; line-height: 1.55; }
+  dialog::backdrop { background: rgba(255,255,255,0.7); }
+  dialog h2 { font-size: 16px; font-weight: 600; margin: 0 0 8px; letter-spacing: .02em; }
+  dialog h3 { font-size: 13px; font-weight: 600; margin: 14px 0 4px; }
+  dialog table { border-collapse: collapse; font-size: 12px; }
+  dialog td { padding: 1px 12px 1px 0; vertical-align: top; }
+  dialog kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; }
+  dialog .close { float: right; font: inherit; background: none; border: 1px solid var(--line); border-radius: 4px; padding: 1px 8px; cursor: pointer; }
+  .muted { color: var(--muted); }
+  @media (max-width: 700px), (pointer: coarse) {
+    #stage { height: min(58svh, 96vw); }
+    #map { width: 140px; height: 140px; }
+    #hud .wide { display: none; }
+    #hud button, #hud select { min-height: 34px; }
+    #label { font-size: 17px; }
+    #top span { display: none; }
+  }
+</style>
+<script>
+  // start every download at once: model files (with byte progress) and the one TensorFlow.js backend this browser uses
+  (function () {
+    // ?model= may only name a folder of this site (letters, digits, - _ /): never another origin or a parent path
+    const qs = new URLSearchParams(location.search), mq = qs.get('model'), dir = mq && /^[\w-]+(\/[\w-]+)*$/.test(mq) ? mq : 'model';
+    const own = (o, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
+    const cdn = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-', BE = window.__M3D_BE = {
+      webgpu: [cdn + 'webgpu@4.22.0/dist/tf-backend-webgpu.min.js', 'sha384-0cz8Hmjyhn7MyeyzI7MSTOuEdxiSNiwpDDPakM6XjdtC/Fb5/qRxkmLrTJROQqjQ'],
+      webgl: [cdn + 'webgl@4.22.0/dist/tf-backend-webgl.min.js', 'sha384-PAbE0QuTSZkDuS/hX4MEx1MZ0Nwd+mkb2Znz35ZqGDjb36klpR8/mCpykhdd7uHW'],
+      cpu: [cdn + 'cpu@4.22.0/dist/tf-backend-cpu.min.js', 'sha384-gZf8Y2Jsk28VIIkZjV2+JG6Gi+OiYGFalXGsYGOyyFabJ0GwWEc2FguAPIal3tvJ'] };
+    const be = qs.get('backend'), first = own(BE, be) ? be : navigator.gpu ? 'webgpu' : 'webgl';
+    const l = document.createElement('link'); l.rel = 'preload'; l.as = 'script'; l.href = BE[first][0]; l.integrity = BE[first][1]; l.crossOrigin = 'anonymous'; document.head.appendChild(l);
+    const prog = window.__M3D_PROG = { got: 0, total: 0 };
+    const get = async (name, json) => {
+      const r = await fetch(dir + '/' + name);
+      if (!r.ok) throw new Error(name + ' ' + r.status);
+      const n = +r.headers.get('content-length') || 0; prog.total += n;
+      let buf;
+      if (!r.body || !n) { buf = new Uint8Array(await r.arrayBuffer()); prog.got += buf.length; }
+      else {
+        const rd = r.body.getReader(), parts = []; let k = 0;
+        for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); k += value.length; prog.got += value.length; }
+        buf = new Uint8Array(k); let o = 0; for (const p of parts) { buf.set(p, o); o += p.length; }
+      }
+      return json ? JSON.parse(new TextDecoder().decode(buf)) : buf.buffer;
+    };
+    window.__M3D_FETCH = { dir, meta: get('meta.json', true), decoder: get('decoder.bin.gz'), a0: get('anchors-0.bin.gz'), map: get('map.json', true) };
+    for (const p of Object.values(window.__M3D_FETCH)) if (p && p.catch) p.catch(() => {});
+  })();
+  window.__tfLoadError = null;
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.22.0/dist/tf-core.min.js" integrity="sha384-ZVckeGw84RpbmPMzx1s9LFUqIaeIsG46rmlH/HynDuJikkmGLnTDnEmT0CrKI6Yi" crossorigin="anonymous" onerror="window.__tfLoadError = 'TensorFlow.js failed to load from the CDN'"></script>
+<style id="pm-ui">
+/* pm-ui — the shared Pixel Morph look (Apple-style controls), inlined so each app stays self-contained (standalone
+   roots, the single-file export). KEEP IDENTICAL in pixel-morph/index.html and morph3d/index.html. */
+:root {
+  --pm-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Inter, system-ui, sans-serif;
+  --pm-text: #1d1d1f; --pm-text-2: #6e6e73; --pm-text-3: #86868b;
+  --pm-fill: rgba(118, 118, 128, 0.12); --pm-fill-2: rgba(118, 118, 128, 0.2); --pm-hair: rgba(0, 0, 0, 0.08);
+  --pm-accent: #0071e3; --pm-glass: rgba(255, 255, 255, 0.72);
+  --pm-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+html, body { font-family: var(--pm-font); color: var(--pm-text); -webkit-font-smoothing: antialiased; }
+
+/* header of the standalone pages: a small segmented control instead of underlined links */
+html #views { display: inline-flex; gap: 0; padding: 2px; border-radius: 9px; background: var(--pm-fill); font-size: 12px; }
+html #views a { padding: 4px 12px; border-radius: 7px; color: var(--pm-text-2); text-decoration: none; font-weight: 500;
+                transition: color .2s var(--pm-ease), background .2s var(--pm-ease); }
+html #views a[aria-current] { color: var(--pm-text); background: #fff; text-decoration: none;
+                              box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12), 0 3px 1px rgba(0, 0, 0, 0.04); }
+html #views a:hover { color: var(--pm-text); }
+html #top { color: var(--pm-text-3); font-size: 12px; align-items: center; }
+html.embed #views, html.embed #top { display: none; }
+/* inside the shell the page is one screen: tighter spacing (and a shorter 3D stage) keep the toolbar and the credits in
+   view; the 2D canvas keeps its whole-pixel size (fitCanvas), so its dots stay crisp */
+html.embed #wrap { padding: 10px 16px 8px; gap: 8px; }
+html.embed #stage { height: clamp(240px, calc(100svh - 300px), 76vw); }
+
+/* the object's name */
+html #label { font: 600 22px/1.25 var(--pm-font); letter-spacing: -0.01em; text-transform: none; color: var(--pm-text); }
+html #label::first-letter { text-transform: uppercase; }
+html #progress { height: 3px; border-radius: 2px; background: var(--pm-fill); margin-top: -4px; overflow: hidden; }
+html #progress i { height: 3px; border-radius: 2px; background: var(--pm-text); }
+
+/* the toolbar: a floating glass bar of pills */
+html #hud { gap: 6px 8px; padding: 8px 12px; border-radius: 22px; background: var(--pm-glass);
+            -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+            box-shadow: 0 0 0 0.5px var(--pm-hair), 0 8px 28px rgba(0, 0, 0, 0.08); color: var(--pm-text-2); font-size: 13px; }
+html #hud label { gap: 8px; }
+html #hud select, html #hud button, html #hud input:not([type=range]):not([type=checkbox]) {
+  -webkit-appearance: none; appearance: none; border: 0; border-radius: 980px; padding: 7px 12px; min-height: 32px;
+  background-color: var(--pm-fill); color: var(--pm-text); font: 500 13px/1.1 var(--pm-font); cursor: pointer;
+  transition: background-color .2s var(--pm-ease), transform .12s var(--pm-ease), color .2s var(--pm-ease); }
+html #hud input:not([type=range]):not([type=checkbox]) { cursor: text; height: 32px; padding-top: 0; padding-bottom: 0; }
+html #hud input::-webkit-calendar-picker-indicator { display: none !important; }
+html #hud select { padding-right: 30px; background-repeat: no-repeat; background-position: right 12px center; background-size: 9px 6px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='%236e6e73' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+html #hud select:hover, html #hud button:hover { background-color: var(--pm-fill-2); }
+html #hud button:active { transform: scale(0.96); }
+html #hud button[aria-pressed=true] { background-color: var(--pm-text); color: #fff; }
+
+/* sliders: thin track, white knob */
+html input[type=range] { -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; background: rgba(118, 118, 128, 0.24);
+                         accent-color: var(--pm-text); cursor: pointer; }
+html input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #fff;
+  box-shadow: 0 0.5px 4px rgba(0, 0, 0, 0.12), 0 6px 13px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04); }
+html input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border: 0; border-radius: 50%; background: #fff;
+  box-shadow: 0 0.5px 4px rgba(0, 0, 0, 0.12), 0 6px 13px rgba(0, 0, 0, 0.12); }
+
+/* checkbox -> switch */
+html #hud input[type=checkbox] { -webkit-appearance: none; appearance: none; position: relative; width: 36px; height: 22px; margin: 0;
+  border-radius: 11px; background: rgba(120, 120, 128, 0.32); cursor: pointer; transition: background .25s var(--pm-ease); }
+html #hud input[type=checkbox]::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 1px rgba(0, 0, 0, 0.16); transition: transform .25s var(--pm-ease); }
+html #hud input[type=checkbox]:checked { background: #34c759; }
+html #hud input[type=checkbox]:checked::after { transform: translateX(14px); }
+
+/* status lines and credits */
+html #status, html #credit, html #walkhint { color: var(--pm-text-3); font-size: 12px; }
+html #walkhint { color: var(--pm-text-2); }
+html #credit a, html #status a { color: var(--pm-accent); text-decoration: none; }
+html #credit a:hover, html #status a:hover { text-decoration: underline; }
+html #fps { font-variant-numeric: tabular-nums; }
+
+/* 3D: map, hint and the about sheet */
+html #map { border: 0; border-radius: 16px; background: var(--pm-glass); -webkit-backdrop-filter: saturate(180%) blur(20px);
+            backdrop-filter: saturate(180%) blur(20px); box-shadow: 0 0 0 0.5px var(--pm-hair), 0 10px 30px rgba(0, 0, 0, 0.12); }
+html #maptip { border: 0; border-radius: 8px; background: var(--pm-glass); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+               box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12); font-size: 12px; padding: 3px 9px; }
+html #hint { color: var(--pm-text-3); font-size: 12px; }
+html #msg { color: var(--pm-text-2); font-size: 15px; }
+html dialog { border: 0; border-radius: 18px; padding: 24px 28px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.25); font-size: 14px; }
+html dialog::backdrop { background: rgba(0, 0, 0, 0.2); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+html dialog h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 10px; }
+html dialog h3 { font-size: 15px; font-weight: 600; margin-top: 18px; }
+html dialog .close { border: 0; border-radius: 980px; background: var(--pm-fill); padding: 6px 14px; font-weight: 500; }
+html dialog kbd { border: 0; background: var(--pm-fill); border-radius: 5px; padding: 1px 6px; }
+html :focus-visible { outline: 3px solid rgba(0, 113, 227, 0.5); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  html #hud *, html #views a, html #hud input[type=checkbox]::after { transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <header id="top">
+    <nav id="views" aria-label="pixel morph views"><a href="../pixel-morph/" id="to2d">Drawings</a><a aria-current="page">3D Objects</a></nav>
+    <span>pixel morph · 3d — a neural 3D decoder, running live on your gpu</span>
+  </header>
+  <div id="stage">
+    <canvas id="c" tabindex="0" role="img" aria-label="a 3D object generated by a neural decoder"></canvas>
+    <canvas id="map" hidden aria-hidden="true"></canvas>
+    <div id="maptip" hidden></div>
+    <div id="msg">loading…</div>
+    <div id="hint">drag to orbit · scroll to zoom · click the map to travel</div>
+    <pre id="dbg" hidden></pre>
+  </div>
+  <div id="label"></div>
+  <div id="progress" aria-hidden="true"><i></i></div>
+  <div id="hud">
+    <label>walk <select id="walk" title="how the walk moves through latent space"></select></label>
+    <label class="wide">speed <input id="speed" type="range" min="0.25" max="3" step="0.05" value="1" aria-label="speed"></label>
+    <label>style <select id="style" title="rendering style"><option value="lit">lit</option><option value="dots">dots</option><option value="mono">ink dots</option></select></label>
+    <button id="back" type="button" class="wide" title="previous object (←)">‹ back</button>
+    <button id="pause" type="button" title="pause (space)">pause</button>
+    <button id="next" type="button" title="next object (→)">next ›</button>
+    <label class="wide">find <input id="find" list="classes" size="10" placeholder="a class…" autocomplete="off" aria-label="find a class"></label>
+    <datalist id="classes"></datalist>
+    <button id="mapBtn" type="button" aria-pressed="false" title="latent map (m)">map</button>
+    <button id="save" type="button" class="wide" title="save a png (s)">save png</button>
+    <button id="share" type="button" title="copy a link to this walk">copy link</button>
+    <button id="aboutBtn" type="button" title="about (i)">about</button>
+  </div>
+  <div id="walkhint"></div>
+  <div id="sr" class="sr-only" aria-live="polite"></div>
+  <div id="status"></div>
+  <div id="credit"></div>
+</div>
+<dialog id="about" aria-labelledby="aboutTitle">
+  <button class="close" type="button" data-close>close</button>
+  <h2 id="aboutTitle">pixel morph · 3d</h2>
+  <p>Each of the 516 objects is a real 3D model from Objaverse, encoded by a triplane variational autoencoder into a
+  latent of 3 × 32 × 32 × 8 numbers. A 1.31 M-parameter decoder turns any latent into a signed-distance and colour
+  field, evaluated on a dense grid on your GPU (WebGPU compute or WebGL shaders) and sphere-traced every frame.
+  Walking blends latents, so every in-between frame is a shape the network invents.</p>
+  <h3>ways of walking</h3>
+  <table id="walkTable"></table>
+  <h3>accuracy (held-out objects, shipped int8 decoder)</h3>
+  <p id="acc" class="muted">loading…</p>
+  <h3>how the walks were chosen</h3>
+  <p class="muted">Partners are neighbours by decoded shape overlap, not by latent distance: on 32 measured pairs the
+  in-between shapes keep 97 % of their volume with 3 % floating debris, against 75 % and 17 % for latent-nearest
+  pairs. The bottom-up sweep halves the debris again. The map is a t-SNE of the latents, so distances on it are approximate.</p>
+  <h3>keys</h3>
+  <p class="muted"><kbd>space</kbd> pause · <kbd>→</kbd> next · <kbd>←</kbd> back · <kbd>1</kbd>–<kbd>6</kbd> walks ·
+  <kbd>s</kbd> save png · <kbd>/</kbd> find · <kbd>m</kbd> map · <kbd>i</kbd> about · <kbd>d</kbd> debug</p>
+  <h3>credits</h3>
+  <p class="muted" id="aboutCredit"></p>
+</dialog>
+<script src="m3d-model.js"></script>
+<script src="m3d-model2.js"></script>
+<script src="m3d-render.js"></script>
+<script src="m3d-level.js"></script>
+<script src="m3d-walk.js"></script>
+<script src="m3d-map.js"></script>
+<script src="m3d-ui.js"></script>
+<script src="m3d-app.js"></script>
+</body>
+</html>

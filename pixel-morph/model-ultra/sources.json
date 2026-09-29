@@ -1,0 +1,665 @@
+{
+ "note": "Photos behind the anchor scenes; contours and colours were distilled from them. All from Wikimedia Commons.",
+ "photos": [
+  {
+   "class": "mountain",
+   "anchors": [
+    0
+   ],
+   "title": "File:DER Berg - Matterhorn (Juli 2008).jpg",
+   "author": "JoachimKohler-HB",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:DER_Berg_-_Matterhorn_(Juli_2008).jpg"
+  },
+  {
+   "class": "airliner",
+   "anchors": [
+    1
+   ],
+   "title": "File:Airbus A330-323, D-AAED (1).jpg",
+   "author": "Cjp24",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Airbus_A330-323,_D-AAED_(1).jpg"
+  },
+  {
+   "class": "car",
+   "anchors": [
+    2
+   ],
+   "title": "File:Moscow, Volvo C30 blue, Sept 2025 02-1.jpg",
+   "author": "Retired electrician",
+   "license": "CC0",
+   "url": "https://commons.wikimedia.org/wiki/File:Moscow,_Volvo_C30_blue,_Sept_2025_02-1.jpg"
+  },
+  {
+   "class": "spacecraft",
+   "anchors": [
+    3
+   ],
+   "title": "File:STS-107 launchpad.jpg",
+   "author": "NASA",
+   "license": "Public domain",
+   "url": "https://commons.wikimedia.org/wiki/File:STS-107_launchpad.jpg"
+  },
+  {
+   "class": "lighthouse",
+   "anchors": [
+    4
+   ],
+   "title": "File:La Martre lighthouse - La Martre, QC, CA - 16-06-2013.jpg",
+   "author": "Letartean",
+   "license": "CC BY 3.0",
+   "url": "https://commons.wikimedia.org/wiki/File:La_Martre_lighthouse_-_La_Martre,_QC,_CA_-_16-06-2013.jpg"
+  },
+  {
+   "class": "earth",
+   "anchors": [
+    5
+   ],
+   "title": "File:Africa from low orbiting satellite Suomi NPP.jpg",
+   "author": "NASA/NOAA",
+   "license": "Public domain",
+   "url": "https://commons.wikimedia.org/wiki/File:Africa_from_low_orbiting_satellite_Suomi_NPP.jpg"
+  },
+  {
+   "class": "church",
+   "anchors": [
+    6
+   ],
+   "title": "File:Saint Patrick Cathedral in Auckland 02.jpg",
+   "author": "Krzysztof Golik",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Saint_Patrick_Cathedral_in_Auckland_02.jpg"
+  },
+  {
+   "class": "house",
+   "anchors": [
+    7
+   ],
+   "title": "File:Peterson Farmhouse-front-3qtr right.jpg",
+   "author": "Myotus",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Peterson_Farmhouse-front-3qtr_right.jpg"
+  },
+  {
+   "class": "moon",
+   "anchors": [
+    8
+   ],
+   "title": "File:Makalali Game Reserve (ZA), Mond -- 2024 -- 1818.jpg",
+   "author": "Dietmar Rabich",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Makalali_Game_Reserve_(ZA),_Mond_--_2024_--_1818.jpg"
+  },
+  {
+   "class": "tower",
+   "anchors": [
+    9
+   ],
+   "title": "File:Winterswijk, de Watertoren RM523469 IMG 2610 2022-07-18 18.06.jpg",
+   "author": "Michielverbeek",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Winterswijk,_de_Watertoren_RM523469_IMG_2610_2022-07-18_18.06.jpg"
+  },
+  {
+   "class": "windmill",
+   "anchors": [
+    10
+   ],
+   "title": "File:Goingarijp. (actm) 02.jpg",
+   "author": "Agnes Monkelbaan",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Goingarijp._(actm)_02.jpg"
+  },
+  {
+   "class": "airliner",
+   "anchors": [
+    11
+   ],
+   "title": "File:Ocean Airlines Boeing 747-230F, I-OCEU@ZRH,08.09.2007-487df - Flickr - Aero Icarus.jpg",
+   "author": "Aero Icarus from Zürich, Switzerland",
+   "license": "CC BY-SA 2.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Ocean_Airlines_Boeing_747-230F,_I-OCEU@ZRH,08.09.2007-487df_-_Flickr_-_Aero_Icarus.jpg"
+  },
+  {
+   "class": "car",
+   "anchors": [
+    12
+   ],
+   "title": "File:2025 Chevrolet Corvette C8 E-Ray.jpg",
+   "author": "Calreyn88",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:2025_Chevrolet_Corvette_C8_E-Ray.jpg"
+  },
+  {
+   "class": "church",
+   "anchors": [
+    13
+   ],
+   "title": "File:Iglesia de Balbanera 01.jpg",
+   "author": "Bernard Gagnon",
+   "license": "CC BY-SA 3.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Iglesia_de_Balbanera_01.jpg"
+  },
+  {
+   "class": "earth",
+   "anchors": [
+    14
+   ],
+   "title": "File:EARTH - PHOTOGRAPHED DURING THE APOLLO 11 AND APOLLO 17 MISSIONS - NARA - 17470321.jpg",
+   "author": "\nUnknown authorUnknown author or not provided",
+   "license": "Public domain",
+   "url": "https://commons.wikimedia.org/wiki/File:EARTH_-_PHOTOGRAPHED_DURING_THE_APOLLO_11_AND_APOLLO_17_MISSIONS_-_NARA_-_17470321.jpg"
+  },
+  {
+   "class": "house",
+   "anchors": [
+    15
+   ],
+   "title": "File:Gwangajeong House 03.jpg",
+   "author": "Bernard Gagnon",
+   "license": "CC0",
+   "url": "https://commons.wikimedia.org/wiki/File:Gwangajeong_House_03.jpg"
+  },
+  {
+   "class": "lighthouse",
+   "anchors": [
+    16
+   ],
+   "title": "File:Lighthouse in Chania. Crete, Greece.jpg",
+   "author": "Ввласенко",
+   "license": "CC BY-SA 3.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Lighthouse_in_Chania._Crete,_Greece.jpg"
+  },
+  {
+   "class": "moon",
+   "anchors": [
+    17
+   ],
+   "title": "File:Lunar eclipse 20250907 200922 07.jpg",
+   "author": "Korinna",
+   "license": "CC BY 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Lunar_eclipse_20250907_200922_07.jpg"
+  },
+  {
+   "class": "mountain",
+   "anchors": [
+    18
+   ],
+   "title": "File:Everest from Ngozumpa tse.jpg",
+   "author": "Gozitano",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Everest_from_Ngozumpa_tse.jpg"
+  },
+  {
+   "class": "spacecraft",
+   "anchors": [
+    19
+   ],
+   "title": "File:Soyuz TMA-20 spacecraft departs the ISS.jpg",
+   "author": "NASA",
+   "license": "Public domain",
+   "url": "https://commons.wikimedia.org/wiki/File:Soyuz_TMA-20_spacecraft_departs_the_ISS.jpg"
+  },
+  {
+   "class": "tower",
+   "anchors": [
+    20
+   ],
+   "title": "File:Berliner Fernsehturm November 2013.jpg",
+   "author": "Arild Vågen",
+   "license": "CC BY-SA 3.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Berliner_Fernsehturm_November_2013.jpg"
+  },
+  {
+   "class": "windmill",
+   "anchors": [
+    21
+   ],
+   "title": "File:Aaspere mõisa tuuleveski 2013.jpg",
+   "author": "Ivar Leidus",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Aaspere_m%C3%B5isa_tuuleveski_2013.jpg"
+  },
+  {
+   "class": "airliner",
+   "anchors": [
+    22
+   ],
+   "title": "File:All Nippon Airways Boeing 787-8 Dreamliner JA801A OKJ Night retuschiert.jpg",
+   "author": "Spaceaero2, derivative work Lämpel",
+   "license": "CC BY-SA 3.0",
+   "url": "https://commons.wikimedia.org/wiki/File:All_Nippon_Airways_Boeing_787-8_Dreamliner_JA801A_OKJ_Night_retuschiert.jpg"
+  },
+  {
+   "class": "car",
+   "anchors": [
+    23
+   ],
+   "title": "File:Tesla Model Y Washington DC Metro Area, USA (6).jpg",
+   "author": "OWS Photography",
+   "license": "CC BY 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Tesla_Model_Y_Washington_DC_Metro_Area,_USA_(6).jpg"
+  },
+  {
+   "class": "church",
+   "anchors": [
+    24
+   ],
+   "title": "File:Iglesia de San Alejandro Nevsky, Riga, Letonia, 2012-08-07, DD 01.JPG",
+   "author": "Diego Delso",
+   "license": "CC BY-SA 3.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Iglesia_de_San_Alejandro_Nevsky,_Riga,_Letonia,_2012-08-07,_DD_01.JPG"
+  },
+  {
+   "class": "earth",
+   "anchors": [
+    25
+   ],
+   "title": "File:Earth (45138212292).jpg",
+   "author": "Yuri Samoilov",
+   "license": "CC BY 2.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Earth_(45138212292).jpg"
+  },
+  {
+   "class": "house",
+   "anchors": [
+    26
+   ],
+   "title": "File:Berry Farmhouse, Bromham.jpg",
+   "author": "Simon Burchell",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Berry_Farmhouse,_Bromham.jpg"
+  },
+  {
+   "class": "lighthouse",
+   "anchors": [
+    27
+   ],
+   "title": "File:Perch Rock Lighthouse 1.jpg",
+   "author": "Photograph by Mike Peel (www.mikepeel.net).",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Perch_Rock_Lighthouse_1.jpg"
+  },
+  {
+   "class": "moon",
+   "anchors": [
+    28
+   ],
+   "title": "File:Lunar eclipse 20250907 200922 17.jpg",
+   "author": "Korinna",
+   "license": "CC BY 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Lunar_eclipse_20250907_200922_17.jpg"
+  },
+  {
+   "class": "mountain",
+   "anchors": [
+    29
+   ],
+   "title": "File:Азау-Гитче-Чегет-Карабаши.jpg",
+   "author": "Ekaterina Kuzmina",
+   "license": "CC BY-SA 2.0",
+   "url": "https://commons.wikimedia.org/wiki/File:%D0%90%D0%B7%D0%B0%D1%83-%D0%93%D0%B8%D1%82%D1%87%D0%B5-%D0%A7%D0%B5%D0%B3%D0%B5%D1%82-%D0%9A%D0%B0%D1%80%D0%B0%D0%B1%D0%B0%D1%88%D0%B8.jpg"
+  },
+  {
+   "class": "spacecraft",
+   "anchors": [
+    30
+   ],
+   "title": "File:Apollo 8 CM MSI.jpg",
+   "author": "Tcnottwins",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Apollo_8_CM_MSI.jpg"
+  },
+  {
+   "class": "tower",
+   "anchors": [
+    31
+   ],
+   "title": "File:Dali Yunnan China Chongsheng-Temple-03a.jpg",
+   "author": "CEphoto, Uwe Aranas",
+   "license": "CC BY-SA 3.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Dali_Yunnan_China_Chongsheng-Temple-03a.jpg"
+  },
+  {
+   "class": "windmill",
+   "anchors": [
+    32
+   ],
+   "title": "File:Shirley Windmill - geograph.org.uk - 7485762.jpg",
+   "author": "Peter Trimming ",
+   "license": "CC BY-SA 2.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Shirley_Windmill_-_geograph.org.uk_-_7485762.jpg"
+  },
+  {
+   "class": "airliner",
+   "anchors": [
+    33
+   ],
+   "title": "File:Boeing 747-446 (EI-XLF) of Transaero Airlines at Manchester Airport (EGCC) (27030183680).jpg",
+   "author": "\nRiik@mctr",
+   "license": "CC BY-SA 2.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Boeing_747-446_(EI-XLF)_of_Transaero_Airlines_at_Manchester_Airport_(EGCC)_(27030183680).jpg"
+  },
+  {
+   "class": "car",
+   "anchors": [
+    34
+   ],
+   "title": "File:Ford Mustang Mach-E GT IAA 2021 1X7A0176.jpg",
+   "author": "Alexander Migl",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Ford_Mustang_Mach-E_GT_IAA_2021_1X7A0176.jpg"
+  },
+  {
+   "class": "church",
+   "anchors": [
+    35
+   ],
+   "title": "File:Iglesia de Cristo, Windhoek, Namibia, 2018-08-04, DD 01.jpg",
+   "author": "Diego Delso",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Iglesia_de_Cristo,_Windhoek,_Namibia,_2018-08-04,_DD_01.jpg"
+  },
+  {
+   "class": "earth",
+   "anchors": [
+    36
+   ],
+   "title": "File:Pluto & Charon, Earth size comparison.jpg",
+   "author": "NASA, JHUAPL, SWRI, Gregory H. Revera",
+   "license": "Public domain",
+   "url": "https://commons.wikimedia.org/wiki/File:Pluto_%26_Charon,_Earth_size_comparison.jpg"
+  },
+  {
+   "class": "house",
+   "anchors": [
+    37
+   ],
+   "title": "File:Turf houses in Glaumbær open-air museum, Iceland, 20240715 1435 0940.jpg",
+   "author": "Jakub Hałun",
+   "license": "CC BY 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Turf_houses_in_Glaumb%C3%A6r_open-air_museum,_Iceland,_20240715_1435_0940.jpg"
+  },
+  {
+   "class": "lighthouse",
+   "anchors": [
+    38
+   ],
+   "title": "File:UK Scotland Ardrishaig Lighthouse.jpg",
+   "author": "Virtual-Pano",
+   "license": "CC BY 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:UK_Scotland_Ardrishaig_Lighthouse.jpg"
+  },
+  {
+   "class": "moon",
+   "anchors": [
+    39
+   ],
+   "title": "File:Apollo 11 image of a nearly full Moon.jpg",
+   "author": "NASA / ALSJ / Emily Lakdawalla",
+   "license": "Public domain",
+   "url": "https://commons.wikimedia.org/wiki/File:Apollo_11_image_of_a_nearly_full_Moon.jpg"
+  },
+  {
+   "class": "mountain",
+   "anchors": [
+    40
+   ],
+   "title": "File:View of Mount Everest.jpg",
+   "author": "Thisisbadri",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:View_of_Mount_Everest.jpg"
+  },
+  {
+   "class": "spacecraft",
+   "anchors": [
+    41
+   ],
+   "title": "File:NM22-715-056.jpg",
+   "author": "Earth Science and Remote Sensing Unit, NASA Johnson Space Center",
+   "license": "Public domain",
+   "url": "https://commons.wikimedia.org/wiki/File:NM22-715-056.jpg"
+  },
+  {
+   "class": "tower",
+   "anchors": [
+    42
+   ],
+   "title": "File:Lauderdale Tower, Barbican Estate, London.jpg",
+   "author": "Daniel Case",
+   "license": "CC BY-SA 3.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Lauderdale_Tower,_Barbican_Estate,_London.jpg"
+  },
+  {
+   "class": "windmill",
+   "anchors": [
+    43
+   ],
+   "title": "File:Brill - Windmill - geograph.org.uk - 7263658.jpg",
+   "author": "Colin Smith ",
+   "license": "CC BY-SA 2.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Brill_-_Windmill_-_geograph.org.uk_-_7263658.jpg"
+  },
+  {
+   "class": "airliner",
+   "anchors": [
+    44
+   ],
+   "title": "File:Qatar القطرية Boeing 777-200LR A7-BBB (15629943809).jpg",
+   "author": "BriYYZ from Toronto, Canada",
+   "license": "CC BY-SA 2.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Qatar_%D8%A7%D9%84%D9%82%D8%B7%D8%B1%D9%8A%D8%A9_Boeing_777-200LR_A7-BBB_(15629943809).jpg"
+  },
+  {
+   "class": "car",
+   "anchors": [
+    45
+   ],
+   "title": "File:2023 Rolls-Royce Spectre EV - 102kWh (585PS) Electric - Wittering Blue - 06-2024, Front.jpg",
+   "author": "Harvey Bold",
+   "license": "CC0",
+   "url": "https://commons.wikimedia.org/wiki/File:2023_Rolls-Royce_Spectre_EV_-_102kWh_(585PS)_Electric_-_Wittering_Blue_-_06-2024,_Front.jpg"
+  },
+  {
+   "class": "church",
+   "anchors": [
+    46
+   ],
+   "title": "File:Kuta Bali Indonesia Catholic-Church-Maria-Bunda-Segala-Bangsa-03.jpg",
+   "author": "CEphoto, Uwe Aranas",
+   "license": "CC BY-SA 3.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Kuta_Bali_Indonesia_Catholic-Church-Maria-Bunda-Segala-Bangsa-03.jpg"
+  },
+  {
+   "class": "earth",
+   "anchors": [
+    47
+   ],
+   "title": "File:Our Earth (7948889734).jpg",
+   "author": "Kevin M. Gill",
+   "license": "CC BY 2.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Our_Earth_(7948889734).jpg"
+  },
+  {
+   "class": "house",
+   "anchors": [
+    48
+   ],
+   "title": "File:Bauernhaus Au 1157 Teufen P1031384.jpg",
+   "author": "Lokolia",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Bauernhaus_Au_1157_Teufen_P1031384.jpg"
+  },
+  {
+   "class": "lighthouse",
+   "anchors": [
+    49
+   ],
+   "title": "File:Faro del cabo Espartel, Marruecos, 2015-12-11, DD 02.JPG",
+   "author": "Diego Delso",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Faro_del_cabo_Espartel,_Marruecos,_2015-12-11,_DD_02.JPG"
+  },
+  {
+   "class": "moon",
+   "anchors": [
+    50
+   ],
+   "title": "File:Dülmen, Hausdülmen, Mond über Schmalo -- 2020 -- 6307.jpg",
+   "author": "Dietmar Rabich",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:D%C3%BClmen,_Hausd%C3%BClmen,_Mond_%C3%BCber_Schmalo_--_2020_--_6307.jpg"
+  },
+  {
+   "class": "mountain",
+   "anchors": [
+    51
+   ],
+   "title": "File:Prisojnik from Vrsic Pass (1).jpg",
+   "author": "Krzysztof Golik",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Prisojnik_from_Vrsic_Pass_(1).jpg"
+  },
+  {
+   "class": "spacecraft",
+   "anchors": [
+    52
+   ],
+   "title": "File:SpaceX Demo-2 Launch (NHQ202005300052).jpg",
+   "author": "Joel Kowsky",
+   "license": "Public domain",
+   "url": "https://commons.wikimedia.org/wiki/File:SpaceX_Demo-2_Launch_(NHQ202005300052).jpg"
+  },
+  {
+   "class": "tower",
+   "anchors": [
+    53
+   ],
+   "title": "File:Río Saigón, Ciudad Ho Chi Minh, Vietnam, 2013-08-14, DD 30.JPG",
+   "author": "Diego Delso",
+   "license": "CC BY-SA 3.0",
+   "url": "https://commons.wikimedia.org/wiki/File:R%C3%ADo_Saig%C3%B3n,_Ciudad_Ho_Chi_Minh,_Vietnam,_2013-08-14,_DD_30.JPG"
+  },
+  {
+   "class": "windmill",
+   "anchors": [
+    54
+   ],
+   "title": "File:Marinheiro windmill in Montedor 01.jpg",
+   "author": "Krzysztof Golik",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Marinheiro_windmill_in_Montedor_01.jpg"
+  },
+  {
+   "class": "airliner",
+   "anchors": [
+    55
+   ],
+   "title": "File:NASA's 737 gets painted 03.jpg",
+   "author": "NASA/Carla Escamilla",
+   "license": "Public domain",
+   "url": "https://commons.wikimedia.org/wiki/File:NASA%27s_737_gets_painted_03.jpg"
+  },
+  {
+   "class": "car",
+   "anchors": [
+    56
+   ],
+   "title": "File:Moscow, Audi convertible, Aug 2025 02.jpg",
+   "author": "Retired electrician",
+   "license": "CC0",
+   "url": "https://commons.wikimedia.org/wiki/File:Moscow,_Audi_convertible,_Aug_2025_02.jpg"
+  },
+  {
+   "class": "church",
+   "anchors": [
+    57
+   ],
+   "title": "File:Iglesia de San Alfonso (Salta) 02.jpg",
+   "author": "Bernard Gagnon",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Iglesia_de_San_Alfonso_(Salta)_02.jpg"
+  },
+  {
+   "class": "earth",
+   "anchors": [
+    58
+   ],
+   "title": "File:GOES \"Full Disk\" image of Earth (4407007292).jpg",
+   "author": "NASA Goddard Space Flight Center from Greenbelt, MD, USA",
+   "license": "CC BY 2.0",
+   "url": "https://commons.wikimedia.org/wiki/File:GOES_%22Full_Disk%22_image_of_Earth_(4407007292).jpg"
+  },
+  {
+   "class": "house",
+   "anchors": [
+    59
+   ],
+   "title": "File:20230209 Nymphenburg Palace 06.jpg",
+   "author": "Flocci Nivis",
+   "license": "CC BY 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:20230209_Nymphenburg_Palace_06.jpg"
+  },
+  {
+   "class": "lighthouse",
+   "anchors": [
+    60
+   ],
+   "title": "File:The lighthouse on the promontory of Nyholmen by Bodø harbor.jpg",
+   "author": "Frankemann",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:The_lighthouse_on_the_promontory_of_Nyholmen_by_Bod%C3%B8_harbor.jpg"
+  },
+  {
+   "class": "moon",
+   "anchors": [
+    61
+   ],
+   "title": "File:Dülmen, Hausdülmen, Mondaufgang -- 2016 -- 4088.jpg",
+   "author": "Dietmar Rabich",
+   "license": "CC BY-SA 4.0",
+   "url": "https://commons.wikimedia.org/wiki/File:D%C3%BClmen,_Hausd%C3%BClmen,_Mondaufgang_--_2016_--_4088.jpg"
+  },
+  {
+   "class": "mountain",
+   "anchors": [
+    62
+   ],
+   "title": "File:Matterhorn North Face.jpg",
+   "author": "R. J. Mathar",
+   "license": "CC BY-SA 3.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Matterhorn_North_Face.jpg"
+  },
+  {
+   "class": "spacecraft",
+   "anchors": [
+    63
+   ],
+   "title": "File:Ariane model @ Quai d’Orsay @ Ministry of Foreign Affairs @ Paris (29686247781).jpg",
+   "author": "Guilhem Vellut from Paris, France",
+   "license": "CC BY 2.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Ariane_model_@_Quai_d%E2%80%99Orsay_@_Ministry_of_Foreign_Affairs_@_Paris_(29686247781).jpg"
+  },
+  {
+   "class": "tower",
+   "anchors": [
+    64
+   ],
+   "title": "File:Istanbul asv2020-02 img48 Galata Tower.jpg",
+   "author": "A.Savin",
+   "license": "FAL",
+   "url": "https://commons.wikimedia.org/wiki/File:Istanbul_asv2020-02_img48_Galata_Tower.jpg"
+  },
+  {
+   "class": "windmill",
+   "anchors": [
+    65
+   ],
+   "title": "File:Chillenden Windmill - geograph.org.uk - 4458392.jpg",
+   "author": "Marathon ",
+   "license": "CC BY-SA 2.0",
+   "url": "https://commons.wikimedia.org/wiki/File:Chillenden_Windmill_-_geograph.org.uk_-_4458392.jpg"
+  }
+ ]
+}

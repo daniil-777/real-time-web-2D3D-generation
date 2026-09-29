@@ -1,0 +1,5882 @@
+[
+{
+"cls": "castle",
+"label": "castle",
+"name": "Castle_Part_06",
+"author": "BlackSpire",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b750160aa60a408890f1390fa7ba2c7b",
+"iou": 0.9691,
+"anchor": 0
+},
+{
+"cls": "classical_statue",
+"label": "classical statue",
+"name": "Buste f\u00e9minin au diad\u00e8me",
+"author": "Le Chronographe",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f95ac1422ce54a5aaf333ada6e2eeb2a",
+"iou": 0.9395,
+"anchor": 1
+},
+{
+"cls": "sports_car",
+"label": "sports car",
+"name": "Chevrolet Corvette 1980",
+"author": "Shrine Of The Loud",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/fc1a31e42b0c42a0a7143df52585cdd1",
+"iou": 0.9602,
+"anchor": 2
+},
+{
+"cls": "cathedral",
+"label": "cathedral",
+"name": "Yosemite Historic Mountaineers Cabin",
+"author": "shapespeare",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/1cc1bbca617047979f3f2ddb7aef37f9",
+"iou": 0.9261,
+"anchor": 3
+},
+{
+"cls": "classical_bust",
+"label": "classical bust",
+"name": "Head Sculpt",
+"author": "laurenanne",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ec07b87e87884a8bb624c47f4fb9049b",
+"iou": 0.9601,
+"anchor": 4
+},
+{
+"cls": "classic_car",
+"label": "classic car",
+"name": "Old Timer Mini Cooper 2",
+"author": "Isa_van_den_Bosch",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/31095570b9a34b43a5b9cb58104aa06e",
+"iou": 0.9634,
+"anchor": 5
+},
+{
+"cls": "airplane",
+"label": "airplane",
+"name": "Thunderbird7blend",
+"author": "FOR18223813",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/8a17a71aa6bd4bdaaf7fb4cdacb2f3ff",
+"iou": 0.9304,
+"anchor": 6
+},
+{
+"cls": "chair",
+"label": "chair",
+"name": "Sillita Roja",
+"author": "Manfred.Saberbein.Guzman",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/8505977020be4fd194854ad3d9808222",
+"iou": 0.9467,
+"anchor": 7
+},
+{
+"cls": "owl",
+"label": "owl",
+"name": "Owl (tree story)",
+"author": "MartinaSpangenberg",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/cae2c1c03e864260adb18afd8665a6fc",
+"iou": 0.9547,
+"anchor": 8
+},
+{
+"cls": "guitar",
+"label": "guitar",
+"name": "Guitar",
+"author": "Ryan Dominick",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/8dec034ab5754c91a0596fad668bfaa7",
+"iou": 0.9839,
+"anchor": 9
+},
+{
+"cls": "teapot",
+"label": "teapot",
+"name": "chaleira",
+"author": "Jonathan Collares",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/56dde1d5fdb44867b5a48e232cd95b2f",
+"iou": 0.9888,
+"anchor": 10
+},
+{
+"cls": "elephant",
+"label": "elephant",
+"name": "elephant",
+"author": "chloechou",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/0a7e5fcdaeac4f0f8d5194f42f4d4492",
+"iou": 0.9489,
+"anchor": 11
+},
+{
+"cls": "Christmas_tree",
+"label": "christmas tree",
+"name": "Low Poly Tree",
+"author": "Ruben Roseleth",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/64a0364ffb424438b26ac3c846ed2186",
+"iou": 0.9466,
+"anchor": 12
+},
+{
+"cls": "apple",
+"label": "apple",
+"name": "Elma",
+"author": "3DFigur",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/932c037c0b30461891f8af1abaa9e7a1",
+"iou": 0.987,
+"anchor": 13
+},
+{
+"cls": "armchair",
+"label": "armchair",
+"name": "\u043a\u04401",
+"author": "basil330",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/58fcc949156b4092a2b575fb68b3c1d5",
+"iou": 0.9368,
+"anchor": 14
+},
+{
+"cls": "bear",
+"label": "bear",
+"name": "Bear Figure",
+"author": "CrisLArt",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ee70a460b9dc485f81eed2dc0ebf8619",
+"iou": 0.9644,
+"anchor": 15
+},
+{
+"cls": "bed",
+"label": "bed",
+"name": "Cartoon Bed",
+"author": "MrPuppet",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a0a80e5afb33458fbc0aa0ca6d0636b1",
+"iou": 0.9306,
+"anchor": 16
+},
+{
+"cls": "beetle",
+"label": "beetle",
+"name": "3December Day 17 Bug",
+"author": "defnotdan",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/cf5396b6d5ad4f5484761b90086b7e09",
+"iou": 0.9523,
+"anchor": 17
+},
+{
+"cls": "bell",
+"label": "bell",
+"name": "Bell",
+"author": "sidadi",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f00f60bfc27e4f498467f386cd559503",
+"iou": 0.9535,
+"anchor": 18
+},
+{
+"cls": "bench",
+"label": "bench",
+"name": "Bench-ver2-dark",
+"author": "Pixel",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/79c837c560eb4ba9b074db479e8c0e70",
+"iou": 0.9491,
+"anchor": 19
+},
+{
+"cls": "bicycle",
+"label": "bicycle",
+"name": "Moulton sketch",
+"author": "jsyang",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/3389dff16c74443289ed3cddabf46bb5",
+"iou": 0.8971,
+"anchor": 20
+},
+{
+"cls": "bird",
+"label": "bird",
+"name": "Chickie",
+"author": "harubex",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/0df0236e131544b4a940973c05137370",
+"iou": 0.9682,
+"anchor": 21
+},
+{
+"cls": "boat",
+"label": "boat",
+"name": "Tugboat from Poly by Google",
+"author": "IronEqual",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/9816819af90e4f28a7ba853d48516bcb",
+"iou": 0.9139,
+"anchor": 22
+},
+{
+"cls": "bookcase",
+"label": "bookcase",
+"name": "Bookcase",
+"author": "1023524",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/946bca019fac43e2a04304dc27898024",
+"iou": 0.931,
+"anchor": 23
+},
+{
+"cls": "boot",
+"label": "boot",
+"name": "Halloween_boots\ud83d\udcae\ud83d\udcf7",
+"author": "ayumi ikeda",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/3857946000c048d0b0b880e5bb65f5a9",
+"iou": 0.9103,
+"anchor": 24
+},
+{
+"cls": "bus_(vehicle)",
+"label": "bus",
+"name": "Low Poly Hipster Van",
+"author": "ville.eriksen",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f353b1d5b37c47da9970a25db4d79925",
+"iou": 0.9701,
+"anchor": 25
+},
+{
+"cls": "butterfly",
+"label": "butterfly",
+"name": "Butterfly",
+"author": "Tan",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/35426d17345e4fd3b0532ed0fee951fa",
+"iou": 0.9145,
+"anchor": 26
+},
+{
+"cls": "car_(automobile)",
+"label": "car",
+"name": "Car",
+"author": "calrk",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/da28757a8fac483aa4aa1205e96ea0cb",
+"iou": 0.9809,
+"anchor": 27
+},
+{
+"cls": "cat",
+"label": "cat",
+"name": "Cat",
+"author": "zz062050x",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/655edd88cfa74d2cafc13c7aa387d137",
+"iou": 0.9494,
+"anchor": 28
+},
+{
+"cls": "chandelier",
+"label": "chandelier",
+"name": "Chandelier",
+"author": "Espen Lindahl",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ba90f173220944eea071e7839547ee4e",
+"iou": 0.6708,
+"anchor": 29
+},
+{
+"cls": "church",
+"label": "church",
+"name": "Old Wooden Church",
+"author": "LucasPresoto",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/603a1c132b594446b509e041cd354504",
+"iou": 0.9615,
+"anchor": 30
+},
+{
+"cls": "classical_sculpture",
+"label": "classical sculpture",
+"name": "TheGirl 1 - girl chest sculpture",
+"author": "SkotchPoch",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/2717ed549521432aa6375d7aefb6ca02",
+"iou": 0.9524,
+"anchor": 31
+},
+{
+"cls": "clock",
+"label": "clock",
+"name": "Clock Prop",
+"author": "Kyle Rooze",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/fdf932b04e6c4e0fbd6e274563b94536",
+"iou": 0.956,
+"anchor": 32
+},
+{
+"cls": "cow",
+"label": "cow",
+"name": "Cow2",
+"author": "shakiller",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/6f6770b0a9e64d7d9ca99d722a9561f9",
+"iou": 0.9278,
+"anchor": 33
+},
+{
+"cls": "crab_(animal)",
+"label": "crab",
+"name": "Cartoon Crab",
+"author": "Egarshan",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/64ddb36a8610408eb40466566f5da167",
+"iou": 0.8663,
+"anchor": 34
+},
+{
+"cls": "crown",
+"label": "crown",
+"name": "Queen Black",
+"author": "koliabachu",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/59453ed7e25c44468b3e7bcd788dae4f",
+"iou": 0.9404,
+"anchor": 35
+},
+{
+"cls": "cup",
+"label": "cup",
+"name": "Lean (REMADE 3/28/21)",
+"author": "Hardly",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/1f9eb125fafd48a98635b12454466880",
+"iou": 0.951,
+"anchor": 36
+},
+{
+"cls": "cupcake",
+"label": "cupcake",
+"name": "Cupcake Stylized",
+"author": "Zinkzonk",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f6614af6bbad489584e9f66a6296f273",
+"iou": 0.9718,
+"anchor": 37
+},
+{
+"cls": "deer",
+"label": "deer",
+"name": "Deer#01",
+"author": "Ziro.com",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/5c48284fd1724fda94d71657a677ef6c",
+"iou": 0.8978,
+"anchor": 38
+},
+{
+"cls": "dirt_bike",
+"label": "dirt bike",
+"name": "Dirtbike",
+"author": "Thunder",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/902ad095fca94981b6156fa49a21e495",
+"iou": 0.7162,
+"anchor": 39
+},
+{
+"cls": "dog",
+"label": "dog",
+"name": "Dog's head",
+"author": "Gabriel Eloy",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/0cd590cd899548e4858010f054a29dbd",
+"iou": 0.9612,
+"anchor": 40
+},
+{
+"cls": "dolphin",
+"label": "dolphin",
+"name": "Iruka",
+"author": "TomoNaga",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/3464f46a2be6498ebe0b08a557b0f983",
+"iou": 0.9778,
+"anchor": 41
+},
+{
+"cls": "drum_(musical_instrument)",
+"label": "drum",
+"name": "Jidur 16inch",
+"author": "eeelabvisual",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/36acd5413d90461c988c58d3454e2c05",
+"iou": 0.9721,
+"anchor": 42
+},
+{
+"cls": "fighter_jet",
+"label": "fighter jet",
+"name": "Starship 8xt",
+"author": "NoVa_",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b4ad723fa3114a77ad5212fa8913b928",
+"iou": 0.8458,
+"anchor": 43
+},
+{
+"cls": "fish",
+"label": "fish",
+"name": "Pez1",
+"author": "Design Factory",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/678e8eb3bc424a7ba17a54d4b010ab38",
+"iou": 0.9872,
+"anchor": 44
+},
+{
+"cls": "flowerpot",
+"label": "flowerpot",
+"name": "Parametric Flower Nicholas yee. 13-4-2021.",
+"author": "it.trackv",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/587b1c9b68324eb38255572ba0d6adde",
+"iou": 0.9582,
+"anchor": 45
+},
+{
+"cls": "frog",
+"label": "frog",
+"name": "Frog",
+"author": "JessSwynn",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/0c30a9f6b2f740b282b6a305accca96f",
+"iou": 0.9164,
+"anchor": 46
+},
+{
+"cls": "gargoyle",
+"label": "gargoyle",
+"name": "Demon Head",
+"author": "wyeknotlove",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/487356d4b9e148dba8d6b385a148e82c",
+"iou": 0.8914,
+"anchor": 47
+},
+{
+"cls": "giraffe",
+"label": "giraffe",
+"name": "Gyry la giraffa",
+"author": "Leo Barbaro",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/4714d91f830642a791ea6b4457435d86",
+"iou": 0.944,
+"anchor": 48
+},
+{
+"cls": "globe",
+"label": "globe",
+"name": "Earth 3",
+"author": "Mspaint3d",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f9dc30b767e74ffbaa8a5ea36d1f43bc",
+"iou": 0.9912,
+"anchor": 49
+},
+{
+"cls": "helicopter",
+"label": "helicopter",
+"name": "helicopter",
+"author": "linus1178",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/dec45a28e6f346648c3d6585426157b8",
+"iou": 0.9032,
+"anchor": 50
+},
+{
+"cls": "helmet",
+"label": "helmet",
+"name": "Base Iron Helmet (enemy team)",
+"author": "3DWorkbench",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/66b845b9bceb48ae9bc7ef401523dca4",
+"iou": 0.9707,
+"anchor": 51
+},
+{
+"cls": "horse",
+"label": "horse",
+"name": "Horse",
+"author": "weikeong",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/8c0c8c0684c74b68962b212e6e1161e7",
+"iou": 0.9209,
+"anchor": 52
+},
+{
+"cls": "jet_plane",
+"label": "jet plane",
+"name": "Aircraft jewel for casting (Plane)",
+"author": "Applepie911",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/7dccc62d436c40efa2ea23b9c8179451",
+"iou": 0.8741,
+"anchor": 53
+},
+{
+"cls": "kettle",
+"label": "kettle",
+"name": "Soviet Teapot",
+"author": "TurboSlowSSS",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/af249e607bea40cfa2f275e5e23b8283",
+"iou": 0.9801,
+"anchor": 54
+},
+{
+"cls": "lamppost",
+"label": "lamppost",
+"name": "Old Indoor Street Lamp",
+"author": "sleepingburrito",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b01dcda9dcab499fa1602d3992ee720d",
+"iou": 0.9636,
+"anchor": 55
+},
+{
+"cls": "landmark",
+"label": "landmark",
+"name": "EiffelTower",
+"author": "yalbd",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/1b2e3f86e48b44f2a468f2d2f9073471",
+"iou": 0.9347,
+"anchor": 56
+},
+{
+"cls": "lantern",
+"label": "lantern",
+"name": "Low-Poly Lantern",
+"author": "Emma-Lie Kamping",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e8a9b72425e148e48364bc0d3d05da13",
+"iou": 0.9338,
+"anchor": 57
+},
+{
+"cls": "lightbulb",
+"label": "lightbulb",
+"name": "A Simple Lightbulb",
+"author": "Miguel Ad\u00e3o",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b63f65374f0640f69b3fe7a95e2cbc8b",
+"iou": 0.9847,
+"anchor": 58
+},
+{
+"cls": "lion",
+"label": "lion",
+"name": "u_\u0414\u0441-83_117x120x35mm_OBJ.obj",
+"author": "AVRORA Group",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/6de8da73af884582a87104cc153af326",
+"iou": 0.8895,
+"anchor": 59
+},
+{
+"cls": "motorcycle",
+"label": "motorcycle",
+"name": "Old MotorCycle 3d model",
+"author": "4sakthi4",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/21b36ef4ac1140899763f6a0581a01eb",
+"iou": 0.7078,
+"anchor": 60
+},
+{
+"cls": "mug",
+"label": "mug",
+"name": "Wooden Mug",
+"author": "tlauer86",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/5661e1f99a3e4d4ea257a085fac5acfd",
+"iou": 0.9602,
+"anchor": 61
+},
+{
+"cls": "mushroom",
+"label": "mushroom",
+"name": "Toadstool",
+"author": "Mjerome",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/71603dfdc70643448552dbc8cd0f36a8",
+"iou": 0.9758,
+"anchor": 62
+},
+{
+"cls": "oil_lamp",
+"label": "oil lamp",
+"name": "Kerosene lamp",
+"author": "Kesenkai",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/cb2e60edf56d45e8bb99a3b4af05d514",
+"iou": 0.9115,
+"anchor": 63
+},
+{
+"cls": "palace",
+"label": "palace",
+"name": "Palazzo Normanno+guglie",
+"author": "gb.prof.69",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/5753723a84d84fd59b4e6791aca92bc0",
+"iou": 0.9413,
+"anchor": 64
+},
+{
+"cls": "parrot",
+"label": "parrot",
+"name": "Red Birb",
+"author": "dolando",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/5982ab03c0804662b47ccb49c4d55b5a",
+"iou": 0.9316,
+"anchor": 65
+},
+{
+"cls": "penguin",
+"label": "penguin",
+"name": "Cartoon Penguin",
+"author": "Akshat",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/3160c6c53dc64943bf107f7567c7dda1",
+"iou": 0.9631,
+"anchor": 66
+},
+{
+"cls": "piano",
+"label": "piano",
+"name": "Piano 2.0",
+"author": "Laura Salas",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f14bd9d3c5364db7bd30c40e15ea1760",
+"iou": 0.9081,
+"anchor": 67
+},
+{
+"cls": "pickup_truck",
+"label": "pickup truck",
+"name": "Lowpolypickup test",
+"author": "Santeri Jauhiainen",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/73809e41208e473c831d34cf90f820bf",
+"iou": 0.9076,
+"anchor": 68
+},
+{
+"cls": "pineapple",
+"label": "pineapple",
+"name": "Pineapple V3",
+"author": "KIRAKIRA",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a886da137e7246d892f38189507e83ef",
+"iou": 0.9598,
+"anchor": 69
+},
+{
+"cls": "pony",
+"label": "pony",
+"name": "Retopo of Sculpt",
+"author": "kevin.dellerue",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/3d5c1694eeee4c4a87349fbe63acad30",
+"iou": 0.8705,
+"anchor": 70
+},
+{
+"cls": "pottery",
+"label": "pottery",
+"name": "Thu, 28 Mar 2019 20:51:28",
+"author": "newfields-3dprinting",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b1aa9affc15f4fe8868f5120e16ed6c3",
+"iou": 0.978,
+"anchor": 71
+},
+{
+"cls": "pumpkin",
+"label": "pumpkin",
+"name": "Apex Halloween Scene",
+"author": "aggy",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/2c72fa9276ef4a5cb986397ce2fd9ab7",
+"iou": 0.986,
+"anchor": 72
+},
+{
+"cls": "rabbit",
+"label": "rabbit",
+"name": "Desktop",
+"author": "a955087",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ec467ff629e343d7a0101cf490726cd9",
+"iou": 0.9338,
+"anchor": 73
+},
+{
+"cls": "race_car",
+"label": "race car",
+"name": "Car",
+"author": "Ala Abuhadbeh",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/95c72bc71526450aa05826b62a574461",
+"iou": 0.9466,
+"anchor": 74
+},
+{
+"cls": "roman_monument",
+"label": "roman monument",
+"name": "Arc De Triomphe",
+"author": "Microsoft",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/6ae73c4f4b1e4c4189f7b5c82ed88d3f",
+"iou": 0.9709,
+"anchor": 75
+},
+{
+"cls": "seashell",
+"label": "seashell",
+"name": "Recent Brachiopod",
+"author": "Digital Atlas of Ancient Life",
+"license": "cc0",
+"url": "https://sketchfab.com/3d-models/ff814230abf44128af37ea768b50ff90",
+"iou": 0.9729,
+"anchor": 76
+},
+{
+"cls": "shark",
+"label": "shark",
+"name": "Shark",
+"author": "akkaban",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/0decb5afa4ec46ccb9ebeb941731a53b",
+"iou": 0.9734,
+"anchor": 77
+},
+{
+"cls": "shoe",
+"label": "shoe",
+"name": "Croc Shoe",
+"author": "Ziaraallman_3D",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/4622e88fd9264b37997671efeb73af85",
+"iou": 0.9603,
+"anchor": 78
+},
+{
+"cls": "skateboard",
+"label": "skateboard",
+"name": "skateboard",
+"author": "AmrTi70",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e8a54da09d964b3e8abe951d5d83fb59",
+"iou": 0.9221,
+"anchor": 79
+},
+{
+"cls": "snowman",
+"label": "snowman",
+"name": "Simple Snowman",
+"author": "Fernando",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ebfd117310e944189fac6ed724fd5763",
+"iou": 0.977,
+"anchor": 80
+},
+{
+"cls": "sofa",
+"label": "sofa",
+"name": "Couch",
+"author": "StarStarbird",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/d90e4353ae7047e0b4f37abc8bc58468",
+"iou": 0.9697,
+"anchor": 81
+},
+{
+"cls": "statue_(sculpture)",
+"label": "statue",
+"name": "Buda",
+"author": "Horton",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/745e8ae2a77b43d5a45f3bcb8f438164",
+"iou": 0.9386,
+"anchor": 82
+},
+{
+"cls": "table",
+"label": "table",
+"name": "Table",
+"author": "isaiahwolf",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f654bfb8ae2b48dfac9ba5b6a86708d8",
+"iou": 0.9493,
+"anchor": 83
+},
+{
+"cls": "table_lamp",
+"label": "table lamp",
+"name": "Desk lamp",
+"author": "HASSAN",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b9458e04d30e4b6284d46d35880a9b95",
+"iou": 0.9216,
+"anchor": 84
+},
+{
+"cls": "teddy_bear",
+"label": "teddy bear",
+"name": "Teddy Bear",
+"author": "kylontome",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/db618e3f97d641bf9ba04af3f84eb059",
+"iou": 0.966,
+"anchor": 85
+},
+{
+"cls": "telephone",
+"label": "telephone",
+"name": "Low poly vintage telephone",
+"author": "kotelev",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c0ae5edb08064ce4bcd1c7d88e68b30b",
+"iou": 0.9354,
+"anchor": 86
+},
+{
+"cls": "tower",
+"label": "tower",
+"name": "Medieval Guard Tower",
+"author": "renzcabiscuelas",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e303a27f7e7244a8b6274f455c2fe2dd",
+"iou": 0.9818,
+"anchor": 87
+},
+{
+"cls": "tractor_(farm_equipment)",
+"label": "tractor",
+"name": "Tracteur Lowpoly",
+"author": "3D'essaim",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/090772a1894b45f6813ca2a04ae0857c",
+"iou": 0.835,
+"anchor": 88
+},
+{
+"cls": "train_(railroad_vehicle)",
+"label": "train",
+"name": "Low Poly Toy Train",
+"author": "Jessica Cooper",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/d0c641cbd3e44fbcb66a3bc9febeb092",
+"iou": 0.877,
+"anchor": 89
+},
+{
+"cls": "trophy_cup",
+"label": "trophy cup",
+"name": "2\u00aa Atividade - 3Ds Max",
+"author": "Fernando Noll",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/1464e06b191041208b52d0bd038b3349",
+"iou": 0.9728,
+"anchor": 90
+},
+{
+"cls": "truck",
+"label": "truck",
+"name": "3D Truck",
+"author": "Sba Stuff",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a0dcefc83e6445ba9b8991cad2654840",
+"iou": 0.9327,
+"anchor": 91
+},
+{
+"cls": "turtle",
+"label": "turtle",
+"name": "Turtle",
+"author": "kennedy.adams",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/7243321e0f1b4acf9c1ee72ca44dbd65",
+"iou": 0.9372,
+"anchor": 92
+},
+{
+"cls": "vase",
+"label": "vase",
+"name": "jarron2",
+"author": "uzumy123",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/cc812eaa7c9f4e81929d6697a03b22de",
+"iou": 0.9787,
+"anchor": 93
+},
+{
+"cls": "violin",
+"label": "violin",
+"name": "Violino",
+"author": "lucaspuc2019",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/fd57d303020b432aa920bef6887607e3",
+"iou": 0.891,
+"anchor": 94
+},
+{
+"cls": "windmill",
+"label": "windmill",
+"name": "[HW XYZ School] Blocking3",
+"author": "s.m.s.775",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/193609eb79874c22b45bbd9534ad75f0",
+"iou": 0.8596,
+"anchor": 95
+},
+{
+"cls": "wineglass",
+"label": "wineglass",
+"name": "Wine glasses",
+"author": "Sousinho",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/24ec0d2be06c42909185d287279ac42e",
+"iou": 0.9522,
+"anchor": 96
+},
+{
+"cls": "wolf",
+"label": "wolf",
+"name": "3D Inktober 2019: Husky",
+"author": "Daniel O'Neil",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/cce43dece37b4914a72c5246e58b35dc",
+"iou": 0.9779,
+"anchor": 97
+},
+{
+"cls": "castle",
+"label": "castle",
+"name": "Castle-tower-middle-large",
+"author": "Pixel",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a1e7f231858b4e66ab103db00f46f54d",
+"iou": 0.99,
+"anchor": 98
+},
+{
+"cls": "classical_statue",
+"label": "classical statue",
+"name": "Zbruch Idol Low Poly - v1 - WSEI",
+"author": "lightguard",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/94b3fc027cb14a2ebc36fd03ee4268cd",
+"iou": 0.9925,
+"anchor": 99
+},
+{
+"cls": "sports_car",
+"label": "sports car",
+"name": "Cartoon Subaru",
+"author": "mednios",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/83160b90e2884f81a11ab948ff936413",
+"iou": 0.9862,
+"anchor": 100
+},
+{
+"cls": "cathedral",
+"label": "cathedral",
+"name": "Museo Civico Archeologico Di Fara",
+"author": "CultureEdu",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f73c064eb24c4a6c8d315aa00f1206b2",
+"iou": 0.9882,
+"anchor": 101
+},
+{
+"cls": "classical_bust",
+"label": "classical bust",
+"name": "Head from an image of the Buddha, 11th-12th C CE",
+"author": "Minneapolis Institute of Art",
+"license": "cc0",
+"url": "https://sketchfab.com/3d-models/070cb30f27d24c3fbe4e7c13f0eaebad",
+"iou": 0.973,
+"anchor": 102
+},
+{
+"cls": "classic_car",
+"label": "classic car",
+"name": "Retro Lowpoly Nissan Tsuru",
+"author": "jomalon",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/94faafff28ce4bb3b3ab338da0b24eec",
+"iou": 0.9783,
+"anchor": 103
+},
+{
+"cls": "airplane",
+"label": "airplane",
+"name": "Angel of the north",
+"author": "g13nn4",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a5197e89e7164431a6620ae7b58ccd2e",
+"iou": 0.9545,
+"anchor": 104
+},
+{
+"cls": "chair",
+"label": "chair",
+"name": "Sat, 30 Mar 2019 15:31:06",
+"author": "newfields-3dprinting",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/fab9443d48e24fbfa309187df78d58e6",
+"iou": 0.9301,
+"anchor": 105
+},
+{
+"cls": "owl",
+"label": "owl",
+"name": "E07_Boonyanut_WK_2B_Small",
+"author": "asuga",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a51751c9989940e592eb61be41ee35cc",
+"iou": 0.976,
+"anchor": 106
+},
+{
+"cls": "guitar",
+"label": "guitar",
+"name": "Simple Guitar",
+"author": "zNight",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/8a49213fca41426d9d8310fb2e0a9f70",
+"iou": 0.9524,
+"anchor": 107
+},
+{
+"cls": "teapot",
+"label": "teapot",
+"name": "Sat, 25 Aug 2018 19:34:21",
+"author": "newfields-3dprinting",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/7846c390707e49d2a0e601ee748aae9b",
+"iou": 0.9815,
+"anchor": 108
+},
+{
+"cls": "elephant",
+"label": "elephant",
+"name": "Elephant",
+"author": "eminkalkis",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c41108a3ef0a47cea07620df8de9cacd",
+"iou": 0.9859,
+"anchor": 109
+},
+{
+"cls": "Christmas_tree",
+"label": "christmas tree",
+"name": "Tree",
+"author": "EgoRich",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/2826823d900347bd97b17708ee04c3ff",
+"iou": 0.9648,
+"anchor": 110
+},
+{
+"cls": "apple",
+"label": "apple",
+"name": "Apple",
+"author": "tsunk66",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/84286947d3ea4ed195a72c25125f60fa",
+"iou": 0.9946,
+"anchor": 111
+},
+{
+"cls": "armchair",
+"label": "armchair",
+"name": "Old Chair",
+"author": "A18K",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/6e35f6fdf1264db4880049b802f18ea2",
+"iou": 0.9638,
+"anchor": 112
+},
+{
+"cls": "bear",
+"label": "bear",
+"name": "Old Bear",
+"author": "AndrewA09",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/1c6d3625b6f448d99c95498b5675c404",
+"iou": 0.9735,
+"anchor": 113
+},
+{
+"cls": "bed",
+"label": "bed",
+"name": "Bed",
+"author": "sirkitree",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/954bcc16347940af96136bc6b666cb69",
+"iou": 0.9764,
+"anchor": 114
+},
+{
+"cls": "beetle",
+"label": "beetle",
+"name": "06 breathing size",
+"author": "gugurij",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/46fd3ab9a51442d2b0bf0f86dfab97de",
+"iou": 0.9871,
+"anchor": 115
+},
+{
+"cls": "bell",
+"label": "bell",
+"name": "Campana Texturizada",
+"author": "forestarg",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/fc203fd849ea46f0b84d4843ba1aafcd",
+"iou": 0.9732,
+"anchor": 116
+},
+{
+"cls": "bench",
+"label": "bench",
+"name": "Table Wall Stand",
+"author": "RyanBlack",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/0c87bb81838946728e2c3270817d67c1",
+"iou": 0.972,
+"anchor": 117
+},
+{
+"cls": "bicycle",
+"label": "bicycle",
+"name": "2D Bike | Downloadable for first 10 users",
+"author": "Sumit Chavan",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b2cf1d7d284f46e4b90def4889c4da24",
+"iou": 0.9885,
+"anchor": 118
+},
+{
+"cls": "bird",
+"label": "bird",
+"name": "Bird",
+"author": "Weiting Ke",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/76a8557e54524a40b9dd16ddd373fd4e",
+"iou": 0.9809,
+"anchor": 119
+},
+{
+"cls": "boat",
+"label": "boat",
+"name": "Little's island lighthouse",
+"author": "adrianadesp",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/814781ac1f334f1e915200d30374529d",
+"iou": 0.9587,
+"anchor": 120
+},
+{
+"cls": "bookcase",
+"label": "bookcase",
+"name": "Keiffer Shelf",
+"author": "Evan Keiffer",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/3049fcce9cfd4bf4a164398966b3fd7d",
+"iou": 0.948,
+"anchor": 121
+},
+{
+"cls": "boot",
+"label": "boot",
+"name": "Military Boot low poly",
+"author": "Gulgolet",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/77816f1c617541d9b67c1ee4db9a0197",
+"iou": 0.9396,
+"anchor": 122
+},
+{
+"cls": "bus_(vehicle)",
+"label": "bus",
+"name": "Low Poly Bus (for background)",
+"author": "leedlee",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ab6e3c0001b148fdb49fc15ba08be149",
+"iou": 0.9902,
+"anchor": 123
+},
+{
+"cls": "butterfly",
+"label": "butterfly",
+"name": "butterfly on sculpture",
+"author": "Daniele Caccavale",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/5a79396e6c754077a011ac8fdb7fda35",
+"iou": 0.9493,
+"anchor": 124
+},
+{
+"cls": "car_(automobile)",
+"label": "car",
+"name": "Kids pool float car",
+"author": "assetfactory",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a9d846aa86944911bd5f983a6c9f2faf",
+"iou": 0.9312,
+"anchor": 125
+},
+{
+"cls": "cat",
+"label": "cat",
+"name": "Yuk Mengenal Kucing",
+"author": "IraTriani",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/cb0a873201044b8aa5e4c3212fed3b19",
+"iou": 0.9866,
+"anchor": 126
+},
+{
+"cls": "chandelier",
+"label": "chandelier",
+"name": "\u0411\u0440\u0430 3921/1W Odeon Light",
+"author": "fedomo.ru",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c2c5b668395a4e7b8ff67ad715e13084",
+"iou": 0.7395,
+"anchor": 127
+},
+{
+"cls": "church",
+"label": "church",
+"name": "Drone photogrammetry of an italian clock tower",
+"author": "ivanfrattina",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/413329fe25b14706bcfbd13f0b0fd13a",
+"iou": 0.9737,
+"anchor": 128
+},
+{
+"cls": "classical_sculpture",
+"label": "classical sculpture",
+"name": "Greece Bronze Cube",
+"author": "ARmediaLab",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/869086b10a25421b81fc5287a6b294c3",
+"iou": 0.998,
+"anchor": 129
+},
+{
+"cls": "clock",
+"label": "clock",
+"name": "Grandfather Clock",
+"author": "Memorie",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/5c08d95755954e109ab63fbf997b818b",
+"iou": 0.9774,
+"anchor": 130
+},
+{
+"cls": "cow",
+"label": "cow",
+"name": "Cow",
+"author": "ejudson",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/224d642a9d4f4f7084d4099659a7caa4",
+"iou": 0.9775,
+"anchor": 131
+},
+{
+"cls": "crab_(animal)",
+"label": "crab",
+"name": "Low-poly Bettle",
+"author": "AlicePandaArt",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b09fe7d9503f41d4a77966c48a5db04a",
+"iou": 0.9178,
+"anchor": 132
+},
+{
+"cls": "crown",
+"label": "crown",
+"name": "Chess Piece Queen",
+"author": "Amine Hosseini",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e1bd054f088e4c928740c4989a4a3a41",
+"iou": 0.9531,
+"anchor": 133
+},
+{
+"cls": "cup",
+"label": "cup",
+"name": "cylinder8",
+"author": "sebastian-wmse",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/943f75e914064e1f83e24b3fed4d9d54",
+"iou": 0.996,
+"anchor": 134
+},
+{
+"cls": "cupcake",
+"label": "cupcake",
+"name": "Cupcake 1",
+"author": "Kallvin",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c73a1f2edf0c41b2848e95bf7a48af20",
+"iou": 0.9804,
+"anchor": 135
+},
+{
+"cls": "deer",
+"label": "deer",
+"name": "African Unicorn Figurine",
+"author": "forkbird",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/6fa6ac4dc24c4802b51d05e4475bbb2f",
+"iou": 0.977,
+"anchor": 136
+},
+{
+"cls": "dirt_bike",
+"label": "dirt bike",
+"name": "Moto",
+"author": "narciussus",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f5d8cce624204a0a8c232c081eb05e9f",
+"iou": 0.7916,
+"anchor": 137
+},
+{
+"cls": "dog",
+"label": "dog",
+"name": "1006_DOG",
+"author": "408730751",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/9eb9d52b34f74e2c81925de28c0ef68d",
+"iou": 0.9842,
+"anchor": 138
+},
+{
+"cls": "dolphin",
+"label": "dolphin",
+"name": "504-06-\u8b1d\u6615\u59a4-\u6d77\u8c5a(\u7b2c\u4e8c\u6b21)",
+"author": "811127",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c8959296a83149b0bb0707ce7b16e387",
+"iou": 0.9815,
+"anchor": 139
+},
+{
+"cls": "drum_(musical_instrument)",
+"label": "drum",
+"name": "Barrel",
+"author": "Joni Suojanen",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/d2bd517fdbc9454b93fd9a9551537441",
+"iou": 0.9869,
+"anchor": 140
+},
+{
+"cls": "fighter_jet",
+"label": "fighter jet",
+"name": "Megaladon Hungry shark world",
+"author": "Tankman",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/6f3b0c7424fc4d7fb8eb84682d5a65fb",
+"iou": 0.9565,
+"anchor": 141
+},
+{
+"cls": "fish",
+"label": "fish",
+"name": "CREEPY",
+"author": "vfxltra",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/4dadaa5050a345d9b362367752eb7c1b",
+"iou": 0.9822,
+"anchor": 142
+},
+{
+"cls": "flowerpot",
+"label": "flowerpot",
+"name": "20th Century Fox Logo 1994 Remake 2019 Edition B",
+"author": "Henrique Matias Neto",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e931793e5efd44b4b1b1f105dda7ba7b",
+"iou": 0.982,
+"anchor": 143
+},
+{
+"cls": "frog",
+"label": "frog",
+"name": "Fwoggy",
+"author": "skylerharris0",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/834eb24ec474482db9a1725cc9fd6dd1",
+"iou": 0.9884,
+"anchor": 144
+},
+{
+"cls": "gargoyle",
+"label": "gargoyle",
+"name": "Lion-dog (Komainu, from Hanazono Shrine)",
+"author": "Yu",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/eeed915e737b49f4b70a82921c2726b4",
+"iou": 0.9485,
+"anchor": 145
+},
+{
+"cls": "giraffe",
+"label": "giraffe",
+"name": "Giraffe",
+"author": "elinaposy",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/6c481ee9b724465d82aeb64e3e417c54",
+"iou": 0.9634,
+"anchor": 146
+},
+{
+"cls": "globe",
+"label": "globe",
+"name": "Mars Geologic Map",
+"author": "dronemapping",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f54e5c6df5414ce48ed5eeca0ec9496f",
+"iou": 0.9943,
+"anchor": 147
+},
+{
+"cls": "helicopter",
+"label": "helicopter",
+"name": "Helicopter Draft",
+"author": "helladyhot",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/aaea418b4d3b444c9af4cf93df06b852",
+"iou": 0.9035,
+"anchor": 148
+},
+{
+"cls": "helmet",
+"label": "helmet",
+"name": "kriptonautas",
+"author": "sualogo3d",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/78f9cf9616ac4dc2a4fd7547fafde942",
+"iou": 0.9894,
+"anchor": 149
+},
+{
+"cls": "horse",
+"label": "horse",
+"name": "Invisibody AI D0-",
+"author": "Anna Borou Yu",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/af589f9836554a83b6837ec862059001",
+"iou": 0.9589,
+"anchor": 150
+},
+{
+"cls": "jet_plane",
+"label": "jet plane",
+"name": "Asset Production - Wooden Toy Plane",
+"author": "granite18louis",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/3c1a86b7f4e6446aa24ae28e695d44dd",
+"iou": 0.9177,
+"anchor": 151
+},
+{
+"cls": "kettle",
+"label": "kettle",
+"name": "Thu, 18 Apr 2019 18:33:16",
+"author": "newfields-3dprinting",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/2fd452ea6803428d9fa1dfae6c53149d",
+"iou": 0.9842,
+"anchor": 152
+},
+{
+"cls": "lamppost",
+"label": "lamppost",
+"name": "Street Lamp",
+"author": "Pyrozen",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/dd07dab0aea14361997300512d661fd9",
+"iou": 1.0,
+"anchor": 153
+},
+{
+"cls": "landmark",
+"label": "landmark",
+"name": "Arch Of Janus",
+"author": "badger5",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f7bf708728224434b9004cff868781f5",
+"iou": 0.9614,
+"anchor": 154
+},
+{
+"cls": "lantern",
+"label": "lantern",
+"name": "Lantern01",
+"author": "Carnosaix",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/cdcb0fa332344a32ad9f6ec81936acc7",
+"iou": 0.9759,
+"anchor": 155
+},
+{
+"cls": "lightbulb",
+"label": "lightbulb",
+"name": "lightbulb",
+"author": "Cather",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e96738ba83044e82a0f69963770481ef",
+"iou": 0.9958,
+"anchor": 156
+},
+{
+"cls": "lion",
+"label": "lion",
+"name": "Wolf Plaque (free download ready for 3D print)",
+"author": "eon",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/9c9d0130e0494c2ba25aa5b41d7d6b4c",
+"iou": 0.9453,
+"anchor": 157
+},
+{
+"cls": "motorcycle",
+"label": "motorcycle",
+"name": "Vintage Scooter",
+"author": "CinekR9",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ad0f9220657c43fb89692dcf7a6b45a8",
+"iou": 0.9144,
+"anchor": 158
+},
+{
+"cls": "mug",
+"label": "mug",
+"name": "HEAD MR:NONE",
+"author": "MrNoNe",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e02123e2b43d4092820c8e78b4a48332",
+"iou": 0.9814,
+"anchor": 159
+},
+{
+"cls": "mushroom",
+"label": "mushroom",
+"name": "Mushroom",
+"author": "oskar.gustafsson1",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e4ebb7a0afb94b618583f2c6bb2ddab4",
+"iou": 0.987,
+"anchor": 160
+},
+{
+"cls": "oil_lamp",
+"label": "oil lamp",
+"name": "Testing Vat",
+"author": "AdamCGD",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f1b34ddc53bc453282e17f0e6bbd2117",
+"iou": 0.9598,
+"anchor": 161
+},
+{
+"cls": "palace",
+"label": "palace",
+"name": "ch\u00e2teau d'eau",
+"author": "CMax_Drone",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/63282d9454904e5f89e20a7833472757",
+"iou": 0.9472,
+"anchor": 162
+},
+{
+"cls": "parrot",
+"label": "parrot",
+"name": "Colorful Wooden Bird Figurine",
+"author": "\u0b9cCIHIRIS\u0b9c",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/66de95735b704c9695fc428c2c9499b4",
+"iou": 0.9706,
+"anchor": 163
+},
+{
+"cls": "penguin",
+"label": "penguin",
+"name": "Weird Looking Penguin",
+"author": "\ud83c\udf80 \u2605\u5f61[\ua730\u1d07\u029f\u026ax \u028f\u1d00\u1d05\u1d0f\u1d0d\u026a]\u5f61\u2605 \ud83c\udf80",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c50701af72334361ac7f50fa01945efd",
+"iou": 0.9886,
+"anchor": 164
+},
+{
+"cls": "piano",
+"label": "piano",
+"name": "piano #sketchfabweekly",
+"author": "SappyEddie",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/82d8dba71b624d0cbcb62c0e7aaf001e",
+"iou": 0.9581,
+"anchor": 165
+},
+{
+"cls": "pickup_truck",
+"label": "pickup truck",
+"name": "Low-Poly Car",
+"author": "The Cube",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/41c8f38c11f84baeb224c23c34233821",
+"iou": 0.9481,
+"anchor": 166
+},
+{
+"cls": "pineapple",
+"label": "pineapple",
+"name": "200ML Pineapple",
+"author": "eyes360vr",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f5b6d7e24df74963ac0af09c1f435143",
+"iou": 0.9852,
+"anchor": 167
+},
+{
+"cls": "pony",
+"label": "pony",
+"name": "Uni3",
+"author": "mariarakstad",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a77c38a190204ace877fc62b77f466e1",
+"iou": 0.9279,
+"anchor": 168
+},
+{
+"cls": "pottery",
+"label": "pottery",
+"name": "Objeto 02 - Moche",
+"author": "Ministerio de Cultura Per\u00fa",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/fc985bc7c17b458f933f0160405af0b8",
+"iou": 0.9818,
+"anchor": 169
+},
+{
+"cls": "pumpkin",
+"label": "pumpkin",
+"name": "Pumpkin",
+"author": "joseph.casey97",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/44612bb17e7d43e4adfbe57b7649027e",
+"iou": 0.9882,
+"anchor": 170
+},
+{
+"cls": "rabbit",
+"label": "rabbit",
+"name": "Poppy Playtime Bunny Toy",
+"author": "popppyplaytime",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e243fab1a47d4427bff9de3ef44b1a15",
+"iou": 0.9732,
+"anchor": 171
+},
+{
+"cls": "race_car",
+"label": "race car",
+"name": "Lamborghini Huracan GT3 - Squadra Corse SDC",
+"author": "SDC PERFORMANCE\u2122\ufe0f",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/73a36cae82004672a024f83d409cf334",
+"iou": 0.9865,
+"anchor": 172
+},
+{
+"cls": "roman_monument",
+"label": "roman monument",
+"name": "Arc de Triumphe Paris",
+"author": "tux",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/3ecde6dbbcde48ffb84ea7fe93485cd7",
+"iou": 0.9468,
+"anchor": 173
+},
+{
+"cls": "seashell",
+"label": "seashell",
+"name": "Cymatoceras sp.",
+"author": "Paleo3d",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e37ba665f10e4c42ac07b682f1a21436",
+"iou": 0.9748,
+"anchor": 174
+},
+{
+"cls": "shark",
+"label": "shark",
+"name": "Character . Fat Sharko",
+"author": "A . Priabudiman",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/1c4ceb980e174dc5b4cea84eb023983d",
+"iou": 0.9826,
+"anchor": 175
+},
+{
+"cls": "shoe",
+"label": "shoe",
+"name": "Galois Bott",
+"author": "saint-jean",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/741f01b969da4f1da568b2744aafa3ca",
+"iou": 0.9766,
+"anchor": 176
+},
+{
+"cls": "skateboard",
+"label": "skateboard",
+"name": "Skate",
+"author": "paulabz8305",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/6e329d48dfe34854b89eb40e5ee4daae",
+"iou": 0.9583,
+"anchor": 177
+},
+{
+"cls": "snowman",
+"label": "snowman",
+"name": "Muneco De Nieve",
+"author": "pelandintecno",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/aa9adefc0dad401d9c1a40ac90cac1ec",
+"iou": 0.9894,
+"anchor": 178
+},
+{
+"cls": "sofa",
+"label": "sofa",
+"name": "Office Couch",
+"author": "Virenimation",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ca63db1db205476fa6f54e1603b7d15d",
+"iou": 0.962,
+"anchor": 179
+},
+{
+"cls": "statue_(sculpture)",
+"label": "statue",
+"name": "Statue am St. Josef-Stift Celle",
+"author": "KAV-Gymnasium Celle",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/918bad4d31ab45d695c3bf08621f4ccc",
+"iou": 0.9615,
+"anchor": 180
+},
+{
+"cls": "table",
+"label": "table",
+"name": "IKEA Lack Side Table 55x55x45",
+"author": "robertrestupambudi",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/77ec465b45574d12bf527a26ece473e8",
+"iou": 0.9861,
+"anchor": 181
+},
+{
+"cls": "table_lamp",
+"label": "table lamp",
+"name": "Lamp",
+"author": "ddiangelo",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e283656b021f4032bb02f8eea06391e0",
+"iou": 0.9718,
+"anchor": 182
+},
+{
+"cls": "teddy_bear",
+"label": "teddy bear",
+"name": "Worn street teddy bear",
+"author": "pacash1",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/8e878e5543424b61b81b247228cc92cc",
+"iou": 0.9747,
+"anchor": 183
+},
+{
+"cls": "telephone",
+"label": "telephone",
+"name": "Old Wall Mounted Telephone.",
+"author": "ShepDes",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/d7efe01f8f51469c821407c9e248c519",
+"iou": 0.9781,
+"anchor": 184
+},
+{
+"cls": "tower",
+"label": "tower",
+"name": "La Torrassa  de Llinars del Vall\u00e8s",
+"author": "jordinoguesg",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/cf7712e2e7cc4858aa9e8c0e9d1362d8",
+"iou": 0.9508,
+"anchor": 185
+},
+{
+"cls": "tractor_(farm_equipment)",
+"label": "tractor",
+"name": "\u9ec4\u660f\u306e\u516c\u5712\u904a\u5177",
+"author": "seirogan",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/739987a6a9e246f5810639bcff7abfae",
+"iou": 0.8919,
+"anchor": 186
+},
+{
+"cls": "train_(railroad_vehicle)",
+"label": "train",
+"name": "Timbangan",
+"author": "andrea.trini323",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/d76cb0dd3c0f4e21adf3e489c14f43cb",
+"iou": 0.9692,
+"anchor": 187
+},
+{
+"cls": "trophy_cup",
+"label": "trophy cup",
+"name": "Ipl Trophy",
+"author": "Ava editz",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/20b3bf74562140d889f671dc994179f5",
+"iou": 0.9439,
+"anchor": 188
+},
+{
+"cls": "truck",
+"label": "truck",
+"name": "Leban",
+"author": "mariaines.leban",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/9ec022e6f6bd4ac489e8853919358ef3",
+"iou": 0.9746,
+"anchor": 189
+},
+{
+"cls": "turtle",
+"label": "turtle",
+"name": "TIQA HAMIZAH ENTERPRISE - Bekas Hiasan Penyu",
+"author": "eeelabvisual",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/afbbf96ff6884bc3a73a183a4774c8aa",
+"iou": 0.9783,
+"anchor": 190
+},
+{
+"cls": "vase",
+"label": "vase",
+"name": "ZUTAH-04 Bowling",
+"author": "eeelabvisual",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ccd47f9847b245449d8e03c532670a80",
+"iou": 0.9967,
+"anchor": 191
+},
+{
+"cls": "violin",
+"label": "violin",
+"name": "felipe lima",
+"author": "sualogo3d",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/440cfd6ead814445baf4e3031efd7d45",
+"iou": 0.97,
+"anchor": 192
+},
+{
+"cls": "windmill",
+"label": "windmill",
+"name": "Lowpoly Windmill",
+"author": "Kumar Mridul",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/13fc708a29054e0c86f886cd8a36191e",
+"iou": 0.9187,
+"anchor": 193
+},
+{
+"cls": "wineglass",
+"label": "wineglass",
+"name": "Wine Glass Exported",
+"author": "cconnolly886",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/7368207bfc9c44f4ad874d0383bc7815",
+"iou": 0.9755,
+"anchor": 194
+},
+{
+"cls": "wolf",
+"label": "wolf",
+"name": "Abstact Painted Wolf",
+"author": "onepirri",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/5ea65e6a2f0a4ba0a0e72b9f5ad36139",
+"iou": 0.9394,
+"anchor": 195
+},
+{
+"cls": "castle",
+"label": "castle",
+"name": "Castle_Part_12",
+"author": "BlackSpire",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/aa60f618ae80468197a5fd8e8779cda5",
+"iou": 0.9732,
+"anchor": 196
+},
+{
+"cls": "classical_statue",
+"label": "classical statue",
+"name": "Roman Statue",
+"author": "Actual360production",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c6d8560c74f44d6fb1ecf2bef3049c71",
+"iou": 0.9587,
+"anchor": 197
+},
+{
+"cls": "sports_car",
+"label": "sports car",
+"name": "Aston Martin Bulldog",
+"author": "Martin Trafas",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/3342cc8231434f878aaa7fd49bd37987",
+"iou": 0.9653,
+"anchor": 198
+},
+{
+"cls": "cathedral",
+"label": "cathedral",
+"name": "Piazza del Duomo v8",
+"author": "tosolini",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/8f0b5e8e255c43229f853565feb57970",
+"iou": 0.9856,
+"anchor": 199
+},
+{
+"cls": "classical_bust",
+"label": "classical bust",
+"name": "Bust of Ankhhaf",
+"author": "pmanuelian",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/1f6c41e379bd4b38b8b35f3158f3f794",
+"iou": 0.964,
+"anchor": 200
+},
+{
+"cls": "classic_car",
+"label": "classic car",
+"name": "Retro Delorean",
+"author": "Liron",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/391b1ce9e5914e328be9127e77c6d5a0",
+"iou": 0.9697,
+"anchor": 201
+},
+{
+"cls": "airplane",
+"label": "airplane",
+"name": "Plane",
+"author": "swimgod",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/08e5277deb5546a699127562c83128d3",
+"iou": 0.9328,
+"anchor": 202
+},
+{
+"cls": "chair",
+"label": "chair",
+"name": "Thu, 18 Jul 2019 18:25:46",
+"author": "newfields-3dprinting",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/7590ca4ee92047fea87a5c287d3fe22c",
+"iou": 0.915,
+"anchor": 203
+},
+{
+"cls": "owl",
+"label": "owl",
+"name": "Rowlet",
+"author": "nguyenlouis32",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b37f526832a7478c91c866434608e414",
+"iou": 0.9517,
+"anchor": 204
+},
+{
+"cls": "guitar",
+"label": "guitar",
+"name": "Viola-basic",
+"author": "Leonardo",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/fabe3515c09349b28d127202d20eec36",
+"iou": 0.9594,
+"anchor": 205
+},
+{
+"cls": "teapot",
+"label": "teapot",
+"name": "Sat, 20 Jul 2019 23:41:35",
+"author": "newfields-3dprinting",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/81ac1ff71f484a48857b622cfec06b1c",
+"iou": 0.9859,
+"anchor": 206
+},
+{
+"cls": "elephant",
+"label": "elephant",
+"name": "fbx",
+"author": "elekezem",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/072a84f8761e491e8803bcb2bfdf808e",
+"iou": 0.9651,
+"anchor": 207
+},
+{
+"cls": "Christmas_tree",
+"label": "christmas tree",
+"name": "Christmas Tree Diorama",
+"author": "Nicola Ristagno",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b2a917737eab4866a8fda30fded72d1c",
+"iou": 0.8609,
+"anchor": 208
+},
+{
+"cls": "apple",
+"label": "apple",
+"name": "English_apple",
+"author": "teachersmapd",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b3ff2dc7dbfa416ebd6d7c6382cc21d3",
+"iou": 0.9905,
+"anchor": 209
+},
+{
+"cls": "armchair",
+"label": "armchair",
+"name": "LPUVW",
+"author": "HannaPachurka",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/da6d646358d1451fa751f1a9141290a3",
+"iou": 0.9476,
+"anchor": 210
+},
+{
+"cls": "bear",
+"label": "bear",
+"name": "Teabag",
+"author": "GravyWavy",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/6da4ed16f6aa4aeda365166e322f9371",
+"iou": 0.9694,
+"anchor": 211
+},
+{
+"cls": "bed",
+"label": "bed",
+"name": "Lowpoly Bed",
+"author": "Mohamed199",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/6eb4212e70b941a3bd2db196a47828b9",
+"iou": 0.962,
+"anchor": 212
+},
+{
+"cls": "beetle",
+"label": "beetle",
+"name": "Black Beetle",
+"author": "HMD\u2019sculptor",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/34dda482e74d4610b29fecccc42c1650",
+"iou": 0.9014,
+"anchor": 213
+},
+{
+"cls": "bell",
+"label": "bell",
+"name": "Bell from Poly by Google",
+"author": "IronEqual",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/cb35450a7e2e4a69b8daa7910b03151e",
+"iou": 0.9727,
+"anchor": 214
+},
+{
+"cls": "bench",
+"label": "bench",
+"name": "Park bench (Game ready)",
+"author": "PT34",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/fd4d821a9e5f46cab786d4530133fc30",
+"iou": 0.9298,
+"anchor": 215
+},
+{
+"cls": "bicycle",
+"label": "bicycle",
+"name": "bicycle",
+"author": "karinkakravchenko",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ee3b649aa5ad4cda9580dc3f4a32bba9",
+"iou": 0.9622,
+"anchor": 216
+},
+{
+"cls": "bird",
+"label": "bird",
+"name": "Chik lowpoly",
+"author": "lamass",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/6354119423d14471a803b77aa539b2eb",
+"iou": 0.9607,
+"anchor": 217
+},
+{
+"cls": "boat",
+"label": "boat",
+"name": "Spongebob Boatmobile | #SketchfabWeeklyChallenge",
+"author": "TheoClarke",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/abdca2ced413486b9c943111621d6f39",
+"iou": 0.9105,
+"anchor": 218
+},
+{
+"cls": "bookcase",
+"label": "bookcase",
+"name": "Colonial Pinewood Shelf",
+"author": "Derlich",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/baded4f3a22e4d6e9472e925e6f1fc12",
+"iou": 0.9016,
+"anchor": 219
+},
+{
+"cls": "boot",
+"label": "boot",
+"name": "Julia Masalin",
+"author": "rasmus3",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/0465a8009d50432caba8fa21c86c0bcd",
+"iou": 0.9334,
+"anchor": 220
+},
+{
+"cls": "bus_(vehicle)",
+"label": "bus",
+"name": "LowPoly Bus",
+"author": "Scuderia Morello",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/5c8b8d30a37543feae428846484d316b",
+"iou": 0.9742,
+"anchor": 221
+},
+{
+"cls": "butterfly",
+"label": "butterfly",
+"name": "An Awesome Design",
+"author": "Andrew Magdy Kamal",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/584979305dc64cb3bf775562748e5c28",
+"iou": 0.9052,
+"anchor": 222
+},
+{
+"cls": "car_(automobile)",
+"label": "car",
+"name": "1956 Fiat 500 Low Poly",
+"author": "Montero",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/55f16de75dba4bf7adce3e1ff5bdfa46",
+"iou": 0.9687,
+"anchor": 223
+},
+{
+"cls": "cat",
+"label": "cat",
+"name": "\u306d\u3053\u3060\u3093\u3054\u3000\u30c6\u30b9\u30c8",
+"author": "sayatan_",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/7c3383a26abe4ff0b4bcf596b0f1be0e",
+"iou": 0.9739,
+"anchor": 224
+},
+{
+"cls": "chandelier",
+"label": "chandelier",
+"name": "Chandelier from Poly by Google",
+"author": "IronEqual",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/202cbb2a22ea4dda80160ec89a77dc39",
+"iou": 0.7143,
+"anchor": 225
+},
+{
+"cls": "church",
+"label": "church",
+"name": "Eggesford Church Font",
+"author": "artfletch",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/fa6a60d149534611aba3422b27132deb",
+"iou": 0.9688,
+"anchor": 226
+},
+{
+"cls": "classical_sculpture",
+"label": "classical sculpture",
+"name": "Marble Pillar \u25b31820",
+"author": "O-tolab",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f65b042360f441f7a3aeb2c3a11925b3",
+"iou": 0.9805,
+"anchor": 227
+},
+{
+"cls": "clock",
+"label": "clock",
+"name": "Gustav Becker Glass Dome Pendulum Clock",
+"author": "jankeza121",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/65248841bd914884a837ae3f3bb6137c",
+"iou": 0.9361,
+"anchor": 228
+},
+{
+"cls": "cow",
+"label": "cow",
+"name": "Low Poly Cow",
+"author": "tsutomu.saito",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/df042eca21c946a89b8df54310f28c59",
+"iou": 0.9506,
+"anchor": 229
+},
+{
+"cls": "crab_(animal)",
+"label": "crab",
+"name": "Stylised Crab",
+"author": "AlienDev",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/424974dd5eee46c5b5e28bb2d3e494fb",
+"iou": 0.9029,
+"anchor": 230
+},
+{
+"cls": "crown",
+"label": "crown",
+"name": "Burger King",
+"author": "CHooverShrimp",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/1237d80e466f4c5dbf53b1302ddbca1f",
+"iou": 0.9003,
+"anchor": 231
+},
+{
+"cls": "cup",
+"label": "cup",
+"name": "POTTINGER - Gobelet 18cl",
+"author": "Sobopagob",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a17070d3ce224e9d80bcb4cebd10c42b",
+"iou": 0.9738,
+"anchor": 232
+},
+{
+"cls": "cupcake",
+"label": "cupcake",
+"name": "Cupcake",
+"author": "Nikuza",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/d944627e130147a4bd1bc1973ca29b09",
+"iou": 0.9788,
+"anchor": 233
+},
+{
+"cls": "deer",
+"label": "deer",
+"name": "Moose",
+"author": "IzLoM39",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/58019f16d1784063bfb95a5bbc4575e3",
+"iou": 0.9533,
+"anchor": 234
+},
+{
+"cls": "dirt_bike",
+"label": "dirt bike",
+"name": "Motorbike Concept",
+"author": "benjaminshaw",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/04d8e009a64347509704072987319440",
+"iou": 0.7688,
+"anchor": 235
+},
+{
+"cls": "dog",
+"label": "dog",
+"name": "Annoying Dog - Sprite",
+"author": "Jarod",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/4f534b695fd14efdaa3d217c539f975a",
+"iou": 0.9642,
+"anchor": 236
+},
+{
+"cls": "dolphin",
+"label": "dolphin",
+"name": "CUTE SHARK",
+"author": "Luckster",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b1c0265a579a4d39b84406ca49c7b5b2",
+"iou": 0.9796,
+"anchor": 237
+},
+{
+"cls": "drum_(musical_instrument)",
+"label": "drum",
+"name": "Bongos",
+"author": "arnett.w.michael",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/661a23e81a5342d1a8225bf078d5c028",
+"iou": 0.9649,
+"anchor": 238
+},
+{
+"cls": "fighter_jet",
+"label": "fighter jet",
+"name": "Low Poly Jet Mk.2",
+"author": "checkersai",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f2d29714c8e24a2ba03fdde5fc4b20f8",
+"iou": 0.9237,
+"anchor": 239
+},
+{
+"cls": "fish",
+"label": "fish",
+"name": "Fish Animated",
+"author": "Pia Krensel",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/665ab73155a44d91908519d84e5fd002",
+"iou": 0.9772,
+"anchor": 240
+},
+{
+"cls": "flowerpot",
+"label": "flowerpot",
+"name": "GD54_MOD3_A1_RusydiHairulanuar",
+"author": "gd54rusydi",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/14eddfd59aff4c3689d3f16048fc478b",
+"iou": 0.9286,
+"anchor": 241
+},
+{
+"cls": "frog",
+"label": "frog",
+"name": "fren",
+"author": "watergroyper",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c6f1ebdac9e446f4b1f0833f0775886b",
+"iou": 0.9446,
+"anchor": 242
+},
+{
+"cls": "gargoyle",
+"label": "gargoyle",
+"name": "Demonio burocrata",
+"author": "piquelin",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a3c2ddfa596b480eb12594e1e2912212",
+"iou": 0.9324,
+"anchor": 243
+},
+{
+"cls": "giraffe",
+"label": "giraffe",
+"name": "Giuseppe The Giraffe",
+"author": "aniina",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/5a66bf81ed944f00a5d59043aeec4480",
+"iou": 0.9513,
+"anchor": 244
+},
+{
+"cls": "globe",
+"label": "globe",
+"name": "Your Mesh",
+"author": "bigmiy2",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/3c6b18692028416cb21b29ca43eb600f",
+"iou": 0.9889,
+"anchor": 245
+},
+{
+"cls": "helicopter",
+"label": "helicopter",
+"name": "Medical Chopper",
+"author": "Sba Stuff",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c9e23e65e1824d57a3a97048d11f0b54",
+"iou": 0.8917,
+"anchor": 246
+},
+{
+"cls": "helmet",
+"label": "helmet",
+"name": "Daft",
+"author": "ChriS_S3",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/bd0404ce546047008c6572f10a92e618",
+"iou": 0.9594,
+"anchor": 247
+},
+{
+"cls": "horse",
+"label": "horse",
+"name": "Basic Chunky Horse Square",
+"author": "Maggie.Jenner-Bennett",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/46743d3ca1f64dce8faee122bdcd55fb",
+"iou": 0.94,
+"anchor": 248
+},
+{
+"cls": "jet_plane",
+"label": "jet plane",
+"name": "Tinker",
+"author": "jj2008",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a74d7f9d98cf4ebfa6cb2302c46af02d",
+"iou": 0.888,
+"anchor": 249
+},
+{
+"cls": "kettle",
+"label": "kettle",
+"name": "579502f02ab4ca23ba598ef76836fc6f399904f5",
+"author": "newfields-3dprinting",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/d9951aeea7ef481bafb777ea54198f02",
+"iou": 0.9773,
+"anchor": 250
+},
+{
+"cls": "lamppost",
+"label": "lamppost",
+"name": "Street Lamp",
+"author": "Rizzrat",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/12079c398b3a4e8db2d1f9a4da6b29d4",
+"iou": 0.9775,
+"anchor": 251
+},
+{
+"cls": "landmark",
+"label": "landmark",
+"name": "Informa\u010dn\u00e1 tabu\u013ea Siho\u0165",
+"author": "MartinMikusat",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/28d80a2144564c8aaf0561f16885472e",
+"iou": 0.9565,
+"anchor": 252
+},
+{
+"cls": "lantern",
+"label": "lantern",
+"name": "Camping Lamp",
+"author": "Peter Primini",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/6a11e3a5acd54b118166a9a55c672f51",
+"iou": 0.9725,
+"anchor": 253
+},
+{
+"cls": "lightbulb",
+"label": "lightbulb",
+"name": "Light Bulb",
+"author": "Yuichi TAMIYA",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/24d1bb5b02014ba8be693b6cca1ca752",
+"iou": 0.9877,
+"anchor": 254
+},
+{
+"cls": "lion",
+"label": "lion",
+"name": "L\u00f6we",
+"author": "noe-3d.at",
+"license": "cc0",
+"url": "https://sketchfab.com/3d-models/cb90310b9d354315b65a7640f9161339",
+"iou": 0.9326,
+"anchor": 255
+},
+{
+"cls": "motorcycle",
+"label": "motorcycle",
+"name": "WW2 Ural M-63 Motorbike",
+"author": "willdudley",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/60d4c55e88d14755935e6351dd46ebff",
+"iou": 0.8186,
+"anchor": 256
+},
+{
+"cls": "mug",
+"label": "mug",
+"name": "Mug with Snake Decal",
+"author": "gottalovehana",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/82e943e3cfac4da5a20d189ddbd6abdf",
+"iou": 0.9494,
+"anchor": 257
+},
+{
+"cls": "mushroom",
+"label": "mushroom",
+"name": "Mushroom",
+"author": "jonnybolton",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/85ebb06733654cb5bad293dae518c4f8",
+"iou": 0.9835,
+"anchor": 258
+},
+{
+"cls": "oil_lamp",
+"label": "oil lamp",
+"name": "Lantern",
+"author": "membari",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/500a64623ef1441db994bfc50e278ff6",
+"iou": 0.9048,
+"anchor": 259
+},
+{
+"cls": "palace",
+"label": "palace",
+"name": "Palazzo Cita",
+"author": "Karpulya",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c66e34d04dde428c8f26ad672716d1d3",
+"iou": 0.9132,
+"anchor": 260
+},
+{
+"cls": "parrot",
+"label": "parrot",
+"name": "jitters",
+"author": "GR.blend",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/bad46dc1bdfd4dd1a34fe2d9f4365a25",
+"iou": 0.9649,
+"anchor": 261
+},
+{
+"cls": "penguin",
+"label": "penguin",
+"name": "Penguin",
+"author": "swittzz",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/35398d85e5914f2f844a08a97b1d37d2",
+"iou": 0.9713,
+"anchor": 262
+},
+{
+"cls": "piano",
+"label": "piano",
+"name": "Piano",
+"author": "EdwardPark",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/79990b80306c4e13be88319991e0e220",
+"iou": 0.9219,
+"anchor": 263
+},
+{
+"cls": "pickup_truck",
+"label": "pickup truck",
+"name": "Low Poly Pickup Truck",
+"author": "_its_sagar_bro",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/107eee5085634f86b8d362f6b5674687",
+"iou": 0.946,
+"anchor": 264
+},
+{
+"cls": "pineapple",
+"label": "pineapple",
+"name": "Spongebob's House",
+"author": "Yanez Designs",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/d9b8edf3526e429fa80758c285dac858",
+"iou": 0.9641,
+"anchor": 265
+},
+{
+"cls": "pony",
+"label": "pony",
+"name": "Unicorn",
+"author": "nkbergen",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/568c556465934fb6b427f60708bb0f45",
+"iou": 0.8932,
+"anchor": 266
+},
+{
+"cls": "pottery",
+"label": "pottery",
+"name": "RN 13397 - Vasija",
+"author": "Ministerio de Cultura Per\u00fa",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/68bc5563e0d94362ac100275ce9b5ad7",
+"iou": 0.9683,
+"anchor": 267
+},
+{
+"cls": "pumpkin",
+"label": "pumpkin",
+"name": "Ramsgate Ranch Long Stem Pumpkin",
+"author": "NickNaglich",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/30e40711b548419c97934965f7c7213c",
+"iou": 0.9788,
+"anchor": 268
+},
+{
+"cls": "rabbit",
+"label": "rabbit",
+"name": "Fluff - Miraculous Ladybug 3d model",
+"author": "Julia Arts",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/4bf8ad35caa84f12884c6f5ba6ad79f6",
+"iou": 0.966,
+"anchor": 269
+},
+{
+"cls": "race_car",
+"label": "race car",
+"name": "Lamborghini Aventador inspired car",
+"author": "Fred Drabble",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/3ca5e944a55c4745a08d983c544bdad7",
+"iou": 0.9463,
+"anchor": 270
+},
+{
+"cls": "roman_monument",
+"label": "roman monument",
+"name": "Low Poly Roman Triumphal Arch (WIP)",
+"author": "lexferreira89",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/570ba6a3c1ed43bb96a472f689154f90",
+"iou": 0.9423,
+"anchor": 271
+},
+{
+"cls": "seashell",
+"label": "seashell",
+"name": "Escultura - RN 12967",
+"author": "Ministerio de Cultura Per\u00fa",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/5d1f32cf43334c09955319df2552312c",
+"iou": 0.9599,
+"anchor": 272
+},
+{
+"cls": "shark",
+"label": "shark",
+"name": "Shark Animation",
+"author": "SatiKudasati",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/4d4077f9e83b4f55a78cc40ba72e1b2b",
+"iou": 0.9633,
+"anchor": 273
+},
+{
+"cls": "shoe",
+"label": "shoe",
+"name": "Generic Cartoon Shoes",
+"author": "ijiklvn",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/efa2f1f33966447e8d21d605fecf5231",
+"iou": 0.9594,
+"anchor": 274
+},
+{
+"cls": "skateboard",
+"label": "skateboard",
+"name": "Skate board",
+"author": "tsutomu.saito",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/689a7a3d712f4085bd2320512172226f",
+"iou": 0.9526,
+"anchor": 275
+},
+{
+"cls": "snowman",
+"label": "snowman",
+"name": "Snowman Suhyouri",
+"author": "suhyouri",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/d73c6dbe98ed44638f549f8a9fc81996",
+"iou": 0.9732,
+"anchor": 276
+},
+{
+"cls": "sofa",
+"label": "sofa",
+"name": "Chair",
+"author": "Natalia Mendoza",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/d41ef98dbadc4d1fa49c2adc715c3fe6",
+"iou": 0.9614,
+"anchor": 277
+},
+{
+"cls": "statue_(sculpture)",
+"label": "statue",
+"name": "portrait sculpting",
+"author": "Siavash Razavi",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/6a62d098e0c548e384ae122d0947604a",
+"iou": 0.9458,
+"anchor": 278
+},
+{
+"cls": "table",
+"label": "table",
+"name": "Table Pingu",
+"author": "sharkpuppetxl",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/d149e60429574bacab6815132824c59b",
+"iou": 0.9632,
+"anchor": 279
+},
+{
+"cls": "table_lamp",
+"label": "table lamp",
+"name": "Metal Lamp",
+"author": "Cloe Aw",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/7f2489e1e0a945be9b774761a1b745c9",
+"iou": 0.9682,
+"anchor": 280
+},
+{
+"cls": "teddy_bear",
+"label": "teddy bear",
+"name": "Sugar Teddy Bear",
+"author": "Suvalien",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/8fbc11e8876d4ac7b22190c07e96726b",
+"iou": 0.9662,
+"anchor": 281
+},
+{
+"cls": "telephone",
+"label": "telephone",
+"name": "Toy Phone - Sketchfabweeklychallenge -Week 7",
+"author": "Rosbergen Designs",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/5feecd536f77452e9f5cfbba97acb975",
+"iou": 0.9342,
+"anchor": 282
+},
+{
+"cls": "tower",
+"label": "tower",
+"name": "TOWER 5",
+"author": "lisa_shcheglova",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/0d803e88096f47aab2a5edc3f5bff6db",
+"iou": 0.9579,
+"anchor": 283
+},
+{
+"cls": "tractor_(farm_equipment)",
+"label": "tractor",
+"name": "Dump Truck",
+"author": "Zane Bodle",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c17a610a6ff249d8a5d99f305764de11",
+"iou": 0.857,
+"anchor": 284
+},
+{
+"cls": "train_(railroad_vehicle)",
+"label": "train",
+"name": "NYCT R33 Redbird Subway car",
+"author": "NanoRay",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/6ba95918a2854e7ea4213609bd965dfb",
+"iou": 0.947,
+"anchor": 285
+},
+{
+"cls": "trophy_cup",
+"label": "trophy cup",
+"name": "Wed, 19 Sep 2018 16:01:05",
+"author": "newfields-3dprinting",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/2c19dba8f9c444f58a7b87d1e48ca4bf",
+"iou": 0.9437,
+"anchor": 286
+},
+{
+"cls": "truck",
+"label": "truck",
+"name": "Fancy Truck",
+"author": "Sba Stuff",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a9100d0735734854bd1741233b902fa3",
+"iou": 0.9477,
+"anchor": 287
+},
+{
+"cls": "turtle",
+"label": "turtle",
+"name": "Tarta Candela",
+"author": "Francesco Coldesina",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/fca5c69c5635489e8b7bd4790dfbc9b6",
+"iou": 0.9301,
+"anchor": 288
+},
+{
+"cls": "vase",
+"label": "vase",
+"name": "\u7eb9\u9970\u9676\u7f50\uff08584.147\uff09",
+"author": "wsmuseum",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/073534d7bb5d4b90a86c44316c0f112d",
+"iou": 0.9836,
+"anchor": 289
+},
+{
+"cls": "violin",
+"label": "violin",
+"name": "Ovation Guitar",
+"author": "Duane's Mind",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f5bd8065de084cf297302ed676f4da71",
+"iou": 0.9391,
+"anchor": 290
+},
+{
+"cls": "windmill",
+"label": "windmill",
+"name": "Episode 65 - WindMill",
+"author": "dartuchiwa",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/19d436c8acea45cd914c035d2aff9b54",
+"iou": 0.8684,
+"anchor": 291
+},
+{
+"cls": "wineglass",
+"label": "wineglass",
+"name": "Glas",
+"author": "freyaftw",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/2c843f62365b42feb94137f70582d7a7",
+"iou": 0.9644,
+"anchor": 292
+},
+{
+"cls": "wolf",
+"label": "wolf",
+"name": "Low Poly Wolf",
+"author": "Mysticreator",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f8ae73f41a6f40259d9d811f525ee745",
+"iou": 0.96,
+"anchor": 293
+},
+{
+"cls": "castle",
+"label": "castle",
+"name": "Castle-tower-small-ver1",
+"author": "Pixel",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/77ad052ded6a4df29ebe9a81374f2958",
+"iou": 0.9648,
+"anchor": 294
+},
+{
+"cls": "classical_statue",
+"label": "classical statue",
+"name": "Atlantis Idol",
+"author": "jgianelli",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/0bb0ee2c349644a18e1cd2030b35435c",
+"iou": 0.9454,
+"anchor": 295
+},
+{
+"cls": "sports_car",
+"label": "sports car",
+"name": "FrostBite",
+"author": "luckicher",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/26aa64c62df942f6be2bdd5f114d23ad",
+"iou": 0.9691,
+"anchor": 296
+},
+{
+"cls": "cathedral",
+"label": "cathedral",
+"name": "Dome - \"Marqu\u00e9s de Campo\" Palace",
+"author": "egiptologo91",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/3f13d64109644b969b7af0a3b9badd4b",
+"iou": 0.9035,
+"anchor": 297
+},
+{
+"cls": "classical_bust",
+"label": "classical bust",
+"name": "Nefertiti's bust (like in the museum)",
+"author": "C. Yamahata",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ce5b14926e494558ab584375a8d63ca7",
+"iou": 0.9556,
+"anchor": 298
+},
+{
+"cls": "classic_car",
+"label": "classic car",
+"name": "Plymouth Barracuda 1969",
+"author": "eightismore",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/9fba28329ca148208a0b93e7104f9524",
+"iou": 0.9532,
+"anchor": 299
+},
+{
+"cls": "airplane",
+"label": "airplane",
+"name": "Scorpio",
+"author": "Cl\u00e9ment Dussol",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c1c2cec3e95c429c96a9e59b9b84d4fc",
+"iou": 0.9342,
+"anchor": 300
+},
+{
+"cls": "chair",
+"label": "chair",
+"name": "Wooden Chair",
+"author": "Dakota",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/fb208e51d71240e2b9269e62085e3c32",
+"iou": 0.9102,
+"anchor": 301
+},
+{
+"cls": "owl",
+"label": "owl",
+"name": "Duolingo V2",
+"author": "BaldiBaldimore",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/aa96f905533044bb97ca639444c44597",
+"iou": 0.9662,
+"anchor": 302
+},
+{
+"cls": "guitar",
+"label": "guitar",
+"name": "1 Stringed Guitar",
+"author": "jetonart",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f078ec4957764c5daa43cc0105aaf064",
+"iou": 0.9613,
+"anchor": 303
+},
+{
+"cls": "teapot",
+"label": "teapot",
+"name": "Thu, 01 Nov 2018 22:50:08",
+"author": "newfields-3dprinting",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/163be3188b2d4030a859775f70a4111d",
+"iou": 0.9783,
+"anchor": 304
+},
+{
+"cls": "elephant",
+"label": "elephant",
+"name": "Elph",
+"author": "a950078",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/61a3b712a03d40f38a6702b97155cf4d",
+"iou": 0.9328,
+"anchor": 305
+},
+{
+"cls": "Christmas_tree",
+"label": "christmas tree",
+"name": "Roca de Drag\u00f3n",
+"author": "Alex Moya",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ae6b7039ae1b4d0795f613e5514b2f7b",
+"iou": 0.8865,
+"anchor": 306
+},
+{
+"cls": "apple",
+"label": "apple",
+"name": "RedApplefull",
+"author": "Michael Thompson",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/42737da524e14c07ac7b35f3e64c1d69",
+"iou": 0.9862,
+"anchor": 307
+},
+{
+"cls": "armchair",
+"label": "armchair",
+"name": "Armchair Low Poly",
+"author": "lucasalic99",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f01f4881d58248a7b0ae6d2fbf2fd5b6",
+"iou": 0.9281,
+"anchor": 308
+},
+{
+"cls": "bear",
+"label": "bear",
+"name": "\u5c0f\u718a",
+"author": "\u5bb6\u5ead\u9177\u6a02\u7db2",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/0a8d7f0bd073460ba573e3fbb73091e1",
+"iou": 0.9546,
+"anchor": 309
+},
+{
+"cls": "bed",
+"label": "bed",
+"name": "Bed",
+"author": "joelandy",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ca1990835c3c4be3b2f1c59eb3355bd9",
+"iou": 0.966,
+"anchor": 310
+},
+{
+"cls": "beetle",
+"label": "beetle",
+"name": "Ladybug Textured",
+"author": "jennag",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/226ba71853ee418a80729aabb387c455",
+"iou": 0.9093,
+"anchor": 311
+},
+{
+"cls": "bell",
+"label": "bell",
+"name": "BELL",
+"author": "anycollor",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ad96fa619da940f88b4a9eb4c1013ab0",
+"iou": 0.9482,
+"anchor": 312
+},
+{
+"cls": "bench",
+"label": "bench",
+"name": "Banco Para Igreja",
+"author": "mayco001",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/2aa8947b216b4da294abe28ab1dfecc9",
+"iou": 0.8606,
+"anchor": 313
+},
+{
+"cls": "bicycle",
+"label": "bicycle",
+"name": "bicycle",
+"author": "Abdo.Ammar",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/7b6a036bf0164ca7ab809b1b3ddf4926",
+"iou": 0.9439,
+"anchor": 314
+},
+{
+"cls": "bird",
+"label": "bird",
+"name": "Yellow Bird",
+"author": "sleepylina",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/0f236b1b83524689b1901ccadfbbe468",
+"iou": 0.9571,
+"anchor": 315
+},
+{
+"cls": "boat",
+"label": "boat",
+"name": "Boat2020",
+"author": "etiennebt",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/28fa872e41264a8fae159c0469fc73ab",
+"iou": 0.9347,
+"anchor": 316
+},
+{
+"cls": "bookcase",
+"label": "bookcase",
+"name": "Libreria Biblio",
+"author": "cachuchoaudaz",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/636b75352a134e07b26992c44383014e",
+"iou": 0.9016,
+"anchor": 317
+},
+{
+"cls": "boot",
+"label": "boot",
+"name": "Army Fashion boots",
+"author": "emisphere66",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/8b784e121c1a49b69ae55130f420c5ec",
+"iou": 0.9234,
+"anchor": 318
+},
+{
+"cls": "bus_(vehicle)",
+"label": "bus",
+"name": "Minibus",
+"author": "businessyuen",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/23b3d2c733764a6d9917bc46cc88c822",
+"iou": 0.9685,
+"anchor": 319
+},
+{
+"cls": "butterfly",
+"label": "butterfly",
+"name": "Blue Butterfly2 Fbx Scene",
+"author": "annalisa.dipierro",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ea37176639fd4c52add9371aee2fdfbe",
+"iou": 0.8957,
+"anchor": 320
+},
+{
+"cls": "car_(automobile)",
+"label": "car",
+"name": "Carrinho by Ana Ferreira",
+"author": "turmas.ada",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/60c209ce9c25446dbdb0e880dbf51de2",
+"iou": 0.9551,
+"anchor": 321
+},
+{
+"cls": "cat",
+"label": "cat",
+"name": "Crying Cat",
+"author": "Ed94",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/d5df1d1bad23474d8a4b567ac43d417c",
+"iou": 0.9799,
+"anchor": 322
+},
+{
+"cls": "chandelier",
+"label": "chandelier",
+"name": "Chandolier2",
+"author": "Davor Mulalic",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/366b50081c884690bb2ce4df6dacad59",
+"iou": 0.6243,
+"anchor": 323
+},
+{
+"cls": "church",
+"label": "church",
+"name": "Brentor Church in Dartmoor National Park",
+"author": "Chris Bibb",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/cb9b0e7681a54aff89b805c319c62804",
+"iou": 0.9283,
+"anchor": 324
+},
+{
+"cls": "classical_sculpture",
+"label": "classical sculpture",
+"name": "Lord Kelvin",
+"author": "Rafael Maya-Torcelly",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e87ca6037ae842e3ac4ea11625977346",
+"iou": 0.95,
+"anchor": 325
+},
+{
+"cls": "clock",
+"label": "clock",
+"name": "Prop Modelling: Time Piece",
+"author": "ZoeChuiYan",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/db4de4db4ba14c839e9a69b2cf846f6e",
+"iou": 0.8892,
+"anchor": 326
+},
+{
+"cls": "cow",
+"label": "cow",
+"name": "Lowpoly cow walk",
+"author": "xxxaaa444",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/6650f4cdb54b4be1b5a328c1a9f1e414",
+"iou": 0.9557,
+"anchor": 327
+},
+{
+"cls": "crab_(animal)",
+"label": "crab",
+"name": "Crabuster",
+"author": "Arjun Perayil",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e0de07c5feeb4ad49c12505fb088dd3c",
+"iou": 0.8067,
+"anchor": 328
+},
+{
+"cls": "crown",
+"label": "crown",
+"name": "Slime_Boss_Ani",
+"author": "s.r.sin",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/fc05b694350d40b5b3c16af37561d24c",
+"iou": 0.9461,
+"anchor": 329
+},
+{
+"cls": "cup",
+"label": "cup",
+"name": "Coffee mug with material",
+"author": "ivan_t_s",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/37cccf4e5a2141d6a901b04d17074b7f",
+"iou": 0.9619,
+"anchor": 330
+},
+{
+"cls": "cupcake",
+"label": "cupcake",
+"name": "Muffin Spagnola E Crema Ciocc",
+"author": "FAGI66",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/afb758833fba438c9eb702322df64c65",
+"iou": 0.9432,
+"anchor": 331
+},
+{
+"cls": "deer",
+"label": "deer",
+"name": "Moose A Moose",
+"author": "niccheezey",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/625d7786760146b087824a085cd6bdd2",
+"iou": 0.9406,
+"anchor": 332
+},
+{
+"cls": "dirt_bike",
+"label": "dirt bike",
+"name": "POST APOCALYPSE bIKER",
+"author": "bavic420",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/03c1fb786c064f1e8dfc5dbb245dde20",
+"iou": 0.7507,
+"anchor": 333
+},
+{
+"cls": "dog",
+"label": "dog",
+"name": "Boykin Spaniel",
+"author": "justicar",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/032ccef2632146c59f1db8f55d3ba88b",
+"iou": 0.9502,
+"anchor": 334
+},
+{
+"cls": "dolphin",
+"label": "dolphin",
+"name": "Dolphin",
+"author": "Al",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b8cade7891284711948a72613ff5a97a",
+"iou": 0.9679,
+"anchor": 335
+},
+{
+"cls": "drum_(musical_instrument)",
+"label": "drum",
+"name": "Jembe",
+"author": "mingu3307",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/0cce98d6a1d644819ff48a2c42000dd2",
+"iou": 0.9766,
+"anchor": 336
+},
+{
+"cls": "fighter_jet",
+"label": "fighter jet",
+"name": "SM Mars Shuttle",
+"author": "JamesH__",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/9e548ad560bc43e7acab5fc18557506f",
+"iou": 0.8478,
+"anchor": 337
+},
+{
+"cls": "fish",
+"label": "fish",
+"name": "Litlle fishy - tex. test 2",
+"author": "FantasyDragon",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/655237b93d464cdcb499d3390ced7ff5",
+"iou": 0.9773,
+"anchor": 338
+},
+{
+"cls": "flowerpot",
+"label": "flowerpot",
+"name": "Ceramic cup",
+"author": "despoinamarti",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/922f4990d2c34b3693a373856bb516bf",
+"iou": 0.925,
+"anchor": 339
+},
+{
+"cls": "frog",
+"label": "frog",
+"name": "frug",
+"author": "bulbosor",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/524d2fd1aec848eeb000e8a5177f0db2",
+"iou": 0.9554,
+"anchor": 340
+},
+{
+"cls": "gargoyle",
+"label": "gargoyle",
+"name": "Monstahdecunwrap",
+"author": "bakerthegamemaker",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c981106da536417bbf2248a80cd2e9c6",
+"iou": 0.9112,
+"anchor": 341
+},
+{
+"cls": "giraffe",
+"label": "giraffe",
+"name": "Giraffe",
+"author": "Carlos.Maciel",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/58efd7183ff44605a5edc5ccef40bfcb",
+"iou": 0.9529,
+"anchor": 342
+},
+{
+"cls": "globe",
+"label": "globe",
+"name": "Earth Planet Model",
+"author": "GregoryDev",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/cb680d38bee541a5ab4ef331e323fa2d",
+"iou": 0.9909,
+"anchor": 343
+},
+{
+"cls": "helicopter",
+"label": "helicopter",
+"name": "Low Poly Helicopter",
+"author": "lumpapps",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/615e79f062844f22b24c57d0d776825b",
+"iou": 0.7918,
+"anchor": 344
+},
+{
+"cls": "helmet",
+"label": "helmet",
+"name": "Helmet",
+"author": "twalthall",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/130c604d3c0f41a6bd3e8783620b24f2",
+"iou": 0.9837,
+"anchor": 345
+},
+{
+"cls": "horse",
+"label": "horse",
+"name": "Cavalo No Estilo De Ps1",
+"author": "Moustache_Cat",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/9ab347bbf58d4d2db77cc1f0a44256eb",
+"iou": 0.929,
+"anchor": 346
+},
+{
+"cls": "jet_plane",
+"label": "jet plane",
+"name": "Jetplane",
+"author": "babyumine",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/9d9e575a2fd24739ad854ac07a3d4b3d",
+"iou": 0.9143,
+"anchor": 347
+},
+{
+"cls": "kettle",
+"label": "kettle",
+"name": "Kettle_lowpoly",
+"author": "icvetlan",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/8036d50783f946cfab24eb61ac09a01f",
+"iou": 0.9787,
+"anchor": 348
+},
+{
+"cls": "lamppost",
+"label": "lamppost",
+"name": "Clock Street Lamp - Vintage",
+"author": "gozdemrl",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/043dfbe13d8041289e277e175df2f279",
+"iou": 0.95,
+"anchor": 349
+},
+{
+"cls": "landmark",
+"label": "landmark",
+"name": "Wheal Betsy Historic Tin Mine in Dartmoor",
+"author": "Chris Bibb",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/76202c49ac1645258a8a3f5e3b8b09fb",
+"iou": 0.9086,
+"anchor": 350
+},
+{
+"cls": "lantern",
+"label": "lantern",
+"name": "Paper Lantern",
+"author": "SaltyGecko",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/7c51d385917147168fa3d2bba2563a4b",
+"iou": 0.96,
+"anchor": 351
+},
+{
+"cls": "lightbulb",
+"label": "lightbulb",
+"name": "Wink Light Bulb Night Light",
+"author": "npsammy",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/96231d9e4a434046aa3c1845a3345b57",
+"iou": 0.9847,
+"anchor": 352
+},
+{
+"cls": "lion",
+"label": "lion",
+"name": "Lion",
+"author": "ShadowCoffee",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/bee98906fe6c44c68b7eb0cfcbae8949",
+"iou": 0.924,
+"anchor": 353
+},
+{
+"cls": "motorcycle",
+"label": "motorcycle",
+"name": "Motorcycle",
+"author": "tomkranis",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c2237b0373d146f3a06240e085d02dd2",
+"iou": 0.7946,
+"anchor": 354
+},
+{
+"cls": "mug",
+"label": "mug",
+"name": "Xicara",
+"author": "Gabriel.1415",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/783d2d80f163497aa02fda539e82755e",
+"iou": 0.9671,
+"anchor": 355
+},
+{
+"cls": "mushroom",
+"label": "mushroom",
+"name": "Stylized Mario Mushroom",
+"author": "rickeyponder51",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/7d6996fa197e486da9721a60d0c71170",
+"iou": 0.9723,
+"anchor": 356
+},
+{
+"cls": "oil_lamp",
+"label": "oil lamp",
+"name": "lantern",
+"author": "Uragan27",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/3a076319712c4d50b3120ee371a9b1c7",
+"iou": 0.9495,
+"anchor": 357
+},
+{
+"cls": "palace",
+"label": "palace",
+"name": "ESCULTURA MANUEL DE VEGA",
+"author": "elgrecoillescas",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/6a2cf462efef443e803630a76f092d81",
+"iou": 0.9454,
+"anchor": 358
+},
+{
+"cls": "parrot",
+"label": "parrot",
+"name": "Jungle bird",
+"author": "ADrealtime",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/858dc301a0f245ec96bc32879b2f9792",
+"iou": 0.9627,
+"anchor": 359
+},
+{
+"cls": "penguin",
+"label": "penguin",
+"name": "Gunter (Enemy)",
+"author": "Mike Inel",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c4cb8fb7f67e4cd9a7fb555f4de214f6",
+"iou": 0.9797,
+"anchor": 360
+},
+{
+"cls": "piano",
+"label": "piano",
+"name": "Grand Piano",
+"author": "Sam Claydon",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/117e5a2117704c1aa324d122994d61de",
+"iou": 0.9505,
+"anchor": 361
+},
+{
+"cls": "pickup_truck",
+"label": "pickup truck",
+"name": "camioneta",
+"author": "94Zazen",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/9024c86d9f474db6b379ca02932d1d5d",
+"iou": 0.9107,
+"anchor": 362
+},
+{
+"cls": "pineapple",
+"label": "pineapple",
+"name": "MAISON",
+"author": "spellalucas",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/580ae02e1dc44207bb8d412e520d674b",
+"iou": 0.9429,
+"anchor": 363
+},
+{
+"cls": "pony",
+"label": "pony",
+"name": "My Little Pony Base",
+"author": "JCatt",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/0a1e010a89324e33977f2961d6af6465",
+"iou": 0.8965,
+"anchor": 364
+},
+{
+"cls": "pottery",
+"label": "pottery",
+"name": "Pieza",
+"author": "RiosR",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/0b9b4d8173b04614bb9cb40ef2edd240",
+"iou": 0.9679,
+"anchor": 365
+},
+{
+"cls": "pumpkin",
+"label": "pumpkin",
+"name": "Pumpkin",
+"author": "LazyDuchess",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/94244ddae2a0411fad12da680912b238",
+"iou": 0.9792,
+"anchor": 366
+},
+{
+"cls": "rabbit",
+"label": "rabbit",
+"name": "Bunny",
+"author": "saranav",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/30f3ee70d94f42158f634aafeb832cb4",
+"iou": 0.9463,
+"anchor": 367
+},
+{
+"cls": "race_car",
+"label": "race car",
+"name": "Voxel Formula 1",
+"author": "Jnyrr5",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/59e9c3881ac345919b26556f72e09125",
+"iou": 0.955,
+"anchor": 368
+},
+{
+"cls": "roman_monument",
+"label": "roman monument",
+"name": "Colosseum",
+"author": "pminiutti",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ed9fc35a1a9b425d9cfa91302ce18802",
+"iou": 0.8871,
+"anchor": 369
+},
+{
+"cls": "seashell",
+"label": "seashell",
+"name": "Ichigo",
+"author": "Otafab/Smilelink",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/8c4acb02deda4b7e888cfcf607b6c10d",
+"iou": 0.9576,
+"anchor": 370
+},
+{
+"cls": "shark",
+"label": "shark",
+"name": "Shark",
+"author": "Cyber_Pedro",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/d6da27e3d95f48efaa4d936eeb9d6fe6",
+"iou": 0.9622,
+"anchor": 371
+},
+{
+"cls": "shoe",
+"label": "shoe",
+"name": "Gympen",
+"author": "Emagine",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/cb4ad2c1c474446092973ef085562c1b",
+"iou": 0.9641,
+"anchor": 372
+},
+{
+"cls": "skateboard",
+"label": "skateboard",
+"name": "skateboard",
+"author": "timtime3d",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ea09ce8bd3554d6ebbd61fec548bef7c",
+"iou": 0.9532,
+"anchor": 373
+},
+{
+"cls": "snowman",
+"label": "snowman",
+"name": "Snowman",
+"author": "TomoNaga",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f32d26f7d7ae49f3a9e994f91015f65a",
+"iou": 0.9886,
+"anchor": 374
+},
+{
+"cls": "sofa",
+"label": "sofa",
+"name": "Sofa - Taller 07",
+"author": "Mar\u00eda Jos\u00e9 Bravo",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/08df70392658445192550202836a33fa",
+"iou": 0.9382,
+"anchor": 375
+},
+{
+"cls": "statue_(sculpture)",
+"label": "statue",
+"name": "Sculpture From Tretyakovskaya Galereya",
+"author": "yanix",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e8b32da76b8444c59aa13b749db5fc56",
+"iou": 0.933,
+"anchor": 376
+},
+{
+"cls": "table",
+"label": "table",
+"name": "IKEA MAMMUT Children Table, Variant 1",
+"author": "JungleBird",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/5c2496c27fdb42d09cd2d4939cf12b03",
+"iou": 0.9476,
+"anchor": 377
+},
+{
+"cls": "table_lamp",
+"label": "table lamp",
+"name": "Stool",
+"author": "Brandon_Harvey",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ce20e03cc42343ab96e65c364ba6c78c",
+"iou": 0.9274,
+"anchor": 378
+},
+{
+"cls": "teddy_bear",
+"label": "teddy bear",
+"name": "Bear",
+"author": "Noahfense",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a83153e924c646fa9c0f9e041139b136",
+"iou": 0.9649,
+"anchor": 379
+},
+{
+"cls": "telephone",
+"label": "telephone",
+"name": "Bakelite Switchboard Telephone",
+"author": "Maycho",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ee86052caf384ff78a6cbf272c054015",
+"iou": 0.9129,
+"anchor": 380
+},
+{
+"cls": "tower",
+"label": "tower",
+"name": "Tower of Hercules / Torre de Hercules",
+"author": "Duendek86",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e383092b6a0047ae898321b579690649",
+"iou": 0.9382,
+"anchor": 381
+},
+{
+"cls": "tractor_(farm_equipment)",
+"label": "tractor",
+"name": "Low Poly Tractor",
+"author": "micheal_wain",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/33298eba723f440382a7a4d936f8441e",
+"iou": 0.8752,
+"anchor": 382
+},
+{
+"cls": "train_(railroad_vehicle)",
+"label": "train",
+"name": "4",
+"author": "thongtue13595",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f25f1d5b761d4e0b84305f1c467d1807",
+"iou": 0.8601,
+"anchor": 383
+},
+{
+"cls": "trophy_cup",
+"label": "trophy cup",
+"name": "Sat, 24 Aug 2019 21:15:58",
+"author": "newfields-3dprinting",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/2067d9d0d019411ba07cf5b1e829c868",
+"iou": 0.9309,
+"anchor": 384
+},
+{
+"cls": "truck",
+"label": "truck",
+"name": "Food- Truck- Model- No Texture",
+"author": "Charlmange",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e2a46ca91dca442789af4386cc0febf2",
+"iou": 0.9516,
+"anchor": 385
+},
+{
+"cls": "turtle",
+"label": "turtle",
+"name": "Turtle",
+"author": "Maitry",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/faeab5ae48db457abc390b65f793e961",
+"iou": 0.9224,
+"anchor": 386
+},
+{
+"cls": "vase",
+"label": "vase",
+"name": "B\u00e1t Tr\u00e0ng Pottery",
+"author": "WiTEK Solutions",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/3969fe35c6444293af27b976dca085a4",
+"iou": 0.9736,
+"anchor": 387
+},
+{
+"cls": "violin",
+"label": "violin",
+"name": "Cello",
+"author": "slidon",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a1e5e2a37d6a42299dcd5cec06cd1ddc",
+"iou": 0.9362,
+"anchor": 388
+},
+{
+"cls": "windmill",
+"label": "windmill",
+"name": "Windmill from Poly by Google",
+"author": "IronEqual",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/870394045570459587face4cf047c06b",
+"iou": 0.9039,
+"anchor": 389
+},
+{
+"cls": "wineglass",
+"label": "wineglass",
+"name": "Wine Cup",
+"author": "germydan",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/2bef0fa71cde4348acdd067f3b5d5b57",
+"iou": 0.9694,
+"anchor": 390
+},
+{
+"cls": "wolf",
+"label": "wolf",
+"name": "Lobo",
+"author": "monkameo",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/6429476547094b6c879b250f0196647d",
+"iou": 0.9726,
+"anchor": 391
+},
+{
+"cls": "castle",
+"label": "castle",
+"name": "castle_tower_05",
+"author": "BlackSpire",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a25f0711e12f473f854f01e1c3a00efe",
+"iou": 0.9725,
+"anchor": 392
+},
+{
+"cls": "classical_statue",
+"label": "classical statue",
+"name": "Alexandru Tatos",
+"author": "cristiprefac",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/647c1c039c53492abc4f61c3c5392ce8",
+"iou": 0.9521,
+"anchor": 393
+},
+{
+"cls": "sports_car",
+"label": "sports car",
+"name": "Low Poly Sports Car",
+"author": "CG Geek",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/8e01a3fba80c4fbcad19cc768494e91f",
+"iou": 0.9557,
+"anchor": 394
+},
+{
+"cls": "cathedral",
+"label": "cathedral",
+"name": "Doorway, Mosque-Cathedral of C\u00f3rdoba, Spain",
+"author": "Thomas Flynn",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b133977bf93e4e8a8f261dc3c55d7bdc",
+"iou": 0.9194,
+"anchor": 395
+},
+{
+"cls": "classical_bust",
+"label": "classical bust",
+"name": "Head Sculpt",
+"author": "Tomations",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/d5f0799c556f4920aa9ec42822a641b2",
+"iou": 0.9615,
+"anchor": 396
+},
+{
+"cls": "classic_car",
+"label": "classic car",
+"name": "1940 Ford car",
+"author": "Mattias_G",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/8539a5d8864a40119271461f8384017a",
+"iou": 0.9529,
+"anchor": 397
+},
+{
+"cls": "airplane",
+"label": "airplane",
+"name": "Plane",
+"author": "MakishiPrime",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/4baca7ff083d4589b3de6cf6d04226c1",
+"iou": 0.9366,
+"anchor": 398
+},
+{
+"cls": "chair",
+"label": "chair",
+"name": "Fri, 22 Mar 2019 19:25:03",
+"author": "newfields-3dprinting",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b6b80c6a199a411dbfe9c3082a10c365",
+"iou": 0.9174,
+"anchor": 399
+},
+{
+"cls": "owl",
+"label": "owl",
+"name": "2283_THIBAUT_Tom_Sculptris",
+"author": "HEPL3D",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b89a06e6e7554c5db7ecd1c51edd3bbe",
+"iou": 0.9744,
+"anchor": 400
+},
+{
+"cls": "guitar",
+"label": "guitar",
+"name": "VFX2020_A1_Jonas_Gabriel_Kongshaug",
+"author": "jokon",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f8779434ed734c708baf2d2b4fb710f1",
+"iou": 0.9706,
+"anchor": 401
+},
+{
+"cls": "teapot",
+"label": "teapot",
+"name": "Sat, 06 Oct 2018 21:33:16",
+"author": "newfields-3dprinting",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/296b31ccc3e241ffb0c9d3e2a4d6c037",
+"iou": 0.984,
+"anchor": 402
+},
+{
+"cls": "elephant",
+"label": "elephant",
+"name": "ElePHPant",
+"author": "Donward",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/8e3c1c49387c4b799f422637449a060e",
+"iou": 0.9454,
+"anchor": 403
+},
+{
+"cls": "Christmas_tree",
+"label": "christmas tree",
+"name": "arvore natal pequena",
+"author": "williamareichert",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/abe55929c3074a9687c9f7feb2d4b221",
+"iou": 0.9137,
+"anchor": 404
+},
+{
+"cls": "apple",
+"label": "apple",
+"name": "Apple",
+"author": "singingstranger",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/fc7cdaabeb7749ec92d5fe3e71d97478",
+"iou": 0.99,
+"anchor": 405
+},
+{
+"cls": "armchair",
+"label": "armchair",
+"name": "Post Apocalyptic Sofa",
+"author": "slayer.co",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/031574a75f51411b9d73c386893ca7a6",
+"iou": 0.932,
+"anchor": 406
+},
+{
+"cls": "bear",
+"label": "bear",
+"name": "Low Poly Giant Sloth",
+"author": "rkuhlf",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/897500582c5c4c81b01271a7f0c2e322",
+"iou": 0.9709,
+"anchor": 407
+},
+{
+"cls": "bed",
+"label": "bed",
+"name": "Gothic Bed",
+"author": "vistaalienprime",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/7f4b851ded5645e3b3c381769752a4c0",
+"iou": 0.9285,
+"anchor": 408
+},
+{
+"cls": "beetle",
+"label": "beetle",
+"name": "Emerald Euphoria Beetle",
+"author": "University Libraries at Virginia Tech",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/88d82ddc607344ce8fcdbd3a1dc3d6b5",
+"iou": 0.8681,
+"anchor": 409
+},
+{
+"cls": "bell",
+"label": "bell",
+"name": "Bronze Bell",
+"author": "The Hunt Museum",
+"license": "cc0",
+"url": "https://sketchfab.com/3d-models/6ac94462b21549ea8047228391f1239b",
+"iou": 0.875,
+"anchor": 410
+},
+{
+"cls": "bench",
+"label": "bench",
+"name": "Old park bench",
+"author": "rSquare",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c28e45e78c9e4c1fb423605cffc6c088",
+"iou": 0.9122,
+"anchor": 411
+},
+{
+"cls": "bicycle",
+"label": "bicycle",
+"name": "CYCLE MODEL",
+"author": "BALI KUNDAL",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/caa8abc9ba85433f860010962dd0d91f",
+"iou": 0.8026,
+"anchor": 412
+},
+{
+"cls": "bird",
+"label": "bird",
+"name": "The Sparrow 3rd November 2021",
+"author": "cornsoup",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/4809199aa426497daa46aeee398dd387",
+"iou": 0.9602,
+"anchor": 413
+},
+{
+"cls": "boat",
+"label": "boat",
+"name": "VAN 3D Model Lowpoly",
+"author": "miksfactor",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/4d4e8cb3f5ab4b219203b7757dafa5ba",
+"iou": 0.8747,
+"anchor": 414
+},
+{
+"cls": "bookcase",
+"label": "bookcase",
+"name": "Bookshelf",
+"author": "Purely Upset",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/2b808687faa541dcb5a1987cea250c73",
+"iou": 0.9272,
+"anchor": 415
+},
+{
+"cls": "boot",
+"label": "boot",
+"name": "Base boots mesh",
+"author": "Red_Ilya",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/baeeca4fa2954a94876ffcfb7918e7f7",
+"iou": 0.9326,
+"anchor": 416
+},
+{
+"cls": "bus_(vehicle)",
+"label": "bus",
+"name": "Bus - LOW without uv",
+"author": "Milionna",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e6899c0b45524f64945f874e2a449961",
+"iou": 0.9688,
+"anchor": 417
+},
+{
+"cls": "butterfly",
+"label": "butterfly",
+"name": "butterfree-pixel",
+"author": "madexc",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/06f56ee0e1374ac9947c2ce556b318bd",
+"iou": 0.9082,
+"anchor": 418
+},
+{
+"cls": "car_(automobile)",
+"label": "car",
+"name": "Low Poly Car",
+"author": "MohamedShirfy",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/9007fd1dc2694df89b20c36908b3b566",
+"iou": 0.9664,
+"anchor": 419
+},
+{
+"cls": "cat",
+"label": "cat",
+"name": "H8_Eua_WK_2B_Small",
+"author": "Eua",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b86b2f4d79c94531b8385b6397ac5600",
+"iou": 0.9681,
+"anchor": 420
+},
+{
+"cls": "chandelier",
+"label": "chandelier",
+"name": "\u041b\u044e\u0441\u0442\u0440\u0430 2055-10P Favourite",
+"author": "fedomo.ru",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/7025c342daaf437092f75007837be956",
+"iou": 0.6,
+"anchor": 421
+},
+{
+"cls": "church",
+"label": "church",
+"name": "Ventana Monasterio Cotalba",
+"author": "3DRestaurAM",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/7a886883f7c645b98465733bd74a2c66",
+"iou": 0.9076,
+"anchor": 422
+},
+{
+"cls": "classical_sculpture",
+"label": "classical sculpture",
+"name": "Apis Bull, c. 664 BCE - 30 CE",
+"author": "Minneapolis Institute of Art",
+"license": "cc0",
+"url": "https://sketchfab.com/3d-models/8f3c2abe63754b1cbb0f4010c4215538",
+"iou": 0.9547,
+"anchor": 423
+},
+{
+"cls": "clock",
+"label": "clock",
+"name": "\u3010\u7ec3\u4e60\u3011\u65e7\u5ea7\u949f\uff08old clock\uff09",
+"author": "\u5f8b\u3068\u9752\u3044\u9ce5",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/3efcb43ee0de4232aef63b7411c8de95",
+"iou": 0.9742,
+"anchor": 424
+},
+{
+"cls": "cow",
+"label": "cow",
+"name": "Otis Gangnam Style",
+"author": "mohd.akmal.mahyudin",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/64383f6d9b32443cba3a6f5270d62293",
+"iou": 0.9515,
+"anchor": 425
+},
+{
+"cls": "crab_(animal)",
+"label": "crab",
+"name": "Low-Poly Crab",
+"author": "trionamccarthy01",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/57fcd8daa9ef429383eb533a240ef4de",
+"iou": 0.7509,
+"anchor": 426
+},
+{
+"cls": "crown",
+"label": "crown",
+"name": "King Street Badge A",
+"author": "andimations",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/861caf67d3804930bff955ed804d0f5c",
+"iou": 0.9391,
+"anchor": 427
+},
+{
+"cls": "cup",
+"label": "cup",
+"name": "Basic Pencil Cup",
+"author": "technotrumpet",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/44647e6a6db74a78bf757280ae3a52ae",
+"iou": 0.9538,
+"anchor": 428
+},
+{
+"cls": "cupcake",
+"label": "cupcake",
+"name": "Cupcake",
+"author": "nathanielmoore",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/8dbd9cf630b34a7db505565547282172",
+"iou": 0.9665,
+"anchor": 429
+},
+{
+"cls": "deer",
+"label": "deer",
+"name": "Reindeer V3 1 Sketchfab",
+"author": "luiscarloscg",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/1b83e9db68de47eda98be4037b51a9f6",
+"iou": 0.941,
+"anchor": 430
+},
+{
+"cls": "dirt_bike",
+"label": "dirt bike",
+"name": "Bike",
+"author": "CyberDriger83",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/d9b5a2c032244ccf8ee63bd26ed8bb2b",
+"iou": 0.7119,
+"anchor": 431
+},
+{
+"cls": "dog",
+"label": "dog",
+"name": "The Boxy Doge Dog",
+"author": "jacquesachille",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/36c6ec20279946ff9432d5d1cc456206",
+"iou": 0.9733,
+"anchor": 432
+},
+{
+"cls": "dolphin",
+"label": "dolphin",
+"name": "Iwak Yu",
+"author": "nugroho_oki",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/28ab910901224743a610788e99112025",
+"iou": 0.9551,
+"anchor": 433
+},
+{
+"cls": "drum_(musical_instrument)",
+"label": "drum",
+"name": "china Drummer",
+"author": "mrkool33",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/07d500944f68482cafcf7a1d67ae515c",
+"iou": 0.9727,
+"anchor": 434
+},
+{
+"cls": "fighter_jet",
+"label": "fighter jet",
+"name": "Jet",
+"author": "RebelliousRobot",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/27c61001c53b4b8d829f757f8b8e82f2",
+"iou": 0.9273,
+"anchor": 435
+},
+{
+"cls": "fish",
+"label": "fish",
+"name": "Fish_3Dmodel",
+"author": "Annie88",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b6ef6a2eb1024e7bb5aba7755568a074",
+"iou": 0.9748,
+"anchor": 436
+},
+{
+"cls": "flowerpot",
+"label": "flowerpot",
+"name": "Cactusin",
+"author": "AnaMIlena",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/44d32a1bb60a43dfb1d67fc3bcb27a28",
+"iou": 0.9306,
+"anchor": 437
+},
+{
+"cls": "frog",
+"label": "frog",
+"name": "Frog Demo",
+"author": "slushysnake",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/390f8e71038b46ceadb86df1b173c859",
+"iou": 0.9851,
+"anchor": 438
+},
+{
+"cls": "gargoyle",
+"label": "gargoyle",
+"name": "Komainu scans with iPhone12 Pro (Trnio)",
+"author": "seirogan",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/87f85f8e70974d8c8a5cbcdfbffeb176",
+"iou": 0.8795,
+"anchor": 439
+},
+{
+"cls": "giraffe",
+"label": "giraffe",
+"name": "Giraffe voxel",
+"author": "imrobot",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/658e9ea4a55d41d28085417949b58064",
+"iou": 0.9555,
+"anchor": 440
+},
+{
+"cls": "globe",
+"label": "globe",
+"name": "Bb",
+"author": "SabRango",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/69f7f06a762745f289994d8066d7c57e",
+"iou": 0.9907,
+"anchor": 441
+},
+{
+"cls": "helicopter",
+"label": "helicopter",
+"name": "Copter",
+"author": "tazeaf",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f9fdd7c631b246eb83c81b50febd78ef",
+"iou": 0.8598,
+"anchor": 442
+},
+{
+"cls": "helmet",
+"label": "helmet",
+"name": "Mandalorian helmet",
+"author": "cevans2026",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/45c96c7e9dad4c9699fb6480fbcfb201",
+"iou": 0.9637,
+"anchor": 443
+},
+{
+"cls": "horse",
+"label": "horse",
+"name": "Night Mare",
+"author": "proxy_doug",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c1d6c8b90929452d9abbc530af66954d",
+"iou": 0.9232,
+"anchor": 444
+},
+{
+"cls": "jet_plane",
+"label": "jet plane",
+"name": "TRI X-2",
+"author": "Shawn 684 M",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/81c1aa28265b48478c2f52da6fad6faa",
+"iou": 0.8621,
+"anchor": 445
+},
+{
+"cls": "kettle",
+"label": "kettle",
+"name": "Tea Kettle",
+"author": "vfxrahi",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/1f88f7cc096643ba8e364c2b0091a7e5",
+"iou": 0.9791,
+"anchor": 446
+},
+{
+"cls": "lamppost",
+"label": "lamppost",
+"name": "Lamp",
+"author": "Shelton.Schimming",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/3b63c5b6d6a94d3aa3eb026c869b9043",
+"iou": 0.9438,
+"anchor": 447
+},
+{
+"cls": "landmark",
+"label": "landmark",
+"name": "Richmond Apartments 02",
+"author": "hamma085",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/885d323ad9c7450791e1158a91ae226c",
+"iou": 0.937,
+"anchor": 448
+},
+{
+"cls": "lantern",
+"label": "lantern",
+"name": "Lantern",
+"author": "MissLumos",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/5ece83c92baf4cdf8d8383bacd9fc116",
+"iou": 0.9734,
+"anchor": 449
+},
+{
+"cls": "lightbulb",
+"label": "lightbulb",
+"name": "HPS Light Bulb",
+"author": "siotech2011",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/12f1f70b679640ce8ce8295100f5e3f0",
+"iou": 0.9897,
+"anchor": 450
+},
+{
+"cls": "lion",
+"label": "lion",
+"name": "Lionstl2",
+"author": "MandrakeImaging",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/4c4690ba918f477b829990dd2e960c21",
+"iou": 0.8955,
+"anchor": 451
+},
+{
+"cls": "motorcycle",
+"label": "motorcycle",
+"name": "MOPED 1978 Puch Moped Hero",
+"author": "Scanamatics",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b6c212a12d85425bb166f43cd3d70248",
+"iou": 0.736,
+"anchor": 452
+},
+{
+"cls": "mug",
+"label": "mug",
+"name": "\u041a\u0440\u0443\u0436\u043a\u0430",
+"author": "Yakavori",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/74f2d58ffb5f4fc8951be72cd13f64d6",
+"iou": 0.9702,
+"anchor": 453
+},
+{
+"cls": "mushroom",
+"label": "mushroom",
+"name": "Low poly mushroom",
+"author": "negar",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/4b67b1d642b442e5b10114930cb90690",
+"iou": 0.9741,
+"anchor": 454
+},
+{
+"cls": "oil_lamp",
+"label": "oil lamp",
+"name": "Davy Lamp",
+"author": "joseph.casey97",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/423fab6060ef4d12bda58e99e6f76193",
+"iou": 0.9383,
+"anchor": 455
+},
+{
+"cls": "palace",
+"label": "palace",
+"name": "PALAZZO ARCHI",
+"author": "giuliabiga",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b262aac2168c4879b3cd137243f0b172",
+"iou": 0.9367,
+"anchor": 456
+},
+{
+"cls": "parrot",
+"label": "parrot",
+"name": "504-11-\u4f55\u79c9\u5bac-\u9ce5",
+"author": "pchenghoo",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/80cc44761a294682bd998b5b17287c8c",
+"iou": 0.9527,
+"anchor": 457
+},
+{
+"cls": "penguin",
+"label": "penguin",
+"name": "Penguin Oliver",
+"author": "tepapalearninglab",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/9549049a459b4ddb8678a518468722b9",
+"iou": 0.9681,
+"anchor": 458
+},
+{
+"cls": "piano",
+"label": "piano",
+"name": "Pianoroll-testmodel",
+"author": "maxwildcat",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e4ee3b89c73046e0bd0c8b5b3010b12b",
+"iou": 0.9456,
+"anchor": 459
+},
+{
+"cls": "pickup_truck",
+"label": "pickup truck",
+"name": "Dodge Ram 1500 2007",
+"author": "David_Holiday",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/7e099001a6204ea1a585d1b33d68bde4",
+"iou": 0.8465,
+"anchor": 460
+},
+{
+"cls": "pineapple",
+"label": "pineapple",
+"name": "\u30d1\u30a4\u30ca\u30c3\u30d7\u30eb\u30c4\u30a2\u30fc\u30ba",
+"author": "higan69",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e15f62d49d5d4c11b29f945419d8e041",
+"iou": 0.8478,
+"anchor": 461
+},
+{
+"cls": "pony",
+"label": "pony",
+"name": "Pegasus Rainbow Voxel art",
+"author": "Joanna",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/3d6ad17050e7425e94a9441028552c1b",
+"iou": 0.8775,
+"anchor": 462
+},
+{
+"cls": "pottery",
+"label": "pottery",
+"name": "Ar\u00edbalo egiptizante",
+"author": "MAEF - museo virtual",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/afb3bd3660e44bb381502aeae8519314",
+"iou": 0.9653,
+"anchor": 463
+},
+{
+"cls": "pumpkin",
+"label": "pumpkin",
+"name": "Pumpkin",
+"author": "hartalex",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/2a929afa12f341c097de09aa18327807",
+"iou": 0.9765,
+"anchor": 464
+},
+{
+"cls": "rabbit",
+"label": "rabbit",
+"name": "Bunny",
+"author": "Bartosz.Galon",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e3a1caee054740119dbf08a226ede0ef",
+"iou": 0.9531,
+"anchor": 465
+},
+{
+"cls": "race_car",
+"label": "race car",
+"name": "Riva Speedster",
+"author": "leoferraro",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/2a69ee87b41f48b18d08fc6c1eb9055d",
+"iou": 0.9655,
+"anchor": 466
+},
+{
+"cls": "roman_monument",
+"label": "roman monument",
+"name": "Colosseum",
+"author": "BigToeMedia",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/18841773dc6e4dd6909baa03bdfa0458",
+"iou": 0.8366,
+"anchor": 467
+},
+{
+"cls": "seashell",
+"label": "seashell",
+"name": "SharkOne",
+"author": "NeuroGrapher",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f3f9c9afab474d34ac9f0b2d57f41d93",
+"iou": 0.9591,
+"anchor": 468
+},
+{
+"cls": "shark",
+"label": "shark",
+"name": "CG Cookie Shark Sculpture",
+"author": "LeftHandedMatt",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/55441980b3ae44ec817167ec3871d35e",
+"iou": 0.9765,
+"anchor": 469
+},
+{
+"cls": "shoe",
+"label": "shoe",
+"name": "Asset Base",
+"author": "felipuri",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/adb078c42d0746798efaa3e4686afd33",
+"iou": 0.911,
+"anchor": 470
+},
+{
+"cls": "skateboard",
+"label": "skateboard",
+"name": "Electric skateboard OneWheel",
+"author": "Numbian",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/8f2d3e44a30542559a5d09ffe577be39",
+"iou": 0.8803,
+"anchor": 471
+},
+{
+"cls": "snowman",
+"label": "snowman",
+"name": "Snowman",
+"author": "PatelDev",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/95b6485c508c4b068d683dda16a33252",
+"iou": 0.9766,
+"anchor": 472
+},
+{
+"cls": "sofa",
+"label": "sofa",
+"name": "Corner Sofa",
+"author": "Heliona",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/9cef8fd19dd84684b91830f35cc54d4f",
+"iou": 0.9475,
+"anchor": 473
+},
+{
+"cls": "statue_(sculpture)",
+"label": "statue",
+"name": "Virgen Madonna",
+"author": "Ministerio de Cultura Per\u00fa",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/3f859435a4e24735bc10f5bd9bf85c88",
+"iou": 0.9464,
+"anchor": 474
+},
+{
+"cls": "table",
+"label": "table",
+"name": "Dining table Fabrice Grande",
+"author": "tahax",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/5a9c7c1899c84a8e87fb3930132cf478",
+"iou": 0.9698,
+"anchor": 475
+},
+{
+"cls": "table_lamp",
+"label": "table lamp",
+"name": "Simple Lamp",
+"author": "hyrsh",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/7a35d0c7b80f4ac4b48b87f1e04546dc",
+"iou": 0.88,
+"anchor": 476
+},
+{
+"cls": "teddy_bear",
+"label": "teddy bear",
+"name": "Teddy Bear",
+"author": "SamanthaMB",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/2fabab9066a14c029992d32431c6a753",
+"iou": 0.9641,
+"anchor": 477
+},
+{
+"cls": "telephone",
+"label": "telephone",
+"name": "Antique Telephone from CGT241",
+"author": "cgt116_Zih-Ting Yang",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/828ba833e011427abe6d4d053087f861",
+"iou": 0.9202,
+"anchor": 478
+},
+{
+"cls": "tower",
+"label": "tower",
+"name": "Tower",
+"author": "Aysu",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/36069bc569c94954b79823c1eaff1d19",
+"iou": 0.9507,
+"anchor": 479
+},
+{
+"cls": "tractor_(farm_equipment)",
+"label": "tractor",
+"name": "Tractor frame",
+"author": "Dillan Jensen",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/7bae9eb1d0664018b4d2bbbd96ba80f3",
+"iou": 0.8512,
+"anchor": 480
+},
+{
+"cls": "train_(railroad_vehicle)",
+"label": "train",
+"name": "train",
+"author": "saranav",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/87c375347bf348b0b22297da4f85c07b",
+"iou": 0.8598,
+"anchor": 481
+},
+{
+"cls": "trophy_cup",
+"label": "trophy cup",
+"name": "trophy",
+"author": "heroicsatsuma",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ce93654158f14651809b0a9ec6a1ca6a",
+"iou": 0.9291,
+"anchor": 482
+},
+{
+"cls": "truck",
+"label": "truck",
+"name": "\u0413\u0430\u0447\u0438 \u0413\u0440\u0443\u0437\u043e\u0432\u0438\u043a Gachi truck",
+"author": "loh",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/1722b7b96fab48b4a11e3fc816f9bae2",
+"iou": 0.9657,
+"anchor": 483
+},
+{
+"cls": "turtle",
+"label": "turtle",
+"name": "DTS4.2_CUINDA_Y1_MICHAL_E_07_TURTLE",
+"author": "thisaandrew",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/2e51e1c5ef2f44b68a37307f21e665f8",
+"iou": 0.9244,
+"anchor": 484
+},
+{
+"cls": "vase",
+"label": "vase",
+"name": "Vaso - mapeado",
+"author": "juba.aj",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/07ad1f1137f6426eb2d66f6418cab2e5",
+"iou": 0.9758,
+"anchor": 485
+},
+{
+"cls": "violin",
+"label": "violin",
+"name": "Cello for school project",
+"author": "CookieZath",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a6ef4494070e457d89d418b322e2f8a5",
+"iou": 0.9317,
+"anchor": 486
+},
+{
+"cls": "windmill",
+"label": "windmill",
+"name": "Wiatrak w Natalinie. Wind mill in Natalin",
+"author": "panoramakultur",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e443c0863cf64608b68b18e76c83fef6",
+"iou": 0.8923,
+"anchor": 487
+},
+{
+"cls": "wineglass",
+"label": "wineglass",
+"name": "The_GLass",
+"author": "Methus",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c887f92d3d9441b7b46f4ed25476139c",
+"iou": 0.9227,
+"anchor": 488
+},
+{
+"cls": "wolf",
+"label": "wolf",
+"name": "Vintage Wolf Headbase",
+"author": "M_O_T_H",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/84ef153d7c8e4841946a0e626274a24e",
+"iou": 0.9341,
+"anchor": 489
+},
+{
+"cls": "castle",
+"label": "castle",
+"name": "Castle_Part_03",
+"author": "BlackSpire",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/52fd299cfe9a46e186f829f7f6c495be",
+"iou": 0.9582,
+"anchor": 490
+},
+{
+"cls": "classical_statue",
+"label": "classical statue",
+"name": "Owlstatue",
+"author": "Owlman",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/2c1a044f4d644a7ab20974b344630f64",
+"iou": 0.9687,
+"anchor": 491
+},
+{
+"cls": "sports_car",
+"label": "sports car",
+"name": "Concept Volvo Car LowPolygon",
+"author": "Jiradet",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/0a414adb72fb4191a69a64bf9ec7fade",
+"iou": 0.9587,
+"anchor": 492
+},
+{
+"cls": "cathedral",
+"label": "cathedral",
+"name": "Grifo del Duomo de Verona (s. XII)",
+"author": "PAR - Arqueolog\u00eda y Patrimonio Virtual",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/56804749f1314417a3205cdd02561cf1",
+"iou": 0.926,
+"anchor": 493
+},
+{
+"cls": "classical_bust",
+"label": "classical bust",
+"name": "Male head",
+"author": "Virtual Museums of Ma\u0142opolska",
+"license": "cc0",
+"url": "https://sketchfab.com/3d-models/d28c3153445f4ea99232ccf4b1d6db5d",
+"iou": 0.9703,
+"anchor": 494
+},
+{
+"cls": "classic_car",
+"label": "classic car",
+"name": "Back To The Future DeLorean",
+"author": "Samirxd2000",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/dc3023522a6243818e10f3a5aa326ce9",
+"iou": 0.9677,
+"anchor": 495
+},
+{
+"cls": "airplane",
+"label": "airplane",
+"name": "Commercial Aircraft",
+"author": "AnsysLearn",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/03a25ce2e9124165a95891fe21a75142",
+"iou": 0.9375,
+"anchor": 496
+},
+{
+"cls": "chair",
+"label": "chair",
+"name": "Sat, 06 Oct 2018 17:37:13",
+"author": "newfields-3dprinting",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/81738d582ab14b30933d5aab47314ae2",
+"iou": 0.9235,
+"anchor": 497
+},
+{
+"cls": "owl",
+"label": "owl",
+"name": "Test File Owl",
+"author": "rensinghoff",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/5c81c0c8d28a4376b2188280ed73368d",
+"iou": 0.9737,
+"anchor": 498
+},
+{
+"cls": "guitar",
+"label": "guitar",
+"name": "Guitar",
+"author": "Cypher_stash",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/8833074e5ee44923b0457fecf1cc4a7c",
+"iou": 0.9639,
+"anchor": 499
+},
+{
+"cls": "teapot",
+"label": "teapot",
+"name": "d12d51b7a96ea03c2fe303f55f85db287399321e",
+"author": "newfields-3dprinting",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/21558c36a39f4f8b80eaf727aa5727fc",
+"iou": 0.9822,
+"anchor": 500
+},
+{
+"cls": "elephant",
+"label": "elephant",
+"name": "elephant",
+"author": "Hayk",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a3ec3f21113b4ee582e89f491c9dc67a",
+"iou": 0.9296,
+"anchor": 501
+},
+{
+"cls": "Christmas_tree",
+"label": "christmas tree",
+"name": "Christmas Tree",
+"author": "jameshealey94",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/2da008c410be42d188a0c95aa1bca05e",
+"iou": 0.8529,
+"anchor": 502
+},
+{
+"cls": "apple",
+"label": "apple",
+"name": "Apple Modeling Test",
+"author": "3D.01",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/63e2323f49db4793bd087e67b20ac350",
+"iou": 0.9875,
+"anchor": 503
+},
+{
+"cls": "armchair",
+"label": "armchair",
+"name": "Sofa",
+"author": "andree",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f5ca70f46c5549b8a754ee1abf42af68",
+"iou": 0.96,
+"anchor": 504
+},
+{
+"cls": "bear",
+"label": "bear",
+"name": "Gummy Bear",
+"author": "Isabella Baranyk",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/6c807780df124dbfb7105dd64160bb2b",
+"iou": 0.9602,
+"anchor": 505
+},
+{
+"cls": "bed",
+"label": "bed",
+"name": "low poly king size bed",
+"author": "MrPuppet",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c459459cbc734fb1899f4e65b5f13f0c",
+"iou": 0.9364,
+"anchor": 506
+},
+{
+"cls": "beetle",
+"label": "beetle",
+"name": "Cockroach",
+"author": "meganpiunti",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/1245cb93ecf243aa9b583c46e8c31a1a",
+"iou": 0.9267,
+"anchor": 507
+},
+{
+"cls": "bell",
+"label": "bell",
+"name": "Sejarah_Stupa",
+"author": "teachersmapd",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/bdec7557eeb64a98a4ff19fc22e9142c",
+"iou": 0.9515,
+"anchor": 508
+},
+{
+"cls": "bench",
+"label": "bench",
+"name": "Wooden Bench",
+"author": "Akshat",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/22e8163cf6e1413486faeb4e42222a99",
+"iou": 0.8941,
+"anchor": 509
+},
+{
+"cls": "bicycle",
+"label": "bicycle",
+"name": "Dyton bike",
+"author": "mochamadyuda",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/28653c6cc47940a8aca65745a700eda3",
+"iou": 0.8188,
+"anchor": 510
+},
+{
+"cls": "bird",
+"label": "bird",
+"name": "Ferruginous hawk from Poly by Google",
+"author": "IronEqual",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e4e30d3dcc8a45a1a2d72bdc9d61232f",
+"iou": 0.9624,
+"anchor": 511
+},
+{
+"cls": "boat",
+"label": "boat",
+"name": "Boat 2",
+"author": "nyu_grad_alley_2020",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/48461e78135844b0abc51c2369644b4a",
+"iou": 0.8773,
+"anchor": 512
+},
+{
+"cls": "bookcase",
+"label": "bookcase",
+"name": "Wardrobe Low Poly(include: books + plants)",
+"author": "Snake_Eyes",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/97c1c0c9ec6e49b993b37efca14fa830",
+"iou": 0.8874,
+"anchor": 513
+},
+{
+"cls": "boot",
+"label": "boot",
+"name": "Right garden boot",
+"author": "aurelkillers1",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a4d258638d684f318d3f93efcfb1b699",
+"iou": 0.9369,
+"anchor": 514
+},
+{
+"cls": "bus_(vehicle)",
+"label": "bus",
+"name": "Torino 2016 (Low poly)",
+"author": "Nguyentuannghia 64",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/673d7693f8884e039c3462a5079c36df",
+"iou": 0.9744,
+"anchor": 515
+},
+{
+"cls": "butterfly",
+"label": "butterfly",
+"name": "Farfalla Che Si Muove Fbx",
+"author": "annalisa.dipierro",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/63cfd5501da040ac908ff11ec9b9d23d",
+"iou": 0.9325,
+"anchor": 516
+},
+{
+"cls": "car_(automobile)",
+"label": "car",
+"name": "car061",
+"author": "ljy0924",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b56b7c237d5a4204ba117360617a43b5",
+"iou": 0.942,
+"anchor": 517
+},
+{
+"cls": "cat",
+"label": "cat",
+"name": "Scan 2022-05-31T18:00:38.188Z",
+"author": "WrongToy",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/9a366bf23f8c4c92a5ce689a89f725b3",
+"iou": 0.9729,
+"anchor": 518
+},
+{
+"cls": "chandelier",
+"label": "chandelier",
+"name": "Chandelier",
+"author": "Daniele Cocchi",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/27d2f9656bc44885aae5c08edaa8eae1",
+"iou": 0.628,
+"anchor": 519
+},
+{
+"cls": "church",
+"label": "church",
+"name": "Salle m\u00e9di\u00e9vale",
+"author": "Sylvain Herubel",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ce059c826c304e3fa6f3fa943b749ff8",
+"iou": 0.909,
+"anchor": 520
+},
+{
+"cls": "classical_sculpture",
+"label": "classical sculpture",
+"name": "Alto Dignatario",
+"author": "Beatriz Calvo",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/99df86fd25ef4f63965ffc2361994b9c",
+"iou": 0.9581,
+"anchor": 521
+},
+{
+"cls": "clock",
+"label": "clock",
+"name": "Grandfather Clock",
+"author": "Dolores",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/03d9e1e3f20a4e3a98d8016a6765b220",
+"iou": 0.9368,
+"anchor": 522
+},
+{
+"cls": "cow",
+"label": "cow",
+"name": "Cow",
+"author": "webthingee",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/42c95b9d43a548f1b7e2ff46ee4efcba",
+"iou": 0.9419,
+"anchor": 523
+},
+{
+"cls": "crab_(animal)",
+"label": "crab",
+"name": "\u0415\u0432\u0440\u043e\u043f\u0435\u0439\u0441\u043a\u0438\u0439 \u0437\u0435\u043b\u0451\u043d\u044b\u0439 \u043a\u0440\u0430\u0431 | Carcinus maenas",
+"author": "darwinmuseum.ru",
+"license": "cc0",
+"url": "https://sketchfab.com/3d-models/36fcdd98f9df46fb80750a8faeb5ea3d",
+"iou": 0.7641,
+"anchor": 524
+},
+{
+"cls": "crown",
+"label": "crown",
+"name": "Crown",
+"author": "sneacker202",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/8f02b2f4ef124a5faec2661dda1d04d7",
+"iou": 0.8675,
+"anchor": 525
+},
+{
+"cls": "cup",
+"label": "cup",
+"name": "Cup For Breakfast",
+"author": "Gonzalit",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ef7eb9989b124364ab06c390e9948421",
+"iou": 0.9574,
+"anchor": 526
+},
+{
+"cls": "cupcake",
+"label": "cupcake",
+"name": "Panque Con Merengue",
+"author": "danquinter07",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a11f63180d6f460b928ecfe85506d7b9",
+"iou": 0.979,
+"anchor": 527
+},
+{
+"cls": "deer",
+"label": "deer",
+"name": "Walk Deer",
+"author": "Eseyeyo",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/7d988ce63dae499297bc2c46007240f0",
+"iou": 0.9577,
+"anchor": 528
+},
+{
+"cls": "dirt_bike",
+"label": "dirt bike",
+"name": "Honda Africa Twin Motorbike",
+"author": "alban",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/21d1679f7d7449bc8d38da537cbaf72d",
+"iou": 0.671,
+"anchor": 529
+},
+{
+"cls": "dog",
+"label": "dog",
+"name": "439 \u65b0\u52a0\u5761\u8c93",
+"author": "\u9177\u6a02\u5bb6\u65cf",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/05df6cd05aa6426a8d6240013905e9f8",
+"iou": 0.9536,
+"anchor": 530
+},
+{
+"cls": "dolphin",
+"label": "dolphin",
+"name": "Dolphin Animated",
+"author": "Akshat",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/1049ca2426d74280831ef3bf9f2dbc57",
+"iou": 0.9785,
+"anchor": 531
+},
+{
+"cls": "drum_(musical_instrument)",
+"label": "drum",
+"name": "Drum from Poly by Google",
+"author": "IronEqual",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b2211caf446a4c0394ab84c4658b0956",
+"iou": 0.9733,
+"anchor": 532
+},
+{
+"cls": "fighter_jet",
+"label": "fighter jet",
+"name": "Jet with Rockets",
+"author": "G.Linden",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/801b4b81b9374f14987ba09aee7af925",
+"iou": 0.8443,
+"anchor": 533
+},
+{
+"cls": "fish",
+"label": "fish",
+"name": "\u6c34\u6ef4\u9b5a\u6296\u52d5",
+"author": "855436         31731",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a87f1612dd91456a8abe7f8e20260b96",
+"iou": 0.9439,
+"anchor": 534
+},
+{
+"cls": "flowerpot",
+"label": "flowerpot",
+"name": "Pot",
+"author": "schaffsp",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f4d7a66c61bc4905802577b65cb83523",
+"iou": 0.9544,
+"anchor": 535
+},
+{
+"cls": "frog",
+"label": "frog",
+"name": "Frog",
+"author": "sharkpuppetxl",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/fa9f091f14124896aadb847091b0e48e",
+"iou": 0.9682,
+"anchor": 536
+},
+{
+"cls": "gargoyle",
+"label": "gargoyle",
+"name": "Guildhall Grotesque Left",
+"author": "artfletch",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ed688c67339c40ea8b02cdbbaab2b42a",
+"iou": 0.8468,
+"anchor": 537
+},
+{
+"cls": "giraffe",
+"label": "giraffe",
+"name": "Gooraffe",
+"author": "Peter Meldgaard",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/cdec8a3b9299474eb642509bc5b37844",
+"iou": 0.9415,
+"anchor": 538
+},
+{
+"cls": "globe",
+"label": "globe",
+"name": "Global Volcanism and Plate Boundaries",
+"author": "midcrustalmatt",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/7f943c50ad4f4b3fbbf3c2e1283523f1",
+"iou": 0.9904,
+"anchor": 539
+},
+{
+"cls": "helicopter",
+"label": "helicopter",
+"name": "Helicoptero",
+"author": "Bernardmlf",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a25aefa12d0c460a8d181912e5dfe8fc",
+"iou": 0.8165,
+"anchor": 540
+},
+{
+"cls": "helmet",
+"label": "helmet",
+"name": "Drone",
+"author": "MilkJuice",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ecaad147e96f49f2a2158bbb3e7cb083",
+"iou": 0.939,
+"anchor": 541
+},
+{
+"cls": "horse",
+"label": "horse",
+"name": "Horse",
+"author": "Material Saint John",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/edac81a42fa94e1cb6031337b8851999",
+"iou": 0.91,
+"anchor": 542
+},
+{
+"cls": "jet_plane",
+"label": "jet plane",
+"name": "Toy Plane",
+"author": "l3clarke",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/804d6814818247978f28d12efcc38cce",
+"iou": 0.838,
+"anchor": 543
+},
+{
+"cls": "kettle",
+"label": "kettle",
+"name": "Fri, 22 Mar 2019 15:19:25",
+"author": "newfields-3dprinting",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f640e3f4e2224643b76646b6847622a4",
+"iou": 0.9787,
+"anchor": 544
+},
+{
+"cls": "lamppost",
+"label": "lamppost",
+"name": "Lantern (Hand Painted)",
+"author": "Jen S Abbott",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/1cd4eeeb72ab449bb1c835b6bfa85360",
+"iou": 0.9512,
+"anchor": 545
+},
+{
+"cls": "landmark",
+"label": "landmark",
+"name": "Kentucky State Arsenal",
+"author": "3dky",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c5cb0e532ef34db4b17eb6da2f0f1f5b",
+"iou": 0.9405,
+"anchor": 546
+},
+{
+"cls": "lantern",
+"label": "lantern",
+"name": "Jack-O-Furnace",
+"author": "Liam Moffitt",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/97d5ad57fec54d94a2d8d182a7967f42",
+"iou": 0.9282,
+"anchor": 547
+},
+{
+"cls": "lightbulb",
+"label": "lightbulb",
+"name": "light4",
+"author": "rushisonarofficial",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/9029486d05b243ce8e13688af7f2a6c5",
+"iou": 0.985,
+"anchor": 548
+},
+{
+"cls": "lion",
+"label": "lion",
+"name": "Lion Voxel",
+"author": "rossiotti",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/a30c874a645749108423449283c0ff2c",
+"iou": 0.9034,
+"anchor": 549
+},
+{
+"cls": "motorcycle",
+"label": "motorcycle",
+"name": "Harley Davidson",
+"author": "madman982",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/857b2346837f4e4790cabbab2e76df1a",
+"iou": 0.7404,
+"anchor": 550
+},
+{
+"cls": "mug",
+"label": "mug",
+"name": "Extra Credit Behnke Lauren 31242184",
+"author": "laurenbehnke",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/93ad19db34bc49a0b7acc24e7a5a22fd",
+"iou": 0.9626,
+"anchor": 551
+},
+{
+"cls": "mushroom",
+"label": "mushroom",
+"name": "Blue Mushroom",
+"author": "NATHO",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/20356470bcd044fdad77665d60dc5fe6",
+"iou": 0.9747,
+"anchor": 552
+},
+{
+"cls": "oil_lamp",
+"label": "oil lamp",
+"name": "Lantern",
+"author": "berkotsekin",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b424adc1f8824b6bb2d287b587cf8ec3",
+"iou": 0.9268,
+"anchor": 553
+},
+{
+"cls": "palace",
+"label": "palace",
+"name": "Glimmingehus exteri\u00f6r barnversion 1(11)",
+"author": "Riksantikvarieambetet",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/38026a5ceaa54bb59b99388212b21bd8",
+"iou": 0.8994,
+"anchor": 554
+},
+{
+"cls": "parrot",
+"label": "parrot",
+"name": "Bird by Tanso S1",
+"author": "Revopoint3d",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/5424ed724a87417abece2d55ecbe5e84",
+"iou": 0.9487,
+"anchor": 555
+},
+{
+"cls": "penguin",
+"label": "penguin",
+"name": "dise\u00f1o libre - kevin sneider",
+"author": "carmelatic",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/f32584f4df9545f6a0ad740f10de426a",
+"iou": 0.9779,
+"anchor": 556
+},
+{
+"cls": "piano",
+"label": "piano",
+"name": "Keytar Alesis Vortex 2",
+"author": "Space Equestrian",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b0a1e64c90fa4705be2d6cc180594dce",
+"iou": 0.9262,
+"anchor": 557
+},
+{
+"cls": "pickup_truck",
+"label": "pickup truck",
+"name": "Ute Empty Mesh",
+"author": "surveytown",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/fcea40b6148c47d2bdeb4802c8fd6408",
+"iou": 0.9461,
+"anchor": 558
+},
+{
+"cls": "pineapple",
+"label": "pineapple",
+"name": "Thicc Pineapple (pls Ignore)",
+"author": "ketchup_money80",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/129028df34944847bd802f44e0d6b066",
+"iou": 0.9234,
+"anchor": 559
+},
+{
+"cls": "pony",
+"label": "pony",
+"name": "Rocking Horse",
+"author": "andrewleonard",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b71d80c276a94e9194301f0ab4893b00",
+"iou": 0.8885,
+"anchor": 560
+},
+{
+"cls": "pottery",
+"label": "pottery",
+"name": "C\u00e0ntir",
+"author": "alvaropl",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/9dc0f0b3c63248dabbbc6c11075720e2",
+"iou": 0.9653,
+"anchor": 561
+},
+{
+"cls": "pumpkin",
+"label": "pumpkin",
+"name": "Jack - O - Lantern",
+"author": "baxter_night",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b302d2bbcc3d46ba80f6ab808fe95b5a",
+"iou": 0.9829,
+"anchor": 562
+},
+{
+"cls": "rabbit",
+"label": "rabbit",
+"name": "bunne",
+"author": "Kirl",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/acf50680d8964e0fb7853349d3a222a4",
+"iou": 0.9608,
+"anchor": 563
+},
+{
+"cls": "race_car",
+"label": "race car",
+"name": "Cyberbratz",
+"author": "\ud835\udd3e\ud835\udd38\u00cf\ud835\udd38",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/d4e58143ec94426aa0bbaac2c0d32507",
+"iou": 0.9767,
+"anchor": 564
+},
+{
+"cls": "roman_monument",
+"label": "roman monument",
+"name": "Arc de Triomphe Mini",
+"author": "Le FabShop",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/1ad3fc2ded834e7ba0fa54f09d661583",
+"iou": 0.9347,
+"anchor": 565
+},
+{
+"cls": "seashell",
+"label": "seashell",
+"name": "\u30b7\u30aa\u30d5\u30ad Surf Clam, Mactra veneriformis",
+"author": "ffish.asia / floraZia.com",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/e8ae80bec4884254823832d2ab2676dd",
+"iou": 0.971,
+"anchor": 566
+},
+{
+"cls": "shark",
+"label": "shark",
+"name": "Shark Puppet Model - Shark Puppet",
+"author": "Shark Puppet",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/444e17f7be6c4231ac3c21feefbfe399",
+"iou": 0.9632,
+"anchor": 567
+},
+{
+"cls": "shoe",
+"label": "shoe",
+"name": "Arnt Shoes - Dunks",
+"author": "Arnt Shoes",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/da7084026e5246148ed054037a6a3b71",
+"iou": 0.9244,
+"anchor": 568
+},
+{
+"cls": "skateboard",
+"label": "skateboard",
+"name": "Skate GM",
+"author": "polgm",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/65e304546cdf4740b7d86b35755242c9",
+"iou": 0.8889,
+"anchor": 569
+},
+{
+"cls": "snowman",
+"label": "snowman",
+"name": "BONECO DE NEVE",
+"author": "rodrigo.midestion",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/15f70ffe17eb440db6cc6b82c9a96542",
+"iou": 0.9748,
+"anchor": 570
+},
+{
+"cls": "sofa",
+"label": "sofa",
+"name": "Black Leather Sofa",
+"author": "Xierra",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/471cbdf77d254e30988c8998a0615e44",
+"iou": 0.9518,
+"anchor": 571
+},
+{
+"cls": "statue_(sculpture)",
+"label": "statue",
+"name": "Sakuntala Sphinx Osijek - Photoscan",
+"author": "Lazanja",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/7c713e5e80684f7dab36ad5339302a45",
+"iou": 0.8976,
+"anchor": 572
+},
+{
+"cls": "table",
+"label": "table",
+"name": "Low Poly Table",
+"author": "Lupapa",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/350ee502097f4af88163e332e32c0240",
+"iou": 0.9586,
+"anchor": 573
+},
+{
+"cls": "table_lamp",
+"label": "table lamp",
+"name": "Simple Lamp",
+"author": "Odd1In",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/ee849bc1b93f42038441ab541ee49021",
+"iou": 0.9249,
+"anchor": 574
+},
+{
+"cls": "teddy_bear",
+"label": "teddy bear",
+"name": "Lewis BEAR",
+"author": "auswillew",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/73884e277e004c99ae4d5711e7969558",
+"iou": 0.97,
+"anchor": 575
+},
+{
+"cls": "telephone",
+"label": "telephone",
+"name": "Old Telephone-Freepoly.org",
+"author": "Freepoly.org",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/0ea3e2fa6d4f42ebbd2a0095060ce39e",
+"iou": 0.9141,
+"anchor": 576
+},
+{
+"cls": "tower",
+"label": "tower",
+"name": "Eiffel Tower",
+"author": "qkan",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/d4016d5ab470452c8f9b325f9434a07a",
+"iou": 0.9386,
+"anchor": 577
+},
+{
+"cls": "tractor_(farm_equipment)",
+"label": "tractor",
+"name": "Tractor Scene",
+"author": "phoenix_russell",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/62c5169980d843d69151aab98f2d90bc",
+"iou": 0.7799,
+"anchor": 578
+},
+{
+"cls": "train_(railroad_vehicle)",
+"label": "train",
+"name": "Tracked Swamp Machine",
+"author": "Kost_A",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/b1ad63ecadbc4c95b84ac0ac8552c358",
+"iou": 0.9231,
+"anchor": 579
+},
+{
+"cls": "trophy_cup",
+"label": "trophy cup",
+"name": "African drum",
+"author": "lisionkova",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/abeae1a319444352870151d35aa45621",
+"iou": 0.8945,
+"anchor": 580
+},
+{
+"cls": "truck",
+"label": "truck",
+"name": "MACCHINA 00",
+"author": "giuliabiga",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/35cc811e49fa4bc6b5bf66348441a84b",
+"iou": 0.9621,
+"anchor": 581
+},
+{
+"cls": "turtle",
+"label": "turtle",
+"name": "Turtle Lowpoly (Tortuga)",
+"author": "Maru",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/34d5787f909848d088baf1377fb1dc46",
+"iou": 0.9517,
+"anchor": 582
+},
+{
+"cls": "vase",
+"label": "vase",
+"name": "Vaso Extrude",
+"author": "Pedro Lu",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c5b9bc57a58a43debee5d39efa6a516f",
+"iou": 0.9669,
+"anchor": 583
+},
+{
+"cls": "violin",
+"label": "violin",
+"name": "Lute",
+"author": "Kowalo",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/42e097aebea143b69beb9276ffd1cbc2",
+"iou": 0.8742,
+"anchor": 584
+},
+{
+"cls": "windmill",
+"label": "windmill",
+"name": "Free Windmill Game Asset",
+"author": "r2detta",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/c108593a444b4762aac8860a7ae3d5a9",
+"iou": 0.8573,
+"anchor": 585
+},
+{
+"cls": "wineglass",
+"label": "wineglass",
+"name": "Glass 1",
+"author": "Frezzo",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/dc707f81a94e48078069c6a463f59fcf",
+"iou": 0.956,
+"anchor": 586
+},
+{
+"cls": "wolf",
+"label": "wolf",
+"name": "Head Dog",
+"author": "Heloisa",
+"license": "by",
+"url": "https://sketchfab.com/3d-models/9a8f5b77d82f49c3a2eb6957728d3de6",
+"iou": 0.9465,
+"anchor": 587
+}
+]

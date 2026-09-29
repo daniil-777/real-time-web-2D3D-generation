@@ -1,0 +1,145 @@
+{
+ "int8": [
+  "res0.c1.w",
+  "ex.wa",
+  "ex.wb",
+  "ex.w0",
+  "res0.c2.w",
+  "res1.c1.w",
+  "res1.c2.w",
+  "up1.w",
+  "head1.w",
+  "head2.w",
+  "head0.w",
+  "up2.w"
+ ],
+ "weights_grid_iou": 0.9990199208259583,
+ "accuracy": {
+  "fp32": {
+   "chamfer": 0.012524767441860468,
+   "f1": 0.7098831395348837,
+   "f2": 0.8452386046511627,
+   "nc": 0.8780386046511626,
+   "iou": 0.804113953488372,
+   "psnr": 23.308302906976746,
+   "chamfer_se": 0.0010344290577775153,
+   "f1_se": 0.018729635549489525,
+   "f2_se": 0.014637911907526792,
+   "nc_se": 0.008931313643021164,
+   "iou_se": 0.017828526802941353,
+   "psnr_se": 0.9446793649011184,
+   "empty": 0,
+   "objects": 86,
+   "classes": 86,
+   "res": 128,
+   "worst_classes_f2": [
+    [
+     "bell",
+     0.248
+    ],
+    [
+     "seashell",
+     0.475
+    ],
+    [
+     "tractor_(farm_equipment)",
+     0.521
+    ],
+    [
+     "statue_(sculpture)",
+     0.521
+    ],
+    [
+     "train_(railroad_vehicle)",
+     0.622
+    ],
+    [
+     "fighter_jet",
+     0.648
+    ],
+    [
+     "truck",
+     0.65
+    ],
+    [
+     "turtle",
+     0.657
+    ]
+   ]
+  },
+  "shipped": {
+   "chamfer": 0.012557674418604652,
+   "f1": 0.7098272093023256,
+   "f2": 0.8449173255813952,
+   "nc": 0.8777666279069767,
+   "iou": 0.8040088372093023,
+   "psnr": 23.26045267441861,
+   "chamfer_se": 0.0010382596188260782,
+   "f1_se": 0.01872307407604267,
+   "f2_se": 0.014648913075175808,
+   "nc_se": 0.008952692552385923,
+   "iou_se": 0.01779908142665617,
+   "psnr_se": 0.9358276262610992,
+   "empty": 0,
+   "objects": 86,
+   "classes": 86,
+   "res": 128,
+   "worst_classes_f2": [
+    [
+     "bell",
+     0.25
+    ],
+    [
+     "seashell",
+     0.475
+    ],
+    [
+     "statue_(sculpture)",
+     0.518
+    ],
+    [
+     "tractor_(farm_equipment)",
+     0.521
+    ],
+    [
+     "train_(railroad_vehicle)",
+     0.62
+    ],
+    [
+     "fighter_jet",
+     0.649
+    ],
+    [
+     "turtle",
+     0.653
+    ],
+    [
+     "truck",
+     0.655
+    ]
+   ]
+  }
+ },
+ "n_anchors": 516,
+ "anchor_iou_mean": 0.9428980054781418,
+ "decoder_params": 1311108,
+ "bytes": {
+  "anchors-9.bin.gz": 931511,
+  "anchors-10.bin.gz": 941086,
+  "anchors-0.bin.gz": 223163,
+  "ref.json": 289480,
+  "anchors-3.bin.gz": 959775,
+  "decoder.bin.gz": 1159867,
+  "meta.json": 80256,
+  "anchors-4.bin.gz": 974991,
+  "anchors-6.bin.gz": 948343,
+  "sources.json": 111889,
+  "anchors-2.bin.gz": 928563,
+  "anchors-5.bin.gz": 945487,
+  "anchors-8.bin.gz": 956092,
+  "anchors-1.bin.gz": 941797,
+  "anchors-11.bin.gz": 471918,
+  "anchors-7.bin.gz": 963780
+ },
+ "first_load_bytes": 1463286
+}

@@ -1,0 +1,946 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>if (/[?&]embed=1(&|$)/.test(location.search)) document.documentElement.classList.add('embed');</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixel Morph</title>
+<meta name="description" content="An endless stream of scenes drawn in dots, generated live in the browser by a small neural network.">
+<style>
+  :root { --bg: #ffffff; --ink: #000000; --muted: #6b6b6b; --line: #d8d8d8; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 14px; padding: 16px; box-sizing: border-box; }
+  #views { position: fixed; left: 16px; top: 12px; display: flex; gap: 10px; font-size: 12px; z-index: 5; }
+  #views a { color: var(--muted); text-decoration: none; }
+  #views a[aria-current] { color: var(--ink); text-decoration: underline; text-underline-offset: 4px; }
+  #views a:hover { color: var(--ink); }
+  canvas#view { width: min(92vw, 74vh); height: min(92vw, 74vh); image-rendering: pixelated; image-rendering: crisp-edges; background: #fff; }
+  canvas#view.smooth { image-rendering: auto; }
+  canvas#viewgl { width: min(92vw, 74vh); height: min(92vw, 74vh); background: #fff; }
+  canvas[hidden] { display: none; }
+  #label { font-size: 20px; letter-spacing: .06em; min-height: 1.4em; text-transform: lowercase; }
+  #hud { color: var(--muted); font-size: 12px; display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; align-items: center; }
+  #hud label { display: flex; gap: 6px; align-items: center; }
+  #hud label[hidden] { display: none; }
+  #hud input[type=range] { width: 80px; }
+  #hud button, #hud select { font: inherit; color: inherit; background: transparent; border: 1px solid var(--line); border-radius: 4px; padding: 2px 8px; }
+  #status, #credit { color: var(--muted); font-size: 12px; min-height: 1.2em; text-align: center; max-width: 640px; }
+  #credit a { color: inherit; }
+  #debug { position: fixed; left: 8px; top: 8px; margin: 0; padding: 8px 10px; max-width: min(560px, 94vw); font: 11px/1.45 ui-monospace, Menlo, monospace;
+           color: #e8e8e8; background: rgba(20, 20, 24, 0.82); border-radius: 6px; white-space: pre-wrap; z-index: 10; pointer-events: none; }
+</style>
+<style id="pm-ui">
+/* pm-ui — the shared Pixel Morph look (Apple-style controls), inlined so each app stays self-contained (standalone
+   roots, the single-file export). KEEP IDENTICAL in pixel-morph/index.html and morph3d/index.html. */
+:root {
+  --pm-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Inter, system-ui, sans-serif;
+  --pm-text: #1d1d1f; --pm-text-2: #6e6e73; --pm-text-3: #86868b;
+  --pm-fill: rgba(118, 118, 128, 0.12); --pm-fill-2: rgba(118, 118, 128, 0.2); --pm-hair: rgba(0, 0, 0, 0.08);
+  --pm-accent: #0071e3; --pm-glass: rgba(255, 255, 255, 0.72);
+  --pm-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+html, body { font-family: var(--pm-font); color: var(--pm-text); -webkit-font-smoothing: antialiased; }
+
+/* header of the standalone pages: a small segmented control instead of underlined links */
+html #views { display: inline-flex; gap: 0; padding: 2px; border-radius: 9px; background: var(--pm-fill); font-size: 12px; }
+html #views a { padding: 4px 12px; border-radius: 7px; color: var(--pm-text-2); text-decoration: none; font-weight: 500;
+                transition: color .2s var(--pm-ease), background .2s var(--pm-ease); }
+html #views a[aria-current] { color: var(--pm-text); background: #fff; text-decoration: none;
+                              box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12), 0 3px 1px rgba(0, 0, 0, 0.04); }
+html #views a:hover { color: var(--pm-text); }
+html #top { color: var(--pm-text-3); font-size: 12px; align-items: center; }
+html.embed #views, html.embed #top { display: none; }
+/* inside the shell the page is one screen: tighter spacing (and a shorter 3D stage) keep the toolbar and the credits in
+   view; the 2D canvas keeps its whole-pixel size (fitCanvas), so its dots stay crisp */
+html.embed #wrap { padding: 10px 16px 8px; gap: 8px; }
+html.embed #stage { height: clamp(240px, calc(100svh - 300px), 76vw); }
+
+/* the object's name */
+html #label { font: 600 22px/1.25 var(--pm-font); letter-spacing: -0.01em; text-transform: none; color: var(--pm-text); }
+html #label::first-letter { text-transform: uppercase; }
+html #progress { height: 3px; border-radius: 2px; background: var(--pm-fill); margin-top: -4px; overflow: hidden; }
+html #progress i { height: 3px; border-radius: 2px; background: var(--pm-text); }
+
+/* the toolbar: a floating glass bar of pills */
+html #hud { gap: 6px 8px; padding: 8px 12px; border-radius: 22px; background: var(--pm-glass);
+            -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+            box-shadow: 0 0 0 0.5px var(--pm-hair), 0 8px 28px rgba(0, 0, 0, 0.08); color: var(--pm-text-2); font-size: 13px; }
+html #hud label { gap: 8px; }
+html #hud select, html #hud button, html #hud input:not([type=range]):not([type=checkbox]) {
+  -webkit-appearance: none; appearance: none; border: 0; border-radius: 980px; padding: 7px 12px; min-height: 32px;
+  background-color: var(--pm-fill); color: var(--pm-text); font: 500 13px/1.1 var(--pm-font); cursor: pointer;
+  transition: background-color .2s var(--pm-ease), transform .12s var(--pm-ease), color .2s var(--pm-ease); }
+html #hud input:not([type=range]):not([type=checkbox]) { cursor: text; height: 32px; padding-top: 0; padding-bottom: 0; }
+html #hud input::-webkit-calendar-picker-indicator { display: none !important; }
+html #hud select { padding-right: 30px; background-repeat: no-repeat; background-position: right 12px center; background-size: 9px 6px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='%236e6e73' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+html #hud select:hover, html #hud button:hover { background-color: var(--pm-fill-2); }
+html #hud button:active { transform: scale(0.96); }
+html #hud button[aria-pressed=true] { background-color: var(--pm-text); color: #fff; }
+
+/* sliders: thin track, white knob */
+html input[type=range] { -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; background: rgba(118, 118, 128, 0.24);
+                         accent-color: var(--pm-text); cursor: pointer; }
+html input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #fff;
+  box-shadow: 0 0.5px 4px rgba(0, 0, 0, 0.12), 0 6px 13px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04); }
+html input[type=range]::-moz-range-thumb { width: 20px; height: 20px; border: 0; border-radius: 50%; background: #fff;
+  box-shadow: 0 0.5px 4px rgba(0, 0, 0, 0.12), 0 6px 13px rgba(0, 0, 0, 0.12); }
+
+/* checkbox -> switch */
+html #hud input[type=checkbox] { -webkit-appearance: none; appearance: none; position: relative; width: 36px; height: 22px; margin: 0;
+  border-radius: 11px; background: rgba(120, 120, 128, 0.32); cursor: pointer; transition: background .25s var(--pm-ease); }
+html #hud input[type=checkbox]::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 1px rgba(0, 0, 0, 0.16); transition: transform .25s var(--pm-ease); }
+html #hud input[type=checkbox]:checked { background: #34c759; }
+html #hud input[type=checkbox]:checked::after { transform: translateX(14px); }
+
+/* status lines and credits */
+html #status, html #credit, html #walkhint { color: var(--pm-text-3); font-size: 12px; }
+html #walkhint { color: var(--pm-text-2); }
+html #credit a, html #status a { color: var(--pm-accent); text-decoration: none; }
+html #credit a:hover, html #status a:hover { text-decoration: underline; }
+html #fps { font-variant-numeric: tabular-nums; }
+
+/* 3D: map, hint and the about sheet */
+html #map { border: 0; border-radius: 16px; background: var(--pm-glass); -webkit-backdrop-filter: saturate(180%) blur(20px);
+            backdrop-filter: saturate(180%) blur(20px); box-shadow: 0 0 0 0.5px var(--pm-hair), 0 10px 30px rgba(0, 0, 0, 0.12); }
+html #maptip { border: 0; border-radius: 8px; background: var(--pm-glass); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+               box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12); font-size: 12px; padding: 3px 9px; }
+html #hint { color: var(--pm-text-3); font-size: 12px; }
+html #msg { color: var(--pm-text-2); font-size: 15px; }
+html dialog { border: 0; border-radius: 18px; padding: 24px 28px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.25); font-size: 14px; }
+html dialog::backdrop { background: rgba(0, 0, 0, 0.2); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+html dialog h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 10px; }
+html dialog h3 { font-size: 15px; font-weight: 600; margin-top: 18px; }
+html dialog .close { border: 0; border-radius: 980px; background: var(--pm-fill); padding: 6px 14px; font-weight: 500; }
+html dialog kbd { border: 0; background: var(--pm-fill); border-radius: 5px; padding: 1px 6px; }
+html :focus-visible { outline: 3px solid rgba(0, 113, 227, 0.5); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  html #hud *, html #views a, html #hud input[type=checkbox]::after { transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <nav id="views" aria-label="pixel morph views"><a aria-current="page">Drawings</a><a href="../morph3d/" id="to3d">3D Objects</a></nav>
+  <canvas id="view" width="64" height="64" role="img" aria-label="generated drawing"></canvas>
+  <canvas id="viewgl" width="64" height="64" role="img" aria-label="generated drawing" hidden></canvas>
+  <div id="label">loading…</div>
+  <div id="hud">
+    <label>style <select id="mode"><option value="dots" selected>dots</option><option value="lines">lines</option><option value="stipple">stipple</option><option value="cartoon">cartoon</option></select></label>
+    <label>pixels <select id="res"><option>128</option><option>192</option><option selected>256</option><option>320</option></select></label>
+    <label>quality <select id="quality"><option value="model">fast</option><option value="model-hq">hq</option><option value="model-ultra">ultra</option></select></label>
+    <label>ink <input id="ink" type="range" min="1" max="10" step="0.5" value="4"></label>
+    <label id="colorLabel" hidden><input id="color" type="checkbox" checked> colour</label>
+    <label id="toneLabel" hidden>tone <input id="tone" type="range" min="0" max="1" step="0.05" value="0.6"></label>
+    <label>walk <select id="walk" title="how the next object is chosen"><option value="drift" selected>drift</option><option value="dream">dream</option><option value="tour">tour</option><option value="random">random</option></select></label>
+    <label>speed <input id="speed" type="range" min="0.2" max="4" step="0.1" value="1"></label>
+    <button id="pause" type="button">pause</button>
+    <button id="next" type="button">next</button>
+    <button id="sound" type="button">sound: off</button>
+    <span id="fps"></span>
+  </div>
+  <div id="status"></div>
+  <div id="credit"></div>
+  <pre id="debug" hidden></pre>
+</div>
+<!--PM_INLINE-->
+<script>
+  // Start the model downloads right away, in parallel with the TensorFlow.js download below.
+  (function () {
+    const qs = new URLSearchParams(location.search), mq = qs.get('model');
+    const dir = mq && !/^([a-z]+:)?\/\//i.test(mq) && !mq.startsWith('/') && /^[\w.\/-]+$/.test(mq) ? mq : 'model';   // same-origin relative paths only
+    window.__PM_DIR = dir;
+    // model-tier picker: reloads with ?model= set, so switching tiers is a fresh load like any other
+    // ?model= use -- swapping model files under a running decode pipeline isn't supported. Add new
+    // <option>s here (and in the HUD markup above) as more tiers are trained and installed.
+    const qEl = document.getElementById('quality');
+    if (qEl) {
+      qEl.value = dir === 'model-hq' || dir === 'model-ultra' ? dir : 'model';
+      qEl.addEventListener('change', () => {
+        const q = new URLSearchParams(location.search);
+        if (qEl.value === 'model') q.delete('model'); else q.set('model', qEl.value);
+        location.search = q.toString();
+      });
+    }
+    // one TensorFlow.js backend is fetched, the one this browser will use (WebGPU 88 KB or WebGL 72 KB gzipped), preloaded in parallel with tf-core
+    const cdn = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-', BE = window.__PM_BE = {
+      webgpu: [cdn + 'webgpu@4.22.0/dist/tf-backend-webgpu.min.js', 'sha384-0cz8Hmjyhn7MyeyzI7MSTOuEdxiSNiwpDDPakM6XjdtC/Fb5/qRxkmLrTJROQqjQ'],
+      webgl: [cdn + 'webgl@4.22.0/dist/tf-backend-webgl.min.js', 'sha384-PAbE0QuTSZkDuS/hX4MEx1MZ0Nwd+mkb2Znz35ZqGDjb36klpR8/mCpykhdd7uHW'],
+      cpu: [cdn + 'cpu@4.22.0/dist/tf-backend-cpu.min.js', 'sha384-gZf8Y2Jsk28VIIkZjV2+JG6Gi+OiYGFalXGsYGOyyFabJ0GwWEc2FguAPIal3tvJ'] };
+    const be = qs.get('backend'), first = BE[be] ? be : navigator.gpu ? 'webgpu' : 'webgl';
+    const l = document.createElement('link'); l.rel = 'preload'; l.as = 'script'; l.href = BE[first][0]; l.integrity = BE[first][1]; l.crossOrigin = 'anonymous'; document.head.appendChild(l);
+    if (window.__PM_INLINE) return;
+    const get = (name, json) => fetch(dir + '/' + name).then((r) => { if (!r.ok) throw new Error(name + ' ' + r.status); return json ? r.json() : r.arrayBuffer(); });
+    window.__PM_FETCH = { meta: get('meta.json', true), decoder: get('decoder.bin.gz'), a0: get('anchors-0.bin.gz') };
+    for (const p of Object.values(window.__PM_FETCH)) p.catch(() => {});   // handled when awaited
+  })();
+  window.__tfLoadError = null;
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.22.0/dist/tf-core.min.js" integrity="sha384-ZVckeGw84RpbmPMzx1s9LFUqIaeIsG46rmlH/HynDuJikkmGLnTDnEmT0CrKI6Yi" crossorigin="anonymous" onerror="window.__tfLoadError = 'TensorFlow.js failed to load from the CDN'"></script>
+<script>
+(async function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const view = $('view'), ctx = view.getContext('2d', { alpha: false }), viewgl = $('viewgl');
+  // dots on the GPU: every dot is an anti-aliased point sprite, min-blended over white (same maths as the CPU stamper,
+  // one draw call per frame); opt-in with ?gldots=1 (default: CPU stamping into an ImageData)
+  let gl = null, glProg = null, glBuf = null, glScale = null, dotArr = new Float32Array(6 * 32768), dotN = 0;
+  function initGL() {
+    if (qs.get('gldots') !== '1') return false;
+    try {
+      gl = viewgl.getContext('webgl2', { alpha: false, antialias: false, depth: false, stencil: false, preserveDrawingBuffer: false, desynchronized: true });
+      if (!gl) return false;
+      const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+      glProg = gl.createProgram();
+      gl.attachShader(glProg, sh(gl.VERTEX_SHADER, `#version 300 es
+        in vec2 aPos; in float aR; in vec3 aCol; uniform float uInvW; out float vR; out float vSize; out vec3 vCol;
+        void main() { vR = aR; vCol = aCol; vSize = 2.0 * ceil(aR + 1.0); gl_PointSize = vSize;
+          vec2 p = aPos * uInvW * 2.0 - 1.0; gl_Position = vec4(p.x, -p.y, 0.0, 1.0); }`));
+      gl.attachShader(glProg, sh(gl.FRAGMENT_SHADER, `#version 300 es
+        precision highp float; in float vR; in float vSize; in vec3 vCol; out vec4 o;
+        void main() { vec2 d = (gl_PointCoord - 0.5) * vSize; float cov = clamp(vR + 0.5 - length(d), 0.0, 1.0);
+          if (cov <= 0.0) discard; o = vec4(1.0 - (1.0 - vCol) * cov, 1.0); }`));
+      gl.linkProgram(glProg); if (!gl.getProgramParameter(glProg, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(glProg));
+      gl.useProgram(glProg); glBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, glBuf);
+      const at = (n, size, off) => { const l = gl.getAttribLocation(glProg, n); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, size, gl.FLOAT, false, 24, off); };
+      at('aPos', 2, 0); at('aR', 1, 8); at('aCol', 3, 12); glScale = gl.getUniformLocation(glProg, 'uInvW');
+      gl.enable(gl.BLEND); gl.blendEquation(gl.MIN); gl.clearColor(1, 1, 1, 1);
+      viewgl.addEventListener('webglcontextlost', (e) => { e.preventDefault(); gl = null; fitCanvas(); });   // fall back to CPU stamping
+      return true;
+    } catch (e) { console.warn('GL dots unavailable:', e); gl = null; return false; }
+  }
+  const labelEl = $('label'), fpsEl = $('fps'), statusEl = $('status');
+  // Stats exposed for automated tests (test/test_page.js, test/save_samples.js).
+  const stats = (window.__pm = { ready: false, frames: 0, fps: 0, keyHz: 0, errors: [], backend: null, res: 0, mode: '', fastVsPredictMaxDiff: 0,
+    refErr: null, ink: 0, mid: 0, label: '', decoderParams: 0, numTensors: 0, renderMs: 0, decodeMs: 0, anchorsLoaded: 0, chunksLoaded: 0, firstFrameMs: 0, sceneIds: [], prof: {} });
+  window.addEventListener('error', (e) => stats.errors.push(String(e.message || e)));
+  window.addEventListener('unhandledrejection', (e) => stats.errors.push(String(e.reason)));
+
+  const qs = new URLSearchParams(location.search);
+  const HOLD = qs.has('hold'), CHECK = qs.has('check'), WAIT = qs.has('wait');   // test aids: stay on the first scene / self-check / load every chunk first
+  for (const k of ['mode', 'res', 'ink', 'speed', 'tone']) if (qs.get(k)) $(k).value = qs.get(k);
+  if (qs.get('color') === '0') $('color').checked = false;
+  const DOT_STYLE = qs.get('dots') === 'band' ? 'band' : 'line';                    // dots: chains on contour centre lines + tonal stipple | distance band
+  let MIX_P = qs.has('mix') ? Math.min(1, Math.max(0, parseFloat(qs.get('mix')) || 0)) : 0.4;     // share of destinations that are composites of two scenes (model may set its own)
+  const ONLY = qs.get('scene') ? qs.get('scene').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean) : null;   // ?scene=mountain,city
+  let rnd = Math.random;                                                           // ?seed=N makes the walk reproducible
+  if (qs.has('seed')) { let t = (parseInt(qs.get('seed'), 10) || 1) >>> 0; rnd = () => { t += 0x6D2B79F5; let r = Math.imul(t ^ (t >>> 15), 1 | t); r ^= r + Math.imul(r ^ (r >>> 7), 61 | r); return ((r ^ (r >>> 14)) >>> 0) / 4294967296; }; }
+  const MODEL_DIR = window.__PM_DIR || 'model', INL = window.__PM_INLINE || null;
+  const SEG_SECONDS = 2.6, NEAR_K = 40, DRIFT_REL = 0.1, CHUNK_EVERY_MS = 15000;
+  const BLUR64 = 1.4, TAU64 = 0.006, TAU_MIN64 = 0.0008, LOOSE_PX = 2.5, LOOSE_MAX_PX = 4.0, TARGET64 = 0.03, STIPPLE_REACH_PX = 2.5;
+  const BLUE = (() => { const s = atob('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'), a = new Float32Array(4096); for (let i = 0; i < 4096; i++) a[i] = (s.charCodeAt(i) + 0.5) / 256; return a; })();   // 64x64 blue-noise thresholds
+
+  function f16(h) {                                                                // IEEE half -> number
+    const e = (h >> 10) & 0x1f, m = h & 0x3ff, s = h & 0x8000 ? -1 : 1;
+    return e === 0 ? s * m * 5.960464477539063e-8 : e === 31 ? (m ? NaN : s * Infinity) : s * (1 + m / 1024) * Math.pow(2, e - 15);
+  }
+  async function unpack(buf) {                                                     // gzip -> bytes (servers that already inflated it pass through)
+    const b = new Uint8Array(buf, 0, 2);
+    if (b[0] !== 0x1f || b[1] !== 0x8b) return buf;
+    if (typeof DecompressionStream === 'undefined') throw new Error('this browser is too old to unpack the model');
+    return new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+  }
+  const b64buf = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0)).buffer;
+  async function getBin(name) {
+    if (INL) { if (!INL.files[name]) throw new Error(name + ' not in this bundle'); return unpack(b64buf(INL.files[name])); }
+    const r = await fetch(MODEL_DIR + '/' + name); if (!r.ok) throw new Error(name + ' ' + r.status); return unpack(await r.arrayBuffer());
+  }
+  function loadScript(src, integrity) {
+    return new Promise((ok, fail) => { const s = document.createElement('script'); s.src = src; s.integrity = integrity; s.crossOrigin = 'anonymous'; s.onload = ok; s.onerror = () => fail(new Error('could not load ' + src)); document.head.appendChild(s); });
+  }
+
+  try {
+    if (typeof tf === 'undefined') throw new Error(window.__tfLoadError || 'TensorFlow.js did not load');
+    let note = '', cpuMode = false;
+    const F16 = qs.has('f16') ? qs.get('f16') !== '0' : !qs.has('check');             // half-float WebGL textures: ~25-30 % more keyframes, frames differ < 1/255 (the self-check stays exact)
+    const POOL_MB = qs.has('texpool') ? parseFloat(qs.get('texpool')) : 64;          // WebGL texture reuse pool cap: 300 -> 60 MB allocated, no slowdown (-1 = unlimited)
+    // backend: 'auto' (default) = WebGPU where the browser has it (2-4x the keyframe rate of WebGL, exact float32), else WebGL; ?backend=webgl | webgpu | cpu forces one. Each backend script is fetched only when tried.
+    let ok = false; const wantBE = qs.get('backend') || 'auto', BE = window.__PM_BE;
+    if (wantBE === 'webgpu' || (wantBE === 'auto' && navigator.gpu)) {
+      try {
+        if (!navigator.gpu) throw new Error('no navigator.gpu');
+        await loadScript(...BE.webgpu); ok = await tf.setBackend('webgpu');
+      } catch (e) { ok = false; if (wantBE === 'webgpu') note = 'WebGPU unavailable (' + (e && e.message ? e.message : e) + '), using WebGL'; }
+    }
+    if (!ok && wantBE !== 'cpu') try {
+      await loadScript(...BE.webgl);                                               // WebGL flags exist only once the backend is loaded
+      if (F16) try { tf.env().set('WEBGL_FORCE_F16_TEXTURES', true); } catch (e) {}
+      if (POOL_MB >= 0) try { tf.env().set('WEBGL_DELETE_TEXTURE_THRESHOLD', POOL_MB * 1048576); } catch (e) {}
+      ok = await tf.setBackend('webgl');
+    } catch (e) { ok = false; }
+    if (!ok) {                                                                     // no WebGL: the CPU backend (38 KB)
+      await loadScript(...BE.cpu);
+      await tf.setBackend('cpu'); note = 'no WebGL here, running on the CPU'; cpuMode = true;
+    }
+    await tf.ready(); stats.backend = tf.getBackend(); initGL();
+
+    // ---- model: meta + decoder weights + first anchor chunk (downloads started before TensorFlow.js)
+    const F = window.__PM_FETCH;
+    const meta = INL ? INL.meta : await F.meta;
+    if (meta.format !== 'pm2') throw new Error('this page needs a pm2 model export (export_lean.py)');
+    const dbuf = INL ? await getBin('decoder.bin.gz') : await unpack(await F.decoder);
+    const a0buf = INL ? await getBin('anchors-0.bin.gz') : await unpack(await F.a0);
+    if (meta.ink_default && !qs.get('ink')) $('ink').value = String(meta.ink_default);
+    const names = meta.names, G = meta.grid, CODE = meta.code, NATIVE = meta.size, dmax = meta.dmax;
+    if (!qs.has('mix') && typeof meta.mix === 'number') MIX_P = meta.mix;              // objects models blend less, and only within a class
+    const MIX_SAME = !!meta.mix_same_class;
+    const RES = [...new Set([128, 192, 256, 320, 384, 448, 512].filter((r) => r <= NATIVE).concat([NATIVE]))].sort((a, b) => a - b);   // menu follows the model
+    $('res').innerHTML = RES.map((r) => `<option>${r}</option>`).join('');
+    const OUTS = meta.outputs, NOUT = OUTS.length, DIST_CH = OUTS.indexOf('dist'), R_CH = OUTS.indexOf('r'), TONE_CH = OUTS.indexOf('tone');
+    const HAS_RGB = R_CH >= 0, EXTRA = HAS_RGB ? 3 : TONE_CH >= 0 ? 1 : 0, EXTRA_CH = HAS_RGB ? R_CH : TONE_CH, HAS_TONE = EXTRA > 0;
+    $('colorLabel').hidden = !HAS_RGB; $('toneLabel').hidden = !HAS_TONE;
+    const colourOn = () => HAS_RGB && $('color').checked, toneW = () => (HAS_TONE ? parseFloat($('tone').value) : 0);
+
+    // decoder: int8 kernels with per-output-channel scales (or fp16), fp16 biases; run with fused conv ops on tfjs-core
+    const layers = meta.decoder.layers.map((l) => {
+      if (l.type === 'up') return { up: true };
+      if (l.type === 'save' || l.type === 'addrelu') return { [l.type]: true };      // residual block: keep the input, add it back before the ReLU
+      const n = l.kh * l.kw * l.cin * l.cout, w = new Float32Array(n);
+      if (l.dtype === 'f16') { const h = new Uint16Array(dbuf, l.w, n); for (let j = 0; j < n; j++) w[j] = f16(h[j]); }
+      else { const q = new Int8Array(dbuf, l.q, n), sc = Float32Array.from(new Uint16Array(dbuf, l.s, l.cout), f16); for (let j = 0; j < n; j++) w[j] = q[j] * sc[j % l.cout]; }
+      return { W: tf.tensor4d(w, [l.kh, l.kw, l.cin, l.cout]), B: tf.tensor1d(Float32Array.from(new Uint16Array(dbuf, l.b, l.cout), f16)), act: l.act };
+    });
+    stats.decoderParams = meta.decoder.params;
+    const K = meta.pca ? meta.pca.k : CODE, D = G * G * K;                           // anchors are stored as K PCA coefficients per cell
+    const basis = meta.pca ? tf.tensor2d(Float32Array.from(new Uint16Array(dbuf, meta.pca.basis, K * CODE), f16), [K, CODE]) : null;
+    const pmean = meta.pca ? tf.tensor1d(Float32Array.from(new Uint16Array(dbuf, meta.pca.mean, CODE), f16)) : null;
+
+    // ---- anchors: real scenes the walk passes through, streamed in chunks ('PMA2' | n k g 0 | classes | fp16 scales | int8 codes)
+    const SB = 8, SG = Math.max(1, Math.floor(G / SB));                              // 5x5 block signature for nearest-neighbour search
+    function signature(z) {
+      const s = new Float32Array(SG * SG * K);
+      for (let gy = 0; gy < G; gy++) for (let gx = 0; gx < G; gx++) {
+        const o = (gy * G + gx) * K, so = (Math.min(SG - 1, (gy / SB) | 0) * SG + Math.min(SG - 1, (gx / SB) | 0)) * K;
+        for (let k = 0; k < K; k++) s[so + k] += z[o + k];
+      }
+      return s;
+    }
+    function parseChunk(buf, base) {                                              // base: global index of the chunk's first anchor (= row in sources.json)
+      const dv = new DataView(buf);
+      if (String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2), dv.getUint8(3)) !== 'PMA2') throw new Error('bad anchor chunk');
+      const n = dv.getUint16(4, true), k = dv.getUint16(6, true), g = dv.getUint16(8, true), d = g * g * k;
+      if (k !== K || g !== G) throw new Error('anchor chunk does not match the model');
+      let o = 12; const cls = new Uint8Array(buf, o, n); o += n; o += o & 1;
+      const sc = new Uint16Array(buf, o, n); o += 2 * n; const q = new Int8Array(buf, o, n * d);
+      const out = [];
+      for (let i = 0; i < n; i++) { const s = f16(sc[i]), z = new Float32Array(d); for (let j = 0; j < d; j++) z[j] = q[i * d + j] * s; out.push({ c: cls[i], z, ids: [base + i] }); }
+      return out;
+    }
+    const flat = [];
+    function addAnchors(list) {
+      for (const w of list) { if (ONLY && !ONLY.includes(names[w.c])) continue; w.sig = signature(w.z); flat.push(w); }
+      stats.anchorsLoaded = flat.length;
+    }
+    const BASE = {}; { let acc = 0; for (const c of meta.chunks || []) { BASE[c.file] = acc; acc += c.n; } }
+    addAnchors(parseChunk(a0buf, 0)); stats.chunksLoaded = 1;
+    const chunks = (meta.chunks || []).filter((c, i) => !INL || INL.files[c.file] || i === 0);
+    let nextChunk = 1, chunkBusy = false, lastChunkT = performance.now();
+    async function loadChunk(i) {
+      chunkBusy = true;
+      try { addAnchors(parseChunk(await getBin(chunks[i].file), BASE[chunks[i].file] || 0)); stats.chunksLoaded = i + 1; }
+      catch (e) { stats.errors.push('chunk ' + i + ': ' + e); }
+      finally { chunkBusy = false; lastChunkT = performance.now(); }
+    }
+    if (WAIT) while (nextChunk < chunks.length) await loadChunk(nextChunk++);      // tests: everything before the first frame
+    if (ONLY) while (!flat.length && nextChunk < chunks.length) await loadChunk(nextChunk++);   // the requested scenes may live in later chunks
+    if (!flat.length) throw new Error(ONLY ? 'no scene called ' + ONLY.join(', ') : 'no scenes in the model');
+    let sumSq = 0; for (const w of flat) for (let i = 0; i < D; i++) sumSq += w.z[i] * w.z[i];
+    const DRIFT = DRIFT_REL * Math.sqrt(sumSq / (flat.length * D));
+
+    // ---- one decode: code grid -> [distance field S*S | colour (or tone) at half resolution], read back as one array
+    let S = 0, HS = 0, img, buf, tmp, blur, dist, tone, col, work;
+    function decode(zArr) {
+      return tf.tidy(() => {
+        // functional ops only: the tfjs-core bundle does not attach chained methods (x.matMul) to tensors
+        let h = basis ? tf.reshape(tf.add(tf.matMul(tf.tensor2d(zArr, [G * G, K]), basis), pmean), [1, G, G, CODE]) : tf.tensor4d(zArr, [1, G, G, CODE]);
+        if (S !== NATIVE) h = tf.image.resizeBilinear(h, [S / 8, S / 8], true);
+        let skip = null;
+        for (const l of layers) {
+          if (l.save) skip = h;
+          else if (l.addrelu) h = tf.relu(tf.add(h, skip));
+          else h = l.up ? tf.image.resizeNearestNeighbor(h, [h.shape[1] * 2, h.shape[2] * 2]) : tf.fused.conv2d({ x: h, filter: l.W, strides: 1, pad: 'same', bias: l.B, activation: l.act });
+        }
+        const d = tf.reshape(tf.slice(h, [0, 0, 0, DIST_CH], [1, S, S, 1]), [S * S]);
+        if (!EXTRA) return d;
+        return tf.concat([d, tf.reshape(tf.avgPool(tf.slice(h, [0, 0, 0, EXTRA_CH], [1, S, S, EXTRA]), 2, 2, 'valid'), [HS * HS * EXTRA])]);
+      });
+    }
+    function setResolution(newS) {
+      S = newS; HS = S >> 1; stats.res = S; $('res').value = String(S);
+      img = ctx.createImageData(S, S); buf = new Uint32Array(img.data.buffer);
+      tmp = new Float32Array(S * S); blur = new Float32Array(S * S); tone = new Float32Array(HS * HS);
+      work = new Float32Array(S * S + HS * HS * EXTRA); dist = work.subarray(0, S * S); col = work.subarray(S * S);
+      keys = []; lastSig = ''; fitCanvas();
+    }
+    function fitCanvas() {                                                          // whole device pixels per field pixel; dots draw at device resolution
+      if (!S) return;
+      const dpr = window.devicePixelRatio || 1;
+      const availCss = Math.max(160, Math.min(window.innerWidth - 32, window.innerHeight - 190));
+      const md = $('mode').value, dots = md === 'dots', hires = dots || md === 'cartoon', k = Math.max(1, Math.floor(availCss * dpr / S)), px = hires ? k * S : S;
+      view.style.width = view.style.height = viewgl.style.width = viewgl.style.height = (k * S / dpr) + 'px';
+      if (view.width !== px) view.width = view.height = px;
+      if (viewgl.width !== k * S) viewgl.width = viewgl.height = k * S;
+      const useGL = dots && !!gl; viewgl.hidden = !useGL; view.hidden = useGL; stats.glDots = useGL;
+      view.classList.toggle('smooth', hires); lastSig = '';
+    }
+    window.addEventListener('resize', fitCanvas);
+
+    // ---- renderers -------------------------------------------------------------------------------------------
+    let kern = null, kernSigma = -1, kr = 0;
+    function gaussBlur(src, sigma) {                                               // separable Gaussian with mirrored borders
+      if (sigma !== kernSigma) {
+        kr = Math.max(1, Math.ceil(sigma * 2.5)); kern = new Float32Array(2 * kr + 1); let sum = 0;
+        for (let i = -kr; i <= kr; i++) { kern[i + kr] = Math.exp(-i * i / (2 * sigma * sigma)); sum += kern[i + kr]; }
+        for (let i = 0; i < kern.length; i++) kern[i] /= sum;
+        kernSigma = sigma;
+      }
+      const K = kr, T = 2 * kr + 1, mir = (v) => (v < 0 ? -v : v >= S ? 2 * S - 2 - v : v);
+      for (let y = 0; y < S; y++) {                                                 // horizontal: branch-free interior, mirrored borders
+        const row = y * S;
+        for (let x = 0; x < K; x++) { let acc = 0; for (let i = 0; i < T; i++) acc += src[row + mir(x + i - K)] * kern[i]; tmp[row + x] = acc; }
+        for (let x = K; x < S - K; x++) { let acc = 0; const o = row + x - K; for (let i = 0; i < T; i++) acc += src[o + i] * kern[i]; tmp[row + x] = acc; }
+        for (let x = S - K; x < S; x++) { let acc = 0; for (let i = 0; i < T; i++) acc += src[row + mir(x + i - K)] * kern[i]; tmp[row + x] = acc; }
+      }
+      for (let y = 0; y < S; y++) {                                                 // vertical: accumulate whole rows (contiguous memory)
+        const row = y * S; blur.fill(0, row, row + S);
+        for (let i = 0; i < T; i++) { const w = kern[i], sr = mir(y + i - K) * S; for (let x = 0; x < S; x++) blur[row + x] += tmp[sr + x] * w; }
+      }
+      return blur;
+    }
+    let curv = null, lineMask = null, offX = null, offY = null, stack = null; const curvHist = new Uint32Array(1024), WEAK = 0.4;
+    function detectLines(field, detail, draw) {                                    // Steger valley detector with hysteresis -> lineMask (+ sub-pixel offsets)
+      const sc = S / NATIVE, b = gaussBlur(field, BLUR64 * sc), scale2 = sc * sc;
+      const tauMax = TAU64 / scale2, tauMin = TAU_MIN64 / scale2, looseMax = LOOSE_MAX_PX / dmax, loose = LOOSE_PX / dmax;
+      if (!curv || curv.length !== S * S) { curv = new Float32Array(S * S); offX = new Float32Array(S * S); offY = new Float32Array(S * S); stack = new Int32Array(S * S); lineMask = new Uint8Array(S * S); }
+      curvHist.fill(0); let nCand = 0;
+      for (let y = 1; y < S - 1; y++) for (let x = 1; x < S - 1; x++) {
+        const i = y * S + x, v = b[i]; curv[i] = 0;
+        if (v >= looseMax || v >= 0.99) continue;                                  // saturated: >= ~3 px from any contour, cannot be a valley
+        const l = b[i - 1], r = b[i + 1], u = b[i - S], dn = b[i + S];
+        const vx = (r - l) / 2, vy = (dn - u) / 2, vxx = r - 2 * v + l, vyy = dn - 2 * v + u;
+        const vxy = (b[i + S + 1] - b[i + S - 1] - b[i - S + 1] + b[i - S - 1]) / 4;
+        const disc = Math.sqrt(Math.max((vxx - vyy) * (vxx - vyy) / 4 + vxy * vxy, 0)), l1 = (vxx + vyy) / 2 + disc;
+        if (l1 <= tauMin) continue;
+        let ex, ey;
+        if (Math.abs(vxy) > 1e-9) { ex = vxy; ey = l1 - vxx; } else if (vxx >= vyy) { ex = 1; ey = 0; } else { ex = 0; ey = 1; }
+        const n = Math.sqrt(ex * ex + ey * ey) || 1; ex /= n; ey /= n;              // (Math.hypot is several times slower)
+        const t = -(vx * ex + vy * ey) / l1;
+        if (Math.abs(t * ex) <= 0.5 && Math.abs(t * ey) <= 0.5) {
+          curv[i] = l1; nCand++; offX[i] = t * ex; offY[i] = t * ey;
+          let h = ((l1 - tauMin) / (tauMax - tauMin) * 1023) | 0; if (h > 1023) h = 1023; curvHist[h]++;
+        }
+      }
+      const k = Math.round(TARGET64 * detail * NATIVE * NATIVE * sc);               // adaptive threshold: about k strongest line pixels
+      let acc = 0, h = 1023; for (; h > 0; h--) { acc += curvHist[h]; if (acc >= k) break; }
+      const tau = nCand > k ? tauMin + h / 1023 * (tauMax - tauMin) : tauMin, bound = tau > tauMin * 1.5 ? loose : looseMax;
+      const m8 = lineMask; let sp = 0, ink = 0; const weakTau = tau * WEAK;
+      for (let i = 0; i < S * S; i++) {
+        if (b[i] >= bound || curv[i] <= weakTau) { m8[i] = 0; continue; }
+        if (curv[i] > tau) { m8[i] = 1; stack[sp++] = i; ink++; } else m8[i] = 2;
+      }
+      while (sp > 0) {
+        const i = stack[--sp], x = i % S, y = (i - x) / S;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= S || yy >= S) continue;
+          const j = yy * S + xx; if (m8[j] === 2) { m8[j] = 1; stack[sp++] = j; ink++; }
+        }
+      }
+      for (let i = 0; i < S * S; i++) { if (m8[i] === 2) m8[i] = 0; if (draw) buf[i] = m8[i] ? 0xff000000 : 0xffffffff; }
+      if (draw) ctx.putImageData(img, 0, 0);
+      return ink / (S * S);
+    }
+    const BAYER8 = [0, 32, 8, 40, 2, 34, 10, 42, 48, 16, 56, 24, 50, 18, 58, 26, 12, 44, 4, 36, 14, 46, 6, 38, 60, 28, 52, 20, 62, 30, 54, 22,
+      3, 35, 11, 43, 1, 33, 9, 41, 51, 19, 59, 27, 49, 17, 57, 25, 15, 47, 7, 39, 13, 45, 5, 37, 63, 31, 55, 23, 61, 29, 53, 21].map((v) => (v + 0.5) / 64);
+    function drawStipple(field, density) {                                        // ordered dithering of a density that decays with distance
+      const sc = S / NATIVE, b = gaussBlur(field, 0.8 * sc), reach = STIPPLE_REACH_PX / dmax; let ink = 0;
+      for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+        const i = y * S + x; let dv = 1 - b[i] / reach; dv = dv < 0 ? 0 : dv;
+        const on = BAYER8[((y & 7) << 3) | (x & 7)] < dv * dv * density; buf[i] = on ? 0xff000000 : 0xffffffff; if (on) ink++;
+      }
+      ctx.putImageData(img, 0, 0); return ink / (S * S);
+    }
+    function sampleH(arr, ch, nch, x, y) {                                          // bilinear read of a half-resolution field at full-res position (x, y)
+      const hx = Math.min(Math.max(x * 0.5 - 0.5, 0), HS - 1.001), hy = Math.min(Math.max(y * 0.5 - 0.5, 0), HS - 1.001);
+      const x0 = hx | 0, y0 = hy | 0, fx = hx - x0, fy = hy - y0, i = (y0 * HS + x0) * nch + ch, r = HS * nch;
+      return (arr[i] * (1 - fx) + arr[i + nch] * fx) * (1 - fy) + (arr[i + r] * (1 - fx) + arr[i + r + nch] * fx) * fy;
+    }
+    function dotColour(x, y, out) {                                                // scene colour, saturation boosted and lightness capped so dots show on white
+      let hx = (x * 0.5) | 0, hy = (y * 0.5) | 0; if (hx >= HS) hx = HS - 1; if (hy >= HS) hy = HS - 1;
+      const ci = (hy * HS + hx) * 3; let r = col[ci], g = col[ci + 1], b = col[ci + 2];  // nearest half-res sample: a dot covers one colour cell anyway
+      const m = (r + g + b) / 3; r = m + 2 * (r - m); g = m + 2 * (g - m); b = m + 2 * (b - m);
+      const L = 0.299 * r + 0.587 * g + 0.114 * b; if (L > 0.6) { const k = 0.6 / L; r *= k; g *= k; b *= k; }
+      out[0] = Math.min(255, Math.max(0, r * 255)); out[1] = Math.min(255, Math.max(0, g * 255)); out[2] = Math.min(255, Math.max(0, b * 255));
+    }
+    let hImg = null, hBuf = null, h32 = null, hW = 0, occ = null, occW = 0, dotsX = null, dotsY = null; const dotC = [0, 0, 0];
+    // anti-aliased disc, min-composited over white. Coverage masks are precomputed per (radius step, sub-pixel offset):
+    // stamping is then table lookups instead of a square root per pixel (radius quantised to 1/32 px, position to 1/4 px)
+    const DOT_SUB = 4, DOT_RQ = 32, dotMasks = new Map(), POW14 = new Float32Array(256);
+    function dotMask(rq, sx, sy) {
+      const key = (rq * DOT_SUB + sx) * DOT_SUB + sy; let m = dotMasks.get(key);
+      if (!m) {
+        const r = rq / DOT_RQ, fx = (sx + 0.5) / DOT_SUB, fy = (sy + 0.5) / DOT_SUB, e = Math.ceil(r + 1), n = 2 * e + 1, cov = new Uint8Array(n * n);
+        for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+          const dx = i - e + 0.5 - fx, dy = j - e + 0.5 - fy; let c = r + 0.5 - Math.sqrt(dx * dx + dy * dy); c = c < 0 ? 0 : c > 1 ? 1 : c; cov[j * n + i] = Math.round(c * 255);
+        }
+        m = { e, n, cov }; dotMasks.set(key, m);
+      }
+      return m;
+    }
+    function emitDot(g8, W, cx, cy, r, cr, cg, cb) {                               // GPU path: queue the dot, drawn in one call
+      if ((dotN + 1) * 6 > dotArr.length) { const a = new Float32Array(dotArr.length * 2); a.set(dotArr); dotArr = a; }
+      const o = dotN * 6; dotArr[o] = cx; dotArr[o + 1] = cy; dotArr[o + 2] = r; dotArr[o + 3] = cr / 255; dotArr[o + 4] = cg / 255; dotArr[o + 5] = cb / 255; dotN++;
+    }
+    function stampDotCPU(g8, W, cx, cy, r, cr, cg, cb) {
+      const bx = Math.floor(cx), by = Math.floor(cy), sx = Math.min(DOT_SUB - 1, ((cx - bx) * DOT_SUB) | 0), sy = Math.min(DOT_SUB - 1, ((cy - by) * DOT_SUB) | 0);
+      const m = dotMask(Math.max(1, Math.round(r * DOT_RQ)), sx, sy), e = m.e, n = m.n, cov = m.cov;
+      const ir = 255 - cr, ig = 255 - cg, ib = 255 - cb;
+      for (let j = 0; j < n; j++) {
+        const py = by - e + j; if (py < 0 || py >= W) continue;
+        const i0 = Math.max(0, e - bx), i1 = Math.min(n, W - bx + e); let o = (py * W + bx - e + i0) * 4;
+        for (let i = i0; i < i1; i++, o += 4) {
+          const c = cov[j * n + i]; if (!c) continue;
+          const vr = 255 - ((ir * c * 257 + 32768) >> 16), vg = 255 - ((ig * c * 257 + 32768) >> 16), vb = 255 - ((ib * c * 257 + 32768) >> 16);   // exact x*c/255, rounded
+          if (vr < g8[o]) g8[o] = vr; if (vg < g8[o + 1]) g8[o + 1] = vg; if (vb < g8[o + 2]) g8[o + 2] = vb;
+        }
+      }
+    }
+    function drawDots(strength) {                                                  // contour chains + blue-noise tonal stipple, in scene colour or black
+      const onGL = !!gl && !viewgl.hidden, W = onGL ? viewgl.width : view.width, sc = W / S, sp = Math.max(1.4, 2 * S / NATIVE);   // 2 units apart at the native size
+      if (!onGL && hW !== W) { hImg = ctx.createImageData(W, W); hBuf = new Uint8ClampedArray(hImg.data.buffer); h32 = new Uint32Array(hImg.data.buffer); hW = W; }
+      const g8 = hBuf, tA = performance.now(); if (!onGL) h32.fill(0xffffffff); dotN = 0; let area = 0; const colr = colourOn(), tw = toneW();
+      const stampDot = onGL ? emitDot : stampDotCPU;
+      if (DOT_STYLE === 'line') {
+        const tB = performance.now(); detectLines(dist, strength, false); prof('detect', performance.now() - tB); prof('fill', tB - tA);
+        const cs = sp, gw = Math.ceil(S / cs) + 1;
+        if (!occ || occW !== gw) { occ = new Uint8Array(gw * gw); dotsX = new Float32Array(gw * gw); dotsY = new Float32Array(gw * gw); occW = gw; } occ.fill(0);
+        const r = 0.42 * sp * sc, minD2 = sp * sp * 0.8;
+        const tryDot = (x, y, fx, fy, rr) => {                                     // one dot unless another sits within the spacing radius
+          const gx = (x / cs) | 0, gy = (y / cs) | 0;
+          for (let j = Math.max(0, gy - 1); j <= Math.min(gw - 1, gy + 1); j++) for (let i = Math.max(0, gx - 1); i <= Math.min(gw - 1, gx + 1); i++) {
+            const k = j * gw + i; if (!occ[k]) continue;
+            const dx = dotsX[k] - x, dy = dotsY[k] - y; if (dx * dx + dy * dy < minD2) return;
+          }
+          const k = gy * gw + gx; occ[k] = 1; dotsX[k] = x; dotsY[k] = y;
+          if (colr) { dotColour(fx, fy, dotC); stampDot(g8, W, fx * sc, fy * sc, rr, dotC[0], dotC[1], dotC[2]); } else stampDot(g8, W, fx * sc, fy * sc, rr, 0, 0, 0);
+          area += rr * rr * 3.14159265;
+        };
+        for (let y = 1; y < S - 1; y++) for (let x = 1; x < S - 1; x++) {
+          const i = y * S + x; if (lineMask[i]) tryDot(x, y, x + 0.5 + offX[i], y + 0.5 + offY[i], r);
+        }
+        if (tw > 0) {                                                               // darkness^1.4 against blue noise, jittered: no lattice shows through
+          const tsp = Math.max(1, Math.round(sp)), rt = r * 0.9;
+          for (let q = 0; q < 256; q++) POW14[q] = tw * Math.pow(q / 255, 1.4);     // darkness^1.4 as a table (was a pow per grid point)
+          for (let y = 1; y < S - 1; y += tsp) for (let x = 1; x < S - 1; x += tsp) {
+            let dark = 1 - tone[(y >> 1) * HS + (x >> 1)]; dark = dark < 0 ? 0 : dark > 1 ? 1 : dark;
+            if (POW14[(dark * 255 + 0.5) | 0] <= BLUE[(y & 63) * 64 + (x & 63)]) continue;
+            const jx = (BLUE[((y + 17) & 63) * 64 + ((x + 31) & 63)] - 0.5) * 0.9 * tsp, jy = (BLUE[((y + 41) & 63) * 64 + ((x + 7) & 63)] - 0.5) * 0.9 * tsp;
+            tryDot(x, y, x + 0.5 + jx, y + 0.5 + jy, rt * (0.7 + 0.5 * dark));
+          }
+        }
+      } else {                                                                      // ?dots=band: hexagonal lattice, dot size follows distance and tone
+        const rowH = sp * 0.866, rmax = 0.6 * sp * sc, edgeReach = Math.min(1.4, 0.8 + 0.3 * strength) / dmax, gam = 1 / Math.max(0.35, strength);
+        let row = 0;
+        for (let y = sp * 0.5; y < S - 0.5; y += rowH, row++) for (let x = (row & 1 ? sp * 0.5 : 0) + sp * 0.5; x < S - 0.5; x += sp) {
+          const xi = Math.min(S - 1, x | 0), yi = Math.min(S - 1, y | 0), edge = Math.max(0, 1 - dist[yi * S + xi] / edgeReach);
+          const shade = tw > 0 ? tw * Math.pow(Math.max(0, 1 - sampleH(tone, 0, 1, x, y)), gam) : 0;
+          const v = Math.max(shade, edge); if (v < 0.04) continue;
+          const r = rmax * Math.sqrt(v);
+          if (colr) { dotColour(x, y, dotC); stampDot(g8, W, x * sc, y * sc, r, dotC[0], dotC[1], dotC[2]); } else stampDot(g8, W, x * sc, y * sc, r, 0, 0, 0);
+          area += r * r * 3.14159265;
+        }
+      }
+      const tC = performance.now(); prof('stamp', tC - tA);
+      if (onGL) {
+        gl.viewport(0, 0, W, W); gl.clear(gl.COLOR_BUFFER_BIT); gl.uniform1f(glScale, 1 / W);
+        gl.bufferData(gl.ARRAY_BUFFER, dotArr.subarray(0, dotN * 6), gl.STREAM_DRAW); gl.drawArrays(gl.POINTS, 0, dotN);
+      } else ctx.putImageData(hImg, 0, 0);
+      prof('put', performance.now() - tC); stats.dots = dotN; return area / (W * W);
+    }
+    // auto-levels: stretch this frame's tone to its 2..98 % range, then keep the mean darkness moderate, so night scenes show
+    // their lights and structure instead of a uniform carpet of dots and pale scenes still get contrast
+    const toneHist = new Uint32Array(64);
+    function autoLevels() {
+      const n = HS * HS; toneHist.fill(0);
+      for (let i = 0; i < n; i++) { let b = (tone[i] * 64) | 0; b = b < 0 ? 0 : b > 63 ? 63 : b; toneHist[b]++; }
+      let acc = 0, lo = 0, hi = 63;
+      for (; lo < 63; lo++) { acc += toneHist[lo]; if (acc > 0.02 * n) break; }
+      acc = 0; for (; hi > 0; hi--) { acc += toneHist[hi]; if (acc > 0.02 * n) break; }
+      const a = lo / 64, span = Math.max(0.12, (hi + 1) / 64 - a); let dsum = 0;
+      for (let i = 0; i < n; i++) { let v = (tone[i] - a) / span; v = v < 0 ? 0 : v > 1 ? 1 : v; tone[i] = v; dsum += 1 - v; }
+      const m = dsum / n;                                                            // mean darkness after stretching
+      if (m > 0.42) { const g = Math.log(0.42) / Math.log(m); for (let i = 0; i < n; i++) tone[i] = 1 - Math.pow(1 - tone[i], g); }
+    }
+    // ---- cartoon (?mode=cartoon): the decoded contours cut the image into regions (union-find over pixels that are neither on
+    //      a detected line nor within ~1 px of a contour, which closes hairline gaps); each region is filled with one flat
+    //      colour (its mean decoded colour, more saturated; very large, leaky regions take a softly smoothed local colour),
+    //      the tone slider adds two-step cel shading, and dark tinted ink outlines are stamped on top at sub-pixel positions.
+    //      Colour off: four grey levels (manga).
+    let cLab = null, cPar = null, cBar = null, cRow = null, cSmooth = null, cTmp = null, rSum = new Float32Array(0), rN = new Float32Array(0), rCol = new Uint32Array(0);
+    function cFind(i) { while (cPar[i] !== i) { cPar[i] = cPar[cPar[i]]; i = cPar[i]; } return i; }
+    function cUnion(a, b) { a = cFind(a); b = cFind(b); if (a !== b) { if (a < b) cPar[b] = a; else cPar[a] = b; } }
+    function boxBlur3(src, dst, tmp, n, r) {                                          // separable box blur of an n x n RGB field
+      for (let y = 0; y < n; y++) for (let c = 0; c < 3; c++) {
+        let acc = 0; for (let x = -r; x <= r; x++) acc += src[(y * n + Math.min(n - 1, Math.max(0, x))) * 3 + c];
+        for (let x = 0; x < n; x++) { tmp[(y * n + x) * 3 + c] = acc / (2 * r + 1); acc += src[(y * n + Math.min(n - 1, x + r + 1)) * 3 + c] - src[(y * n + Math.max(0, x - r)) * 3 + c]; }
+      }
+      for (let x = 0; x < n; x++) for (let c = 0; c < 3; c++) {
+        let acc = 0; for (let y = -r; y <= r; y++) acc += tmp[(Math.min(n - 1, Math.max(0, y)) * n + x) * 3 + c];
+        for (let y = 0; y < n; y++) { dst[(y * n + x) * 3 + c] = acc / (2 * r + 1); acc += tmp[(Math.min(n - 1, y + r + 1) * n + x) * 3 + c] - tmp[(Math.max(0, y - r) * n + x) * 3 + c]; }
+      }
+    }
+    function toonRGB(r, g, b, colr, shade, out) {                                     // cartoon palette: saturated colour or 4 grey levels
+      if (colr) { const m = (r + g + b) / 3; r = m + 1.35 * (r - m); g = m + 1.35 * (g - m); b = m + 1.35 * (b - m); }
+      else { const L = 0.299 * r + 0.587 * g + 0.114 * b; r = g = b = Math.round(Math.min(1, L * 1.1) * 3) / 3; }
+      r = Math.min(1, Math.max(0, r * shade)) * 255; g = Math.min(1, Math.max(0, g * shade)) * 255; b = Math.min(1, Math.max(0, b * shade)) * 255;
+      out[0] = r; out[1] = g; out[2] = b; return (255 << 24) | ((b | 0) << 16) | ((g | 0) << 8) | (r | 0);
+    }
+    let cImg = null, cImg32 = null, cOff = null, cOffCtx = null, lPar = null, lCnt = null, zsDel = null, cHalf32 = null;
+    let inkList = null, inkN = 0;
+    function thinZS(M) {                                                             // Zhang-Suen thinning in place (1 = ink), over the ink pixels only
+      if (!zsDel || zsDel.length !== S * S) { zsDel = new Int32Array(S * S); inkList = new Int32Array(S * S); }
+      inkN = 0; for (let y = 1; y < S - 1; y++) for (let x = 1; x < S - 1; x++) { const i = y * S + x; if (M[i] === 1) inkList[inkN++] = i; }
+      for (let it = 0, changed = true; changed && it < 10; it++) {
+        changed = false;
+        for (let step = 0; step < 2; step++) {
+          let nd = 0;
+          for (let q = 0; q < inkN; q++) {
+            const i = inkList[q]; if (M[i] !== 1) continue;
+            const p2 = M[i - S] === 1 ? 1 : 0, p3 = M[i - S + 1] === 1 ? 1 : 0, p4 = M[i + 1] === 1 ? 1 : 0, p5 = M[i + S + 1] === 1 ? 1 : 0;
+            const p6 = M[i + S] === 1 ? 1 : 0, p7 = M[i + S - 1] === 1 ? 1 : 0, p8 = M[i - 1] === 1 ? 1 : 0, p9 = M[i - S - 1] === 1 ? 1 : 0;
+            const B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9; if (B < 2 || B > 6) continue;
+            const A = (!p2 && p3) + (!p3 && p4) + (!p4 && p5) + (!p5 && p6) + (!p6 && p7) + (!p7 && p8) + (!p8 && p9) + (!p9 && p2); if (A !== 1) continue;
+            if (step === 0 ? (p2 && p4 && p6) || (p4 && p6 && p8) : (p2 && p4 && p8) || (p2 && p6 && p8)) continue;
+            zsDel[nd++] = i;
+          }
+          for (let k = 0; k < nd; k++) M[zsDel[k]] = 0; if (nd) changed = true;
+        }
+      }
+      let n = 0; for (let q = 0; q < inkN; q++) if (M[inkList[q]] === 1) inkList[n++] = inkList[q]; inkN = n;   // compact the list
+    }
+    function lFind(i) { while (lPar[i] !== i) { lPar[i] = lPar[lPar[i]]; i = lPar[i]; } return i; }
+    function drawCartoon(strength) {
+      const W = view.width, sc = W / S, N = S * S, colr = colourOn(), tw = toneW(), tA = performance.now();
+      if (!cLab || cLab.length !== N) { cLab = new Int32Array(N); cPar = new Int32Array(N); cBar = new Uint8Array(N); lPar = new Int32Array(N); lCnt = new Int32Array(N); }
+      if (!cOff || cOff.width !== S) { cOff = document.createElement('canvas'); cOff.width = cOff.height = S; cOffCtx = cOff.getContext('2d'); cImg = cOffCtx.createImageData(S, S); cImg32 = new Uint32Array(cImg.data.buffer); }
+      detectLines(dist, strength, false); prof('detect', performance.now() - tA);
+      const thr = 1.0 / dmax;
+      for (let i = 0; i < N; i++) { cBar[i] = lineMask[i] || dist[i] < thr ? 1 : 0; cPar[i] = i; cLab[i] = -1; }
+      for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+        const i = y * S + x; if (cBar[i]) continue;
+        if (x > 0 && !cBar[i - 1]) cUnion(i, i - 1);
+        if (y > 0 && !cBar[i - S]) cUnion(i, i - S);
+      }
+      let nReg = 0;
+      for (let i = 0; i < N; i++) if (!cBar[i]) { const r = cFind(i); cLab[i] = r === i ? nReg++ : cLab[r]; }
+      for (let pass = 0; pass < 2; pass++)                                           // barrier pixels join a neighbouring region (fills meet under the ink)
+        for (let k = 0; k < N; k++) {
+          const i = pass ? N - 1 - k : k; if (cLab[i] >= 0) continue; const x = i % S;
+          const l = x > 0 ? cLab[i - 1] : -1, r = x < S - 1 ? cLab[i + 1] : -1, u = i >= S ? cLab[i - S] : -1, d = i < N - S ? cLab[i + S] : -1;
+          cLab[i] = pass ? (r >= 0 ? r : d >= 0 ? d : l >= 0 ? l : u) : (l >= 0 ? l : u >= 0 ? u : r >= 0 ? r : d);
+        }
+      const tR = performance.now(); prof('regions', tR - tA);
+      if (rN.length < nReg + 1) { rN = new Float32Array(2 * nReg + 16); rSum = new Float32Array(4 * rN.length); rCol = new Uint32Array(rN.length); }
+      rN.fill(0, 0, nReg); rSum.fill(0, 0, 4 * nReg);
+      for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {                       // region means: colour + tone
+        const i = y * S + x, L = cLab[i]; if (L < 0 || cBar[i]) continue; const h = (y >> 1) * HS + (x >> 1), ci = 3 * h;
+        rN[L]++; rSum[4 * L] += col[ci]; rSum[4 * L + 1] += col[ci + 1]; rSum[4 * L + 2] += col[ci + 2]; rSum[4 * L + 3] += tone[h];
+      }
+      let big = false; const bigN = 0.06 * N, c4 = [0, 0, 0], sh = [1 - 0.3 * tw, 1, 1 + 0.1 * tw];   // 3 cel-shading steps: shadow, flat, light
+      if (rCol.length < 3 * nReg) rCol = new Uint32Array(3 * rN.length);
+      for (let L = 0; L < nReg; L++) {                                               // every region's three shaded colours, once
+        const n = Math.max(1, rN[L]), r = rSum[4 * L] / n, g = rSum[4 * L + 1] / n, b = rSum[4 * L + 2] / n; if (rN[L] > bigN) big = true;
+        for (let k = 0; k < 3; k++) rCol[3 * L + k] = toonRGB(r, g, b, colr, sh[k], c4);
+      }
+      if (!cSmooth || cSmooth.length !== HS * HS * 3) { cSmooth = new Float32Array(HS * HS * 3); cTmp = new Float32Array(HS * HS * 3); cHalf32 = new Uint32Array(HS * HS * 3); }
+      if (big) {                                                                     // soft local colour for large leaky regions (skies, backgrounds)
+        boxBlur3(col, cSmooth, cTmp, HS, Math.max(2, HS >> 5));
+        for (let h = 0; h < HS * HS; h++) for (let k = 0; k < 3; k++) cHalf32[3 * h + k] = toonRGB(cSmooth[3 * h], cSmooth[3 * h + 1], cSmooth[3 * h + 2], colr, sh[k], c4);
+      }
+      for (let y = 0, i = 0; y < S; y++) for (let x = 0; x < S; x++, i++) {         // fill at field resolution (lookups only); the GPU upscales it
+        const L = cLab[i], h = (y >> 1) * HS + (x >> 1);
+        if (L < 0) { cImg32[i] = toonRGB(col[3 * h], col[3 * h + 1], col[3 * h + 2], colr, 1, c4); continue; }   // rare: unlabelled pixel
+        let k = 1; if (tw > 0) { const d = tone[h] - rSum[4 * L + 3] / Math.max(1, rN[L]); k = d < -0.12 ? 0 : d > 0.16 ? 2 : 1; }
+        cImg32[i] = rN[L] > bigN ? cHalf32[3 * h + k] : rCol[3 * L + k];
+      }
+      const tF = performance.now(); prof('colour', tF - tR);
+      cOffCtx.putImageData(cImg, 0, 0); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(cOff, 0, 0, W, W);
+      const tD = performance.now(); prof('fill', tD - tF);
+      const inkM = cBar;                                                             // reuse: ink mask = detected lines minus the T-shaped caps the
+      for (let i = 0; i < N; i++) inkM[i] = lineMask[i] ? 1 : 0;                     // valley detector leaves at line ends (endpoints pruned 4 times)
+      thinZS(inkM);                                                                  // 2-px-thick stretches -> 1-px skeleton first
+      for (let pass = 0; pass < 4; pass++) {
+        for (let q = 0; q < inkN; q++) {
+          const i = inkList[q]; if (inkM[i] !== 1) continue;
+          const nb = (inkM[i - 1] === 1) + (inkM[i + 1] === 1) + (inkM[i - S] === 1) + (inkM[i + S] === 1) + (inkM[i - S - 1] === 1) + (inkM[i - S + 1] === 1) + (inkM[i + S - 1] === 1) + (inkM[i + S + 1] === 1);
+          if (nb <= 1) inkM[i] = 2;                                                  // an endpoint: drop after this pass
+        }
+        let n = 0; for (let q = 0; q < inkN; q++) { const i = inkList[q]; if (inkM[i] === 2) inkM[i] = 0; else if (inkM[i] === 1) inkList[n++] = i; } inkN = n;
+      }
+      for (let q = 0; q < inkN; q++) { const i = inkList[q]; lPar[i] = i; lCnt[i] = 0; }   // ink: contour chains (8-connected), fragments < 6 px dropped
+      const lJoin = (i, j) => { if (inkM[j]) { const a = lFind(i), b = lFind(j); if (a !== b) { if (a < b) lPar[b] = a; else lPar[a] = b; } } };
+      for (let q = 0; q < inkN; q++) { const i = inkList[q]; lJoin(i, i - 1); lJoin(i, i - S - 1); lJoin(i, i - S); lJoin(i, i - S + 1); }
+      for (let q = 0; q < inkN; q++) lCnt[lFind(inkList[q])]++;
+      const rInk = Math.max(0.6, (0.5 + 0.4 * strength) * sc), path = new Path2D(); let ink = 0;
+      for (let q = 0; q < inkN; q++) {
+        const i = inkList[q]; if (lCnt[lFind(i)] < 6) continue; const x = i % S, y = (i - x) / S;
+        const cx = (x + 0.5 + offX[i]) * sc, cy = (y + 0.5 + offY[i]) * sc; path.moveTo(cx + rInk, cy); path.arc(cx, cy, rInk, 0, 6.283185); ink++;
+      }
+      const tI = performance.now(); prof('ink', tI - tD);
+      ctx.fillStyle = 'rgba(18, 18, 22, 0.9)'; ctx.fill(path); prof('inkfill', performance.now() - tI);
+      prof('stamp', performance.now() - tA); stats.regions = nReg; return ink / N;
+    }
+    const prof = (k, v) => { stats.prof[k] = +(0.9 * (stats.prof[k] || v) + 0.1 * v).toFixed(2); };   // per-stage render times (ms, EMA)
+    function render() {
+      const t0 = performance.now(), mode = $('mode').value, s = parseFloat($('ink').value) / 4; stats.mode = mode;
+      if (HAS_RGB) for (let i = 0, n = HS * HS; i < n; i++) tone[i] = 0.299 * col[3 * i] + 0.587 * col[3 * i + 1] + 0.114 * col[3 * i + 2];
+      else if (EXTRA) tone.set(col);
+      if (EXTRA) autoLevels();
+      const ink = mode === 'dots' ? drawDots(s) : mode === 'cartoon' ? drawCartoon(s) : mode === 'lines' ? detectLines(dist, s, true) : drawStipple(dist, s);
+      stats.renderMs = 0.8 * stats.renderMs + 0.2 * (performance.now() - t0);
+      return ink;
+    }
+
+    // ---- endless walk: Catmull-Rom spline through anchor codes, eased so it lingers on each object. How the next stop is
+    //      chosen in feature space (5x5 code-block signatures = where the shape's contours sit) is the walk style (?walk=, menu):
+    //        drift  (default) a slow random walk: one of the 4 nearest shapes not visited recently, staying in the class 3 times
+    //               out of 4 and otherwise crossing to the nearest shape of one of the 2 semantically closest classes
+    //               (meta.class_sim, from CLIP): airliner -> spacecraft, lighthouse -> tower, earth -> moon
+    //        dream  endless variations of one class: every stop is a new same-class composite of nearby views
+    //        tour   a different class each time, among the 40 nearest shapes (the original walk)
+    //        random anywhere
+    const history = [], visited = [], WALKS = ['drift', 'dream', 'tour', 'random'], CLASS_SIM = Array.isArray(meta.class_sim) ? meta.class_sim : null;
+    let WALK = WALKS.includes(qs.get('walk')) ? qs.get('walk') : WALKS.includes(meta.walk) ? meta.walk : 'drift';
+    $('walk').value = WALK; stats.walk = WALK;
+    function sigDist(a, b) { let s = 0; for (let i = 0; i < a.length; i++) { const t = a[i] - b[i]; s += t * t; } return s; }
+    function composite(w1) {                                                        // two anchors blended across a soft random ramp, one of them shifted
+      const mates = MIX_SAME ? flat.filter((w) => w.c === w1.c && w !== w1) : null;    // same class: two peaks make a new range, not a chimera
+      if (mates && !mates.length) return w1;                                         // no second view of this class loaded yet: no composite
+      let w2 = mates ? mates[(rnd() * mates.length) | 0] : flat[(rnd() * flat.length) | 0];
+      if (!mates) for (let k = 0; k < 8 && w2.c === w1.c && flat.length > 1; k++) w2 = flat[(rnd() * flat.length) | 0];
+      const th = rnd() * 6.283185, cx = Math.cos(th), cy = Math.sin(th), off = 0.35 + 0.3 * rnd(), soft = 0.18 + 0.2 * rnd();
+      const sx = ((rnd() * 7) | 0) - 3, sy = ((rnd() * 5) | 0) - 2, z = new Float32Array(D);
+      for (let gy = 0; gy < G; gy++) for (let gx = 0; gx < G; gx++) {
+        const u = (gx + 0.5) / G - 0.5, v = (gy + 0.5) / G - 0.5; let t = (u * cx + v * cy + 0.5 - off) / soft; t = t < 0 ? 0 : t > 1 ? 1 : t; t = t * t * (3 - 2 * t);
+        const o1 = (gy * G + gx) * K, o2 = (Math.min(G - 1, Math.max(0, gy + sy)) * G + Math.min(G - 1, Math.max(0, gx + sx))) * K;
+        for (let k = 0; k < K; k++) z[o1 + k] = w1.z[o1 + k] * (1 - t) + w2.z[o2 + k] * t;
+      }
+      return { c: w1.c, z, sig: signature(z), ids: w1.ids.concat(w2.ids), name: w1.c === w2.c ? names[w1.c] : names[w1.c] + ' + ' + names[w2.c] };
+    }
+    const keyOf = (w) => w.ids[0];
+    function pickWaypoint(from) {
+      let w;
+      if (!from || WALK === 'random') w = flat[(rnd() * flat.length) | 0];
+      else if (WALK === 'tour') {
+        let pool = flat.filter((x) => !history.includes(x.c)); if (!pool.length) pool = flat;
+        pool = pool.map((x) => [sigDist(from.sig, x.sig), x]).sort((p, q) => p[0] - q[0]).slice(0, NEAR_K).map((p) => p[1]);
+        w = pool[(rnd() * pool.length) | 0];
+      } else if (WALK === 'dream') {                                                 // dream: stay in the class; revisits are fine (every stop is a new blend)
+        const recent = visited.slice(-2); let pool = flat.filter((x) => x.c === from.c && keyOf(x) !== keyOf(from) && !recent.includes(keyOf(x)));
+        if (!pool.length) pool = flat.filter((x) => x.c === from.c); if (!pool.length) pool = flat;
+        const near = pool.map((x) => [sigDist(from.sig, x.sig), x]).sort((p, q) => p[0] - q[0]).slice(0, 3); w = near[(rnd() * near.length) | 0][1];
+      } else {                                                                      // drift: small steps in feature space
+        let pool = flat.filter((x) => !visited.includes(keyOf(x)) && keyOf(x) !== keyOf(from)); if (!pool.length) pool = flat.filter((x) => keyOf(x) !== keyOf(from));
+        if (!pool.length) pool = flat;                                              // a single loaded object (e.g. ?scene=mountain before the chunks arrive)
+        const stay = rnd() < 0.75, sim = CLASS_SIM && CLASS_SIM[from.c];
+        let cand = stay ? pool.filter((x) => x.c === from.c) : [];
+        if (!cand.length) {                                                          // leave the class: only for one of its 2 closest classes (CLIP)
+          const order = sim ? sim.map((v, j) => [v, j]).filter((p) => p[1] !== from.c).sort((a, b) => b[0] - a[0]).slice(0, 2).map((p) => p[1]) : null;
+          cand = order ? pool.filter((x) => order.includes(x.c)) : pool.filter((x) => x.c !== from.c);
+          if (!cand.length) cand = pool;
+        }
+        const near = cand.map((x) => [sigDist(from.sig, x.sig), x]).sort((p, q) => p[0] - q[0]).slice(0, 4); w = near[(rnd() * near.length) | 0][1];
+      }
+      visited.push(keyOf(w)); if (visited.length > Math.min(24, flat.length >> 1)) visited.shift();
+      history.push(w.c); if (history.length > Math.min(8, names.length - 1)) history.shift();
+      if (from && WALK === 'dream' && flat.length > 1) return composite(w);           // every stop a new variation of the class
+      return from && rnd() < MIX_P && flat.length > 1 ? composite(w) : w;
+    }
+    const wps = [pickWaypoint(null)]; for (let i = 0; i < 3; i++) wps.push(pickWaypoint(wps[wps.length - 1]));
+    let segT = qs.has('seg') ? Math.min(0.999, Math.max(0, parseFloat(qs.get('seg')) || 0)) : 0, segN = 0; const zBuf = new Float32Array(D);   // ?seg=0.5&hold=1: freeze mid-transition (tests)
+    // transitions: 'sweep' (default) moves a soft, slightly wavy boundary across the image, so every region is mostly one
+    // real drawing at any moment (mid-morph frames stay as recognisable as the objects themselves); 'blend' moves all cells at once
+    const TRANS = qs.get('trans') || meta.transition || 'sweep', SWEEP_W = 0.35;
+    let sweepSeg = -1, sweepOrder = null;
+    function sweepField() {                                                         // per-cell switch order in [0, 1]
+      const th = rnd() * 6.283185, cx = Math.cos(th), cy = Math.sin(th), f1 = 1 + 2 * rnd(), f2 = 1 + 2 * rnd(), ph1 = 6.283185 * rnd(), ph2 = 6.283185 * rnd();
+      const o = new Float32Array(G * G); let lo = 1e9, hi = -1e9;
+      for (let gy = 0; gy < G; gy++) for (let gx = 0; gx < G; gx++) {
+        const u = (gx + 0.5) / G - 0.5, v = (gy + 0.5) / G - 0.5;
+        const p = u * cx + v * cy + 0.06 * (Math.sin(f1 * 6.283185 * (u * cy - v * cx) + ph1) + Math.sin(f2 * 6.283185 * (u + v) + ph2));
+        o[gy * G + gx] = p; lo = Math.min(lo, p); hi = Math.max(hi, p);
+      }
+      for (let c = 0; c < o.length; c++) o[c] = (o[c] - lo) / (hi - lo); return o;
+    }
+    function spline(t, breathe, tsec) {
+      const p0 = wps[0].z, p1 = wps[1].z, p2 = wps[2].z, p3 = wps[3].z;
+      if (TRANS === 'sweep') {
+        if (sweepSeg !== segN) { sweepOrder = sweepField(); sweepSeg = segN; }
+        const tt = t * (1 + SWEEP_W);
+        for (let c = 0, NC = G * G; c < NC; c++) {
+          let tc = (tt - sweepOrder[c]) / SWEEP_W; tc = tc < 0 ? 0 : tc > 1 ? 1 : tc; tc = tc * tc * (3 - 2 * tc);
+          const c2 = tc * tc, c3 = c2 * tc, o = c * K; let n1 = 0, n2 = 0, nm = 0;
+          for (let i = o; i < o + K; i++) {
+            const v = 0.5 * (2 * p1[i] + (-p0[i] + p2[i]) * tc + (2 * p0[i] - 5 * p1[i] + 4 * p2[i] - p3[i]) * c2 + (-p0[i] + 3 * p1[i] - 3 * p2[i] + p3[i]) * c3);
+            zBuf[i] = v; n1 += p1[i] * p1[i]; n2 += p2[i] * p2[i]; nm += v * v;
+          }
+          if (tc > 0 && tc < 1) {                                                   // keep the cell's contrast inside the band (no washed-out seam)
+            const sc = Math.min(2, ((1 - tc) * Math.sqrt(n1) + tc * Math.sqrt(n2)) / (Math.sqrt(nm) + 1e-6));
+            for (let i = o; i < o + K; i++) zBuf[i] *= sc;
+          }
+          if (breathe) for (let i = o; i < o + K; i++) zBuf[i] += breathe * (Math.sin(0.31 * tsec + i) + Math.sin(0.17 * tsec + 2 * i) + Math.sin(0.11 * tsec + 3 * i)) / 3;
+        }
+        return zBuf;
+      }
+      const t2 = t * t, t3 = t2 * t;
+      for (let i = 0; i < D; i++) {
+        zBuf[i] = 0.5 * (2 * p1[i] + (-p0[i] + p2[i]) * t + (2 * p0[i] - 5 * p1[i] + 4 * p2[i] - p3[i]) * t2 + (-p0[i] + 3 * p1[i] - 3 * p2[i] + p3[i]) * t3)
+          + breathe * (Math.sin(0.31 * tsec + i) + Math.sin(0.17 * tsec + 2 * i) + Math.sin(0.11 * tsec + 3 * i)) / 3;
+      }
+      return zBuf;
+    }
+    const ease = (t) => t * t * t * (t * (t * 6 - 15) + 10);
+
+    // ---- self-check against a PyTorch reference field (test harness, ?check=1)
+    let keys = [], lastSig = '';
+    const wantRes = cpuMode ? 128 : (parseInt(qs.get('res') || '', 10) || NATIVE);   // default: the model's native size (steps down on slow devices)
+    if (CHECK) {
+      const ref = INL ? INL.ref : await fetch(MODEL_DIR + '/ref.json').then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      if (ref) {
+        setResolution(NATIVE); const out = decode(ref.z), fd = await out.data(); out.dispose(); let e = 0; const mid = ref.row_mid;
+        for (let c = 0; c < S; c++) e = Math.max(e, Math.abs(fd[c] - ref.field_row0[c]), Math.abs(fd[mid * S + c] - ref.field_mid[c]));
+        stats.refErr = e; console.log('pixel-morph self-check: max |field - reference| =', e);
+      }
+    }
+    setResolution(RES.includes(wantRes) ? wantRes : NATIVE);
+
+    // ---- controls
+    let running = true, skip = false, settings = 0;
+    const NO_STEPDOWN = HOLD || qs.has('fixres');
+    $('pause').onclick = () => { running = !running; $('pause').textContent = running ? 'pause' : 'play'; if (running) { lastKick = 0; requestAnimationFrame(frame); } };
+    $('next').onclick = () => { skip = true; };
+    $('res').onchange = () => setResolution(parseInt($('res').value, 10));
+    for (const id of ['mode', 'ink', 'tone', 'color']) $(id).addEventListener('input', () => { settings++; if (id === 'mode') fitCanvas(); });
+    // ---- debug overlay (?debug=1 or the d key): GPU memory held by TensorFlow.js (live tensors, allocated textures incl. the
+    //      reuse pool), model and canvas memory, JS heap and per-stage timings; also on window.__pm.gpu for tests
+    const fmtMB = (b) => (b == null || isNaN(b) ? 'n/a' : (b / 1048576).toFixed(1) + ' MB');
+    const weightBytes = layers.reduce((a, l) => a + (l.W ? l.W.size * 4 + l.B.size * 4 : 0), 0);
+    function gpuStats() {
+      const m = tf.memory(), be = tf.getBackend();
+      const g = { backend: be, tensors: m.numTensors, gpuBytes: m.numBytesInGPU, gpuAllocated: m.numBytesInGPUAllocated != null ? m.numBytesInGPUAllocated : m.numBytesAllocatedInGPU,
+                  gpuFree: m.numBytesInGPUFree, weightBytes, canvasBytes: (view.hidden ? viewgl.width * viewgl.width : view.width * view.width) * 4,
+                  heapUsed: performance.memory ? performance.memory.usedJSHeapSize : null, heapTotal: performance.memory ? performance.memory.totalJSHeapSize : null };
+      stats.gpu = g; return g;
+    }
+    function updateDebug() {
+      const g = gpuStats(), p = stats.prof || {}, dbg = $('debug');
+      dbg.textContent = [
+        `backend ${g.backend}${g.backend === 'webgl' ? ` (WebGL ${tf.env().getNumber('WEBGL_VERSION')}, ${F16 ? 'half-float' : 'float'} textures)` : ''} · tfjs ${tf.version_core || ''}`,
+        `GPU memory  tensors ${fmtMB(g.gpuBytes)} · ${g.backend === 'webgpu' ? 'buffers' : 'textures'} allocated ${fmtMB(g.gpuAllocated)}${g.gpuFree != null ? ` (reuse pool ${fmtMB(g.gpuFree)})` : ''} · ${g.tensors} tensors`,
+        `model       decoder ${stats.decoderParams.toLocaleString()} weights (${fmtMB(g.weightBytes)} on GPU) · ${stats.anchorsLoaded} objects, ${stats.chunksLoaded}/${chunks.length} chunks · PCA ${K}`,
+        `canvas      ${view.hidden ? viewgl.width : view.width} px (${fmtMB(g.canvasBytes)} pixel buffer${stats.glDots ? ', WebGL dots' : ''}) · res ${S} · mode ${$('mode').value}${stats.regions ? ` (${stats.regions} regions)` : ''}`,
+        `JS heap     ${g.heapUsed != null ? fmtMB(g.heapUsed) + ' / ' + fmtMB(g.heapTotal) : 'n/a in this browser'}`,
+        `timing      decode ${stats.decodeMs.toFixed(1)} ms · ${stats.keyHz.toFixed(1)} keyframes/s · render ${stats.renderMs.toFixed(1)} ms (detect ${p.detect ?? '–'}, draw ${p.stamp ?? '–'}, put ${p.put ?? '–'}) · ${stats.fps.toFixed(0)} fps`,
+        `walk        ${WALK} · transition ${TRANS} · composites ${Math.round(MIX_P * 100)} %${MIX_SAME ? ' (same class)' : ''} · ${stats.label}`,
+      ].join('\n');
+    }
+    let debugTimer = null;
+    function setDebug(on) { $('debug').hidden = !on; clearInterval(debugTimer); debugTimer = on ? setInterval(updateDebug, 500) : null; if (on) updateDebug(); }
+    if (qs.has('debug') && qs.get('debug') !== '0') { setDebug(true); stats.lines = () => ({ S, mask: Array.from(lineMask || []), ox: Array.from(offX || []), oy: Array.from(offY || []), curv: Array.from(curv || []) }); }
+    document.addEventListener('keydown', (e) => { if (e.key === 'd' && !e.metaKey && !e.ctrlKey) setDebug($('debug').hidden); });
+    $('walk').addEventListener('input', () => { WALK = $('walk').value; stats.walk = WALK; wps[3] = pickWaypoint(wps[2]); });   // takes effect from the next stop
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) { $('speed').value = '0.2'; note = (note ? note + ' · ' : '') + 'reduced motion'; }
+    document.addEventListener('keydown', (e) => { if (e.key === ' ') { e.preventDefault(); $('pause').click(); } else if (e.key === 'n') $('next').click(); });
+    statusEl.textContent = `${names.length} ${meta.noun || 'scenes'} · ${stats.decoderParams.toLocaleString()} weights · ${stats.backend}${note ? ' · ' + note : ''}`;
+    if (meta.credit_html) $('credit').innerHTML = meta.credit_html;
+
+    // ---- recovery: a lost WebGL context or a stalled read-back would otherwise freeze the page silently
+    let lastKeyDone = performance.now(), recovering = false;
+    function recover(reason) {
+      if (recovering) return; recovering = true; running = false; stats.errors.push('recover: ' + reason);
+      let n = 0; try { n = +(sessionStorage.getItem('pmReloads') || 0); } catch (e) {}
+      if (n >= 3) { labelEl.textContent = 'stopped: ' + reason; return; }
+      try { sessionStorage.setItem('pmReloads', String(n + 1)); } catch (e) {}
+      labelEl.textContent = 'restarting…'; setTimeout(() => location.reload(), 600);
+    }
+    try { const cv = tf.backend().gpgpu && tf.backend().gpgpu.gl.canvas; if (cv) cv.addEventListener('webglcontextlost', (e) => { e.preventDefault(); recover('WebGL context lost'); }); } catch (e) {}
+    setInterval(() => { if (running && !document.hidden && performance.now() - lastKeyDone > 6000) recover('decoder stalled'); }, 2000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) { lastKeyDone = performance.now(); lastKick = 0; } });   // tab back: no false stall
+    setTimeout(() => { try { sessionStorage.removeItem('pmReloads'); } catch (e) {} }, 60000);
+    setInterval(() => {                                                             // stream more scenes while someone is watching
+      if (chunkBusy || nextChunk >= chunks.length || document.hidden || !running) return;
+      if (performance.now() - lastChunkT > (nextChunk === 1 ? 1500 : CHUNK_EVERY_MS)) loadChunk(nextChunk++);
+    }, 1000);
+
+    // ---- main loop: the GPU decodes keyframes back to back (one in flight); every animation frame draws an
+    //      interpolation between the two keyframes around (now - latency), so the drawing moves at display rate.
+    let inFlight = 0, lastKick = 0, decEMA = 60, boost = 1, keyId = 0, lastMid = 0, frames = 0, keysN = 0, fpsT = performance.now(), slow = 0, good = 0, bounces = 0, lastUp = -1e9;
+    function kick(now) {
+      if (inFlight >= 2) return;                                                    // two in flight: the GPU computes the next keyframe while one is read back
+      const dt = lastKick ? Math.min((now - lastKick) / 1000, 0.25) : 0; lastKick = now;
+      if (!HOLD || skip) segT += dt * parseFloat($('speed').value) * (skip ? 8 : boost) / SEG_SECONDS;
+      while (segT >= 1) { segT -= 1; segN++; wps.shift(); wps.push(pickWaypoint(wps[2])); skip = false; }
+      const mid = 1 - Math.abs(2 * segT - 1), u = ease(segT), cur = u < 0.5 ? wps[1] : wps[2], S0 = S, t0 = performance.now();
+      let out; try { out = decode(spline(u, DRIFT * (0.4 + 0.6 * mid), now / 1000)); } catch (e) { stats.errors.push('decode: ' + e); return; }
+      inFlight++;
+      out.data().then((f) => {
+        decEMA = 0.85 * decEMA + 0.15 * (performance.now() - t0); stats.decodeMs = decEMA; lastKeyDone = performance.now(); keysN++;
+        if (S0 === S) {
+          const k = { id: ++keyId, t: now, f, name: cur.name || names[cur.c], ids: cur.ids, u, mid }; let j = keys.length;
+          while (j > 0 && keys[j - 1].t > k.t) j--; keys.splice(j, 0, k); if (keys.length > 6) keys.shift();
+        }
+      }, (e) => stats.errors.push('read-back: ' + e)).finally(() => { out.dispose(); inFlight--; });
+    }
+    function frame(now) {
+      if (!running) return;
+      kick(now);
+      if (keys.length) {
+        const tp = now - Math.min(400, decEMA * 1.3 + 16);                         // presentation time: one decode behind
+        let i = keys.length - 1; while (i > 0 && keys[i].t > tp) i--;
+        const a = keys[i], b = keys[i + 1], al = b ? Math.min(1, Math.max(0, (tp - a.t) / (b.t - a.t))) : 0;
+        const sig = settings + ':' + a.id + ':' + (b ? b.id : 0) + ':' + al.toFixed(3);
+        if (sig !== lastSig && a.f.length === work.length) {
+          lastSig = sig;
+          if (!b || al <= 0) work.set(a.f); else if (al >= 1) work.set(b.f); else { const fa = a.f, fb = b.f; for (let j = 0; j < work.length; j++) work[j] = fa[j] + (fb[j] - fa[j]) * al; }
+          stats.ink = render(); frames++; stats.frames++;
+          if (!stats.firstFrameMs) stats.firstFrameMs = Math.round(performance.now());
+          const k = al < 0.5 || !b ? a : b; lastMid = k.mid; stats.mid = k.mid;
+          stats.sceneIds = k.ids; labelEl.textContent = stats.label = k.name; labelEl.style.opacity = Math.pow(Math.abs(1 - 2 * k.u), 1.3).toFixed(3);
+        }
+        boost = (stats.ink < 0.004 && lastMid > 0.4) ? 2.5 : 1;                   // hurry through an empty in-between frame
+      }
+      if (now - fpsT > 1000) {
+        stats.fps = frames * 1000 / (now - fpsT); stats.keyHz = keysN * 1000 / (now - fpsT); frames = 0; keysN = 0; fpsT = now;
+        fpsEl.textContent = stats.fps.toFixed(0) + ' fps'; stats.numTensors = tf.memory().numTensors;
+        slow = (stats.fps < 20 || stats.keyHz < 6) ? slow + 1 : 0;                  // step the resolution down on slow devices
+        good = (stats.fps > 50 && stats.keyHz > 20) ? good + 1 : 0;                // ...and back up once it is fast again, so a
+        if (!NO_STEPDOWN && slow >= 3) {                                            // passing hiccup never leaves the image soft
+          const lower = RES.filter((r) => r < S);
+          if (lower.length) { setResolution(lower[lower.length - 1]); if (now - lastUp < 20000) bounces++; }   // dropped right after a climb
+          slow = 0; good = 0;
+        } else if (!NO_STEPDOWN && S < wantRes && good >= 6 * Math.min(5, 1 + bounces)) {   // one level per 6 s, slower if it bounces
+          const higher = RES.filter((r) => r > S && r <= wantRes); if (higher.length) { setResolution(higher[0]); lastUp = now; } good = 0;
+        }
+      }
+      requestAnimationFrame(frame);
+    }
+    stats.ready = true;
+    requestAnimationFrame(frame);
+  } catch (e) {
+    labelEl.textContent = 'could not start: ' + (e && e.message ? e.message : e);
+    stats.errors.push(String(e)); console.error(e);
+  }
+})();
+</script>
+<script type="module" src="audio/index.js"></script>
+<script>
+  // the 2d|3d switch keeps the walk (drift, dream, tour and random mean the same on both pages)
+  document.getElementById('to3d').addEventListener('click', (e) => {
+    const u = new URL(e.currentTarget.getAttribute('href'), location.href), w = document.getElementById('walk');
+    if (w && ['drift', 'dream', 'tour', 'random'].includes(w.value)) u.searchParams.set('walk', w.value);
+    e.currentTarget.href = u.toString();
+  });
+</script>
+</body>
+</html>

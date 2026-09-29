@@ -1,0 +1,7 @@
+.DS_Store
+._*
+.claude-flow/
+.swarm/
+agentdb.rvf*
+ruvector.db
+*.zip
