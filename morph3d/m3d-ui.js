@@ -24,6 +24,16 @@
       this.app = app; this.lastLabel = ''; this.lastCredit = ''; this.lastHint = ''; this.lastSaid = ''; this.sources = null; this.user = false;
       const { meta, qs, walker } = app;
       this.test = ['check', 'bench', 'debug', 'freeze', 'soak'].some((k) => qs.has(k));
+      // model: picks the trained network (a folder of this site, ?model=), reloading the page to boot it fresh --
+      // switching decoders mid-session would mean tearing down every tf tensor, GL/WebGPU resource, the walker and
+      // the map by hand, for a choice visitors make rarely. The reload reuses the same preloader every link does.
+      const modelEl = this.modelEl = $('model3d');
+      if (modelEl) {
+        if ([...modelEl.options].some((o) => o.value === app.dir)) modelEl.value = app.dir;
+        modelEl.addEventListener('change', () => {
+          const u = new URL(location.href); u.searchParams.set('model', modelEl.value); location.href = u.toString();
+        });
+      }
       this.styleEl = $('style');
       this.styleEl.value = ['lit', 'dots', 'mono'].includes(qs.get('style')) ? qs.get('style') : 'lit';
       const walk = this.walkEl = $('walk');
