@@ -6,7 +6,7 @@
   'use strict';
   M.MapView = class {
     constructor(cv, tip, app) {
-      Object.assign(this, { cv, tip, app, xy: app.map.xy, N: app.map.xy.length, trail: [], visible: false, down: null, baseKey: '', last: 0 });
+      Object.assign(this, { cv, tip, app, xy: app.map.xy, trail: [], visible: false, down: null, baseKey: '', last: 0 });
       const { meta } = app, cen = meta.classes.map(() => [0, 0, 0]);
       this.ci = meta.anchors.map((a) => meta.classes.indexOf(a.cls));
       this.ci.forEach((k, i) => { cen[k][0] += this.xy[i][0]; cen[k][1] += this.xy[i][1]; cen[k][2]++; });
@@ -41,6 +41,8 @@
       cv.addEventListener('lostpointercapture', (e) => end(e, false));
       cv.addEventListener('pointerleave', () => { if (!this.down) this.hideTip(); });
     }
+    get N() { return this.xy.length; }               // created objects (m3d-create.js) are appended to map.xy
+    classOf(i) { const c = this.ci; return c[i] ?? (c[i] = this.app.meta.classes.indexOf(this.app.meta.anchors[i].cls)); }
     size() { return [this.cv.clientWidth, this.cv.clientHeight]; }
     toPx(p) { const [w, h] = this.size(), pad = 8; return [pad + p[0] * (w - 2 * pad), pad + p[1] * (h - 2 * pad)]; }
     nearest(x, y, loadedOnly) {
@@ -75,7 +77,10 @@
       const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
       for (let i = 0; i < this.N; i++) {
         const [x, y] = this.toPx(this.xy[i]); g.beginPath(); g.arc(x, y, 2.4, 0, 6.2832);
-        if (this.app.model.loaded(i)) { g.fillStyle = `hsl(${this.hue[this.ci[i]].toFixed(0)} 45% 55%)`; g.fill(); }
+        if (this.app.model.loaded(i)) {
+          g.fillStyle = `hsl(${this.hue[this.classOf(i)].toFixed(0)} 45% 55%)`; g.fill();
+          if (this.app.meta.anchors[i].gen) { g.strokeStyle = '#1d1d1f'; g.lineWidth = 1.2; g.stroke(); }   // a created object
+        }
         else { g.strokeStyle = '#d8d8d8'; g.lineWidth = 1; g.stroke(); }
       }
       return c;

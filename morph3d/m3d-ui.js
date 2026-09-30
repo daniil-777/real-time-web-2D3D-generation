@@ -54,10 +54,11 @@
       app.oninteract = () => this.fadeHint();
       if (matchMedia('(pointer: coarse)').matches) $('hint').textContent = 'drag to orbit · pinch to zoom';
       // find: a class label travels to a loaded object of that class not seen lately; anything else is a description
-      // (m3d-text.js: CLIP ranks every object's decoded render against it)
+      // (m3d-text.js: CLIP ranks every object's decoded render against it). With a text prior (m3d-create.js), the
+      // create button / Shift+Enter samples a NEW object for the description instead
       const dl = $('classes');
       for (const l of [...new Set(meta.class_labels)].sort()) { const o = document.createElement('option'); o.value = l; dl.appendChild(o); }
-      const find = $('find');
+      const find = $('find'), create = $('create');
       let entered = false;
       const go = () => {
         const q = find.value.trim(), label = q.toLowerCase(), k = meta.class_labels.indexOf(label);
@@ -71,7 +72,18 @@
       find.addEventListener('change', () => { if (!entered) go(); });   // a pick from the list, or leaving the field
       find.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') { find.value = ''; find.blur(); }
-        else if (e.key === 'Enter') { go(); entered = true; find.blur(); setTimeout(() => { entered = false; }); }   // every Enter commits, once
+        else if (e.key === 'Enter') {                                                   // every Enter commits, once
+          const q = find.value.trim();
+          if (e.shiftKey && q && !create.hidden) this.create(q); else go();
+          entered = true; find.blur(); setTimeout(() => { entered = false; });
+        }
+      });
+      if (app.creator) app.creator.available().then((ok) => { create.hidden = !ok; });
+      create.addEventListener('pointerdown', () => { entered = true; });                // leaving the field is not a find
+      create.addEventListener('click', () => {
+        const q = find.value.trim();
+        setTimeout(() => { entered = false; });
+        if (q) this.create(q); else find.focus();
       });
       // map
       this.map = new M.MapView($('map'), $('maptip'), app);
@@ -122,6 +134,20 @@
       this.touched();
     }
     setMap(v) { this.map.show(v); $('mapBtn').setAttribute('aria-pressed', String(v)); }
+    async create(q) {                      // a description -> a NEW object (m3d-create.js), then the walk goes there
+      const app = this.app, first = !app.creator.P;
+      this.say(`creating "${q}"…` + (first ? ` (first time: loading the generator${app.text.enc ? '' : ' and the text model'})` : ''));
+      const t0 = performance.now();
+      try {
+        const i = await app.creator.create(q);
+        app.travel(i); this.touched();
+        this.say(`created "${q}" — again for another one`);
+        app.st.lastCreate = { q, i, ms: Math.round(performance.now() - t0) };
+      } catch (e) {
+        console.warn('create:', e); this.say('creating is unavailable in this browser');
+        app.st.lastCreate = { q, error: String(e) };
+      }
+    }
     async describe(q) {                    // a free description -> the object whose decoded render CLIP finds nearest
       const app = this.app, seen = new Set(app.walker.recent.slice(-24));
       this.say(`looking for "${q}"…` + (app.text.enc ? '' : ' (first time: loading the text model, ~66 MB)'));

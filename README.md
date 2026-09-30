@@ -38,6 +38,13 @@ Everything is static: any static file host serves it as it is.
 a CLIP text encoder running in the browser (OpenCLIP ViT-B/32, 66 MB, loaded on first use) picks the object whose decoded
 shape matches it best.
 
+**Create an object:** a model that ships a *text prior* (`"prior"` in its `meta.json`) also shows a **✦ create** button
+(or Shift+Enter in the find box): a small generator of latents — a rectified-flow U-Net over the three latent planes,
+conditioned on the same CLIP text embedding (`morph3d/m3d-prior.js`, ~20 MB int8, ~0.4 s on WebGPU) — samples a *new*
+object for the description, and the walk morphs to it and carries on through similar objects. Every press is a new
+variation. The prior only works with the decoder it was trained for (its `model_sha16` must match the model's
+checkpoint fingerprint).
+
 The site passes its URL on to the app, so https://daniil-777.github.io/real-time-web-2D3D-generation/?hd=1&spin=1#objects works.
 The frame rate is always shown in the top-right corner of the 3D view.
 

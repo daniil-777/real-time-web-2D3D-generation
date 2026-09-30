@@ -1,7 +1,8 @@
 // Morph 3D text -> 3D generator: the rectified-flow prior over latents (work/m3d_text.py TriUNet) in TF.js. Plane-shared
 // convs (planes batched as [B*3, H, W, C]), Exchange cross-plane mixing, joint attention over the 3 x 8 x 8 tokens,
 // adaptive group norm on time + the CLIP text embedding; Euler steps from noise to data with classifier-free guidance
-// inside a band of t. Weights: prior.bin.gz (fp16, PyTorch layouts, converted here) + prior.json (m3d_text.py export).
+// inside a band of t. Weights: prior.bin.gz (PyTorch layouts, converted here; the big tensors int8 per output channel with
+// fp16 scales, the rest fp16) + prior.json (m3d_text.py export).
 (function (M) {
   'use strict';
 
@@ -14,6 +15,12 @@
     return out;
   };
   const silu = (v) => tf.mul(v, tf.sigmoid(v));
+  const int8 = (buf, off0, w, n) => {       // q x scale of its output channel (axis 0 of the PyTorch layout)
+    const q = new Int8Array(buf, off0 + w.offset, n), s = half(new Uint16Array(buf, off0 + w.scale_offset, w.shape[0]));
+    const per = n / w.shape[0], out = new Float32Array(n);
+    for (let i = 0; i < n; i++) out[i] = q[i] * s[(i / per) | 0];
+    return out;
+  };
 
   M.Prior = class {
     static async load(dir) {
@@ -26,7 +33,8 @@
       this.meta = meta; this.dir = dir; this.W = {};
       const buf = raw.buffer || raw, off0 = raw.byteOffset || 0;
       for (const w of meta.weights) {
-        const n = w.shape.reduce((a, b) => a * b, 1), shape = w.shape, v = half(new Uint16Array(buf, off0 + w.offset, n));
+        const n = w.shape.reduce((a, b) => a * b, 1), shape = w.shape;
+        const v = w.dtype === 'i8' ? int8(buf, off0, w, n) : half(new Uint16Array(buf, off0 + w.offset, n));
         if (w.name === 'pemb') this.W[w.name] = tf.tensor(v, [1, 3, 1, 1, shape[1]]);        // [3, C0, 1, 1]
         else if (shape.length === 4) this.W[w.name] = tf.tidy(() => tf.transpose(tf.tensor(v, shape), [2, 3, 1, 0]));   // conv -> [kh, kw, ci, co]
         else if (shape.length === 2 && w.name.endsWith('.weight')) this.W[w.name] = tf.tidy(() => tf.transpose(tf.tensor(v, shape)));   // linear -> [in, out]

@@ -127,6 +127,11 @@
     }
     // anchors are still streaming in (the app clears model.streaming once every chunk has loaded or given up)
     streaming() { return this.model.streaming !== false && this.model.nLoaded < this.cls.length && this.waits < 6; }
+    add(i, cls, label, nbs) {                       // a created object (m3d-create.js) joins: its class, label, neighbours
+      this.cls[i] = cls; this.lab[i] = label; this.ci[i] = this.meta.classes.indexOf(cls); this.members[this.ci[i]].push(i);
+      this.sk[i] = nbs.slice(); if (this.si) this.si[i] = nbs.map(() => 0.5);   // its shape IoU is unknown: a middling edge
+      this.adj = null;                              // routes are rebuilt with its edges
+    }
     visit(i) {
       this.cur = i; this.recent.push(i); this.recentCls.push(this.cls[i]);
       for (const a of [this.recent, this.recentCls]) if (a.length > 64) a.shift();

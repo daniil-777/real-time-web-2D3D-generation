@@ -427,6 +427,8 @@
         canvas.toBlob((b) => { if (!b) return; const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name || 'pixel-morph-3d.png'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); });
       },
     };
+    // m3d-create.js: descriptions -> new objects, when this model ships a text prior for its own latent space
+    app.creator = meta.prior && app.text && M.Creator ? new M.Creator(app) : null;
     const ui = new M.UI(app);
     produce().catch(fail);
     requestAnimationFrame(frame);
