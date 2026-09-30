@@ -222,7 +222,7 @@ html :focus-visible { outline: 3px solid rgba(0, 113, 227, 0.5); outline-offset:
     <button id="spin" type="button" aria-pressed="false" title="always rotate the object (r)">spin</button>
     <button id="hd" type="button" aria-pressed="false" title="HD: resting objects on a 256³ grid, with curvature shading (h)">HD</button>
     <button id="next" type="button" title="next object (→)">next ›</button>
-    <label class="wide">find <input id="find" list="classes" size="10" placeholder="a class…" autocomplete="off" aria-label="find a class"></label>
+    <label class="wide">find <input id="find" list="classes" size="10" placeholder="a class or a description…" autocomplete="off" aria-label="find a class or describe an object"></label>
     <datalist id="classes"></datalist>
     <button id="mapBtn" type="button" aria-pressed="false" title="latent map (m)">map</button>
     <button id="save" type="button" class="wide" title="save a png (s)">save png</button>
@@ -260,6 +260,7 @@ html :focus-visible { outline: 3px solid rgba(0, 113, 227, 0.5); outline-offset:
 <script src="m3d-render.js"></script>
 <script src="m3d-glgrid.js"></script>
 <script src="m3d-neural.js"></script>
+<script src="m3d-text.js"></script>
 <script src="m3d-level.js"></script>
 <script src="m3d-walk.js"></script>
 <script src="m3d-map.js"></script>

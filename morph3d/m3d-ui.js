@@ -53,13 +53,15 @@
       $('hd').addEventListener('click', () => this.toggleHD());
       app.oninteract = () => this.fadeHint();
       if (matchMedia('(pointer: coarse)').matches) $('hint').textContent = 'drag to orbit · pinch to zoom';
-      // find: the class labels; committing travels to a loaded object of that class not seen lately
+      // find: a class label travels to a loaded object of that class not seen lately; anything else is a description
+      // (m3d-text.js: CLIP ranks every object's decoded render against it)
       const dl = $('classes');
       for (const l of [...new Set(meta.class_labels)].sort()) { const o = document.createElement('option'); o.value = l; dl.appendChild(o); }
       const find = $('find');
       let entered = false;
       const go = () => {
-        const label = find.value.trim().toLowerCase(), k = meta.class_labels.indexOf(label); if (k < 0) return;
+        const q = find.value.trim(), label = q.toLowerCase(), k = meta.class_labels.indexOf(label);
+        if (k < 0) return q && app.text ? this.describe(q) : undefined;
         const cls = meta.classes[k], seen = new Set(walker.recent.slice(-24));
         const cand = meta.anchors.map((a, i) => i).filter((i) => meta.anchors[i].cls === cls && app.model.loaded(i));
         const i = cand.find((j) => !seen.has(j)) ?? cand[0];
@@ -120,6 +122,22 @@
       this.touched();
     }
     setMap(v) { this.map.show(v); $('mapBtn').setAttribute('aria-pressed', String(v)); }
+    async describe(q) {                    // a free description -> the object whose decoded render CLIP finds nearest
+      const app = this.app, seen = new Set(app.walker.recent.slice(-24));
+      this.say(`looking for "${q}"…` + (app.text.enc ? '' : ' (first time: loading the text model, ~66 MB)'));
+      try {
+        const hits = (await app.text.search(q)).filter((h) => app.model.loaded(h.i));
+        const h = hits.find((x) => !seen.has(x.i)) || hits[0];
+        if (!h) return this.say('nothing loaded yet, try again in a moment');
+        app.travel(h.i); this.touched();
+        this.say(`"${q}": the closest is ${app.meta.anchors[h.i].label}`);
+        app.st.lastSearch = { q, i: h.i, cls: app.meta.anchors[h.i].cls, score: +h.score.toFixed(4) };
+      } catch (e) {
+        console.warn('text search:', e); this.say('text search is unavailable in this browser');
+        app.st.lastSearch = { q, error: String(e) };
+      }
+    }
+
     fadeHint() { $('hint').style.opacity = '0'; }
     firstFrame() {
       setTimeout(() => this.fadeHint(), 7000);

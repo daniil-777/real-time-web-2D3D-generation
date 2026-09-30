@@ -399,6 +399,7 @@
 
     const app = M.app = {
       st, meta, map, model, walker, R3, qs, dir: F.dir, lastA: null, lastB: null,
+      text: meta.clip && M.Text ? new M.Text(F.dir, meta) : null,      // m3d-text.js: descriptions in the find box
       get tau() { return tauDisp; }, get paused() { return paused; }, get speed() { return speed; }, get spin() { return spin; }, cam,
       shown, setPaused, loadChunks,
       setSpin(v) { spin = st.spin = v === null ? null : clamp(+v, 0, 8); },

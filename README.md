@@ -34,6 +34,10 @@ Everything is static: any static file host serves it as it is.
 | `?detail=0` … `3` | the curvature shading on its own: 0 off, 1 as in HD, up to 3 stronger |
 | `?neural=1` / `?neural=0` | per-pixel detail on / off: a resting object's surface, normal and colour come from the network itself at every pixel, not from the grid (on with HD, and for models with 256² planes) |
 
+**Describe an object:** the 3D view's *find* box also takes a description ("a red sports car", "something that flies"):
+a CLIP text encoder running in the browser (OpenCLIP ViT-B/32, 66 MB, loaded on first use) picks the object whose decoded
+shape matches it best.
+
 The site passes its URL on to the app, so https://daniil-777.github.io/real-time-web-2D3D-generation/?hd=1&spin=1#objects works.
 The frame rate is always shown in the top-right corner of the 3D view.
 
@@ -47,3 +51,6 @@ The frame rate is always shown in the top-right corner of the 3D view.
 - Music: the piano transformer in `pixel-morph/audio/` was trained on the [MAESTRO](https://magenta.tensorflow.org/datasets/maestro)
   dataset (CC BY-NC-SA 4.0); its weights are shared under the same licence, for non-commercial use.
 - [TensorFlow.js](https://github.com/tensorflow/tfjs) (Apache-2.0), loaded from the jsDelivr CDN.
+- Text: the text tower of [OpenCLIP](https://github.com/mlfoundations/open_clip) ViT-B/32 laion2b_s34b_b79k (MIT), exported
+  to ONNX with 8-bit weights (`morph3d/clip-laion-b32/`), run by [transformers.js](https://github.com/huggingface/transformers.js)
+  (Apache-2.0) and ONNX Runtime Web (MIT) from jsDelivr.
