@@ -138,43 +138,75 @@
       return { sdf, rgb, R, Rc };
     }
 
-    // WebGPU fast path: the whole grid MLP as one compute dispatch on TensorFlow.js's own device, reading the planes'
-    // GPU buffer directly (one invocation per grid point; the weights are broadcast reads, so they stay in cache).
-    async gridGPU(P, R) {
-      const be = tf.backend(), dev = be.device, hid = this.meta.hid;
+    // this model's per-point field in WGSL: fn field(a, b, c, colour) -> (sdf, r, g, b), a / b / c the offsets of the
+    // point's texels in the xy / xz / yz planes, reading P (planes) and Wt (the weights returned alongside)
+    gpuField() {
+      const hid = this.meta.hid, F = this.F;
+      return { CH: hid, weights: Float32Array.from(['b1', 'l2.w', 'l2.b', 'l3.w', 'l3.b'].flatMap((k) => Array.from(F[k]))), code: `
+        const H = ${hid}u;                                           // Wt: b1[H] W2[H*H] b2[H] W3[H*4] b3[4]
+        fn field(a: u32, b: u32, c: u32, colour: bool) -> vec4<f32> {
+          var h: array<f32, ${hid}>;
+          for (var n = 0u; n < H; n++) { h[n] = max(P[a + n] + P[b + n] + P[c + n] + Wt[n], 0.0); }
+          let w2 = H; let b2 = H + H * H; let w3 = b2 + H; let b3 = w3 + 4u * H;
+          var o = vec4<f32>(Wt[b3], Wt[b3 + 1u], Wt[b3 + 2u], Wt[b3 + 3u]);
+          for (var m = 0u; m < H; m++) {
+            var s = Wt[b2 + m];
+            for (var n = 0u; n < H; n++) { s += h[n] * Wt[w2 + n * H + m]; }
+            s = max(s, 0.0);
+            let q = w3 + m * 4u;
+            o += s * vec4<f32>(Wt[q], Wt[q + 1u], Wt[q + 2u], Wt[q + 3u]);
+          }
+          return o;
+        }` };
+    }
+
+    // WebGPU fast path: the whole grid as compute dispatches on TensorFlow.js's own device, reading the planes' GPU
+    // buffer directly. band = { Rg, tau }: narrow band (MISE-style) -- a dense Rg^3 pass first, then the R^3 grid in 4x4x4
+    // bricks where only points whose coarse (trilinear) value lies within tau of the surface run the network; the rest
+    // keep the coarse value. tau above sqrt(3) x the coarse spacing keeps every surface (the field is ~1-Lipschitz).
+    async gridGPU(P, R, band) {
+      const dev = tf.backend().device, f = this.gpuField(), CH = f.CH;
       if (!this.gp) {
-        const F = this.F, cat = (ks) => Float32Array.from(ks.flatMap((k) => Array.from(F[k])));
-        const wts = cat(['b1', 'l2.w', 'l2.b', 'l3.w', 'l3.b']);
-        const wbuf = dev.createBuffer({ size: wts.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-        dev.queue.writeBuffer(wbuf, 0, wts);
+        const wbuf = dev.createBuffer({ size: f.weights.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+        dev.queue.writeBuffer(wbuf, 0, f.weights);
         const code = `
-          const H = ${hid}u;
           @group(0) @binding(0) var<storage, read> P: array<f32>;
-          @group(0) @binding(1) var<storage, read> Wt: array<f32>;   // b1[H] W2[H*H] b2[H] W3[H*4] b3[4]
+          @group(0) @binding(1) var<storage, read> Wt: array<f32>;
           @group(0) @binding(2) var<storage, read_write> S: array<f32>;
           @group(0) @binding(3) var<storage, read_write> Cc: array<f32>;
-          @group(0) @binding(4) var<uniform> U: vec4<u32>;             // R, Rc, total, dispatch width
+          @group(0) @binding(4) var<uniform> U: vec4<u32>;             // R, colour-grid size, threads, dispatch width
+          @group(0) @binding(5) var<storage, read> Co: array<f32>;     // band: the coarse sdf grid
+          @group(0) @binding(6) var<uniform> V: vec4<u32>;             // mode (0 dense, 1 band), coarse size, tau bits, -
+          const CH = ${CH}u;
+          ${f.code}
           @compute @workgroup_size(64) fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-            let R = U.x; let g = id.y * U.w + id.x;
-            if (g >= U.z) { return; }
-            let k = g % R; let j = (g / R) % R; let i = g / (R * R);
-            let a = (i * R + j) * H; let b = ((R + i) * R + k) * H; let c = ((2u * R + j) * R + k) * H;
-            var h: array<f32, ${hid}>;
-            for (var n = 0u; n < H; n++) { h[n] = max(P[a + n] + P[b + n] + P[c + n] + Wt[n], 0.0); }
-            let w2 = H; let b2 = H + H * H; let w3 = b2 + H; let b3 = w3 + 4u * H;
-            var o = vec4<f32>(Wt[b3], Wt[b3 + 1u], Wt[b3 + 2u], Wt[b3 + 3u]);
-            for (var m = 0u; m < H; m++) {
-              var s = Wt[b2 + m];
-              for (var n = 0u; n < H; n++) { s += h[n] * Wt[w2 + n * H + m]; }
-              s = max(s, 0.0);
-              let q = w3 + m * 4u;
-              o += s * vec4<f32>(Wt[q], Wt[q + 1u], Wt[q + 2u], Wt[q + 3u]);
+            let R = U.x; let t = id.y * U.w + id.x;
+            if (t >= U.z) { return; }
+            var i = t / (R * R); var j = (t / R) % R; var k = t % R;
+            if (V.x == 1u) {                                           // one workgroup = one 4x4x4 brick
+              let nb = (R + 3u) / 4u; let q = t / 64u; let l = t % 64u;
+              i = (q / (nb * nb)) * 4u + l / 16u; j = ((q / nb) % nb) * 4u + (l / 4u) % 4u; k = (q % nb) * 4u + l % 4u;
+              if (i >= R || j >= R || k >= R) { return; }
             }
+            let g = (i * R + j) * R + k; let even = (i & 1u) == 0u && (j & 1u) == 0u && (k & 1u) == 0u;
+            let gc = (((i >> 1u) * U.y + (j >> 1u)) * U.y + (k >> 1u)) * 3u;
+            if (V.x == 1u) {                                           // far from the surface: the coarse value
+              let Rg = V.y; let s = f32(Rg - 1u) / f32(R - 1u);
+              let x = f32(i) * s; let y = f32(j) * s; let z = f32(k) * s;
+              let x0 = min(u32(x), Rg - 2u); let y0 = min(u32(y), Rg - 2u); let z0 = min(u32(z), Rg - 2u);
+              let fx = x - f32(x0); let fy = y - f32(y0); let fz = z - f32(z0);
+              let o0 = (x0 * Rg + y0) * Rg + z0; let o1 = o0 + Rg * Rg;
+              let cv = mix(mix(mix(Co[o0], Co[o0 + 1u], fz), mix(Co[o0 + Rg], Co[o0 + Rg + 1u], fz), fy),
+                           mix(mix(Co[o1], Co[o1 + 1u], fz), mix(Co[o1 + Rg], Co[o1 + Rg + 1u], fz), fy), fx);
+              if (abs(cv) > bitcast<f32>(V.z)) {
+                S[g] = cv;
+                if (even) { Cc[gc] = 0.5; Cc[gc + 1u] = 0.5; Cc[gc + 2u] = 0.5; }
+                return;
+              }
+            }
+            let o = field((i * R + j) * CH, ((R + i) * R + k) * CH, ((2u * R + j) * R + k) * CH, even);
             S[g] = o.x;
-            if ((i & 1u) == 0u && (j & 1u) == 0u && (k & 1u) == 0u) {
-              let Rc = U.y; let gc = (((i >> 1u) * Rc + (j >> 1u)) * Rc + (k >> 1u)) * 3u;
-              Cc[gc] = o.y; Cc[gc + 1u] = o.z; Cc[gc + 2u] = o.w;
-            }
+            if (even) { Cc[gc] = o.y; Cc[gc + 1u] = o.z; Cc[gc + 2u] = o.w; }
           }`;
         const pipe = dev.createComputePipeline({ layout: 'auto', compute: { module: dev.createShaderModule({ code }), entryPoint: 'main' } });
         const pack = dev.createComputePipeline({ layout: 'auto', compute: { entryPoint: 'main', module: dev.createShaderModule({ code: `
@@ -187,26 +219,33 @@
             let i = 2u * g;
             B[g] = pack2x16float(vec2<f32>(A[i], select(0.0, A[min(i + 1u, U.x - 1u)], i + 1u < U.x)));
           }` }) } });
-        this.gp = { pipe, pack, wbuf, bufs: {} };
+        this.gp = { pipe, pack, wbuf, bufs: {}, none: dev.createBuffer({ size: 16, usage: GPUBufferUsage.STORAGE }) };
       }
-      const Rc = (R + 1) >> 1, n = R * R * R, nc = Rc * Rc * Rc * 3;
-      let bf = this.gp.bufs[R];
-      if (!bf) {
-        const mk = (bytes, usage) => dev.createBuffer({ size: bytes, usage });
+      const bufsFor = (r) => {                                         // per-resolution buffers, made once
+        if (this.gp.bufs[r]) return this.gp.bufs[r];
+        const n = r * r * r, rc = (r + 1) >> 1, nc = rc * rc * rc * 3, mk = (bytes, usage) => dev.createBuffer({ size: bytes, usage });
         const SU = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC, RD = GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST;
         const hs = 4 * Math.ceil(n / 2), hc = 4 * Math.ceil(nc / 2), UU = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
-        bf = this.gp.bufs[R] = { s: mk(n * 4, GPUBufferUsage.STORAGE), c: mk(nc * 4, GPUBufferUsage.STORAGE), hs: mk(hs, SU), hc: mk(hc, SU),
-          rs: mk(hs, RD), rc: mk(hc, RD), u: mk(16, UU), us: mk(16, UU), uc: mk(16, UU) };
-      }
-      const Pr = R === P.shape[1] ? P : tf.image.resizeBilinear(P, [R, R], true);
-      const src = Pr.dataToGPU();
-      const groups = Math.ceil(n / 64), gx = Math.min(groups, 65535), gy = Math.ceil(groups / gx);
-      dev.queue.writeBuffer(bf.u, 0, new Uint32Array([R, Rc, n, gx * 64]));
-      const bind = dev.createBindGroup({ layout: this.gp.pipe.getBindGroupLayout(0), entries: [
-        { binding: 0, resource: { buffer: src.buffer, size: 3 * R * R * hid * 4 } }, { binding: 1, resource: { buffer: this.gp.wbuf } },
-        { binding: 2, resource: { buffer: bf.s } }, { binding: 3, resource: { buffer: bf.c } }, { binding: 4, resource: { buffer: bf.u } }] });
+        return (this.gp.bufs[r] = { s: mk(n * 4, GPUBufferUsage.STORAGE), c: mk(nc * 4, GPUBufferUsage.STORAGE), hs: mk(hs, SU), hc: mk(hc, SU),
+          rs: mk(hs, RD), rc: mk(hc, RD), u: mk(16, UU), v: mk(16, UU), us: mk(16, UU), uc: mk(16, UU) });
+      };
+      const Rc = (R + 1) >> 1, n = R * R * R, nc = Rc * Rc * Rc * 3, bf = bufsFor(R), temps = [];
       const enc = dev.createCommandEncoder(), pass = enc.beginComputePass();
-      pass.setPipeline(this.gp.pipe); pass.setBindGroup(0, bind); pass.dispatchWorkgroups(gx, gy);
+      const tauBits = new Uint32Array(new Float32Array([band ? band.tau : 0]).buffer)[0];
+      const run = (r, b, co) => {                                      // the field kernel over r^3 into b; co: band source
+        const Pr = r === P.shape[1] ? P : tf.image.resizeBilinear(P, [r, r], true), src = Pr.dataToGPU();
+        temps.push([Pr, src]);
+        const nb = (r + 3) >> 2, threads = co ? nb * nb * nb * 64 : r * r * r;
+        const groups = Math.ceil(threads / 64), gx = Math.min(groups, 65535), gy = Math.ceil(groups / gx);
+        dev.queue.writeBuffer(b.u, 0, new Uint32Array([r, (r + 1) >> 1, threads, gx * 64]));
+        dev.queue.writeBuffer(b.v, 0, new Uint32Array([co ? 1 : 0, band ? band.Rg : 0, tauBits, 0]));
+        const bind = dev.createBindGroup({ layout: this.gp.pipe.getBindGroupLayout(0), entries: [
+          { binding: 0, resource: { buffer: src.buffer, size: 3 * r * r * CH * 4 } }, { binding: 1, resource: { buffer: this.gp.wbuf } },
+          { binding: 2, resource: { buffer: b.s } }, { binding: 3, resource: { buffer: b.c } }, { binding: 4, resource: { buffer: b.u } },
+          { binding: 5, resource: { buffer: co || this.gp.none } }, { binding: 6, resource: { buffer: b.v } }] });
+        pass.setPipeline(this.gp.pipe); pass.setBindGroup(0, bind); pass.dispatchWorkgroups(gx, gy);
+      };
+      if (band) { const cb = bufsFor(band.Rg); run(band.Rg, cb, null); run(R, bf, cb.s); } else run(R, bf, null);
       for (const [a, h, u, cnt] of [[bf.s, bf.hs, bf.us, n], [bf.c, bf.hc, bf.uc, nc]]) {      // float32 -> packed float16
         const pairs = Math.ceil(cnt / 2), pg = Math.ceil(pairs / 64), px = Math.min(pg, 65535);
         dev.queue.writeBuffer(u, 0, new Uint32Array([cnt, pairs, px * 64, 0]));
@@ -219,8 +258,7 @@
       enc.copyBufferToBuffer(bf.hs, 0, bf.rs, 0, bf.hs.size); enc.copyBufferToBuffer(bf.hc, 0, bf.rc, 0, bf.hc.size);
       dev.queue.submit([enc.finish()]);
       await Promise.all([bf.rs.mapAsync(GPUMapMode.READ), bf.rc.mapAsync(GPUMapMode.READ)]);
-      src.tensorRef.dispose();
-      if (Pr !== P) Pr.dispose();
+      for (const [Pr, src] of temps) { src.tensorRef.dispose(); if (Pr !== P) Pr.dispose(); }
       // views straight onto the mapped buffers (no 4-11 MB copies): the caller uploads them, then must call done()
       const sdf = new Uint16Array(bf.rs.getMappedRange(), 0, n), rgb = new Uint16Array(bf.rc.getMappedRange(), 0, nc);
       let open = true;

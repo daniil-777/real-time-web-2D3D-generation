@@ -101,9 +101,18 @@
       return { sdf, rgb, R, Rc };
     }
 
-    // WGSL for this model's MLPs (sizes and weight offsets baked in); one invocation per grid point
-    kernel(off) {
-      const H = this.hid, C = this.chc, D = this.D, o = (k) => off[k] + 'u', OG = C ? 1 : 4;
+    // this model's per-point field in WGSL for M.Model.gridGPU (sizes and weight offsets baked in): the geometry MLP -> sdf,
+    // and the colour stream only where colour is asked for (every 2nd grid point); returns (sdf, r, g, b)
+    gpuField() {
+      const H = this.hid, C = this.chc, D = this.D, OG = C ? 1 : 4;
+      const keys = ['b1'].concat(D.prod ? ['first.w', 'first.b'] : [],
+        ...Array.from({ length: D.mlp_layers }, (_, l) => ['hidden' + l + '.w', 'hidden' + l + '.b']), ['out_g.w', 'out_g.b'],
+        C ? ['c2.w', 'c2.b', 'c3.w', 'c3.b'] : []);
+      const off = {}; let n = 0;
+      for (const k of keys) { off[k] = n; n += this.F[k].length; }
+      const weights = new Float32Array(n);
+      for (const k of keys) weights.set(this.F[k], off[k]);
+      const o = (k) => off[k] + 'u';
       let body = D.prod
         ? `for (var n = 0u; n < H; n++) { let x = P[a + n]; let y = P[b + n]; let z = P[c + n]; t[n] = x + y + z + x * y * z; }
             for (var m = 0u; m < H; m++) { var s = Wt[${o('first.b')} + m] + Wt[${o('b1')} + m];
@@ -119,98 +128,22 @@
             for (var n = 0u; n < H; n++) { let q = ${o('out_g.w')} + n * 4u; ov += h[n] * vec4<f32>(Wt[q], Wt[q + 1u], Wt[q + 2u], Wt[q + 3u]); }
             let sd = ov.x;`;
       const colour = C
-        ? `var hc: array<f32, ${C}>;
+        ? `if (!colour) { return vec4<f32>(sd, 0.5, 0.5, 0.5); }
+            var hc: array<f32, ${C}>;
             for (var q = 0u; q < ${C}u; q++) { hc[q] = max(P[a + H + q] + P[b + H + q] + P[c + H + q], 0.0); }
             var rgb = vec3<f32>(Wt[${o('c3.b')}], Wt[${o('c3.b')} + 1u], Wt[${o('c3.b')} + 2u]);
             for (var m = 0u; m < 32u; m++) { var s = Wt[${o('c2.b')} + m];
               for (var q = 0u; q < ${C}u; q++) { s += hc[q] * Wt[${o('c2.w')} + q * 32u + m]; }
-              s = max(s, 0.0); let w = ${o('c3.w')} + m * 3u; rgb += s * vec3<f32>(Wt[w], Wt[w + 1u], Wt[w + 2u]); }`
-        : 'let rgb = ov.yzw;';
-      return `
-        const H = ${H}u; const CH = ${this.CH}u;
-        @group(0) @binding(0) var<storage, read> P: array<f32>;
-        @group(0) @binding(1) var<storage, read> Wt: array<f32>;
-        @group(0) @binding(2) var<storage, read_write> S: array<f32>;
-        @group(0) @binding(3) var<storage, read_write> Cc: array<f32>;
-        @group(0) @binding(4) var<uniform> U: vec4<u32>;             // R, Rc, total, dispatch width
-        @compute @workgroup_size(64) fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-          let R = U.x; let g = id.y * U.w + id.x;
-          if (g >= U.z) { return; }
-          let k = g % R; let j = (g / R) % R; let i = g / (R * R);
-          let a = (i * R + j) * CH; let b = ((R + i) * R + k) * CH; let c = ((2u * R + j) * R + k) * CH;
+              s = max(s, 0.0); let w = ${o('c3.w')} + m * 3u; rgb += s * vec3<f32>(Wt[w], Wt[w + 1u], Wt[w + 2u]); }
+            return vec4<f32>(sd, rgb);`
+        : 'return vec4<f32>(sd, ov.yzw);';
+      return { CH: this.CH, weights, code: `
+        const H = ${H}u;
+        fn field(a: u32, b: u32, c: u32, colour: bool) -> vec4<f32> {
           var h: array<f32, ${H}>; var t: array<f32, ${H}>;
           ${body}
-          S[g] = sd;
-          if ((i & 1u) == 0u && (j & 1u) == 0u && (k & 1u) == 0u) {
-            ${colour}
-            let Rc = U.y; let gc = (((i >> 1u) * Rc + (j >> 1u)) * Rc + (k >> 1u)) * 3u;
-            Cc[gc] = rgb.x; Cc[gc + 1u] = rgb.y; Cc[gc + 2u] = rgb.z;
-          }
-        }`;
-    }
-
-    // WebGPU fast path: the MLPs as one compute dispatch on TF.js's own device, reading the planes' GPU buffer directly;
-    // outputs packed to float16 on the GPU and mapped (no float32 copies). Same contract as M.Model.gridGPU.
-    async gridGPU(P, R) {
-      const dev = tf.backend().device, CH = this.CH;
-      if (!this.gp) {
-        const D = this.D, keys = ['b1'].concat(D.prod ? ['first.w', 'first.b'] : [],
-          ...Array.from({ length: D.mlp_layers }, (_, l) => ['hidden' + l + '.w', 'hidden' + l + '.b']), ['out_g.w', 'out_g.b'],
-          this.chc ? ['c2.w', 'c2.b', 'c3.w', 'c3.b'] : []);
-        const off = {}; let n = 0;
-        for (const k of keys) { off[k] = n; n += this.F[k].length; }
-        const wts = new Float32Array(n);
-        for (const k of keys) wts.set(this.F[k], off[k]);
-        const wbuf = dev.createBuffer({ size: wts.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-        dev.queue.writeBuffer(wbuf, 0, wts);
-        const pipe = dev.createComputePipeline({ layout: 'auto', compute: { module: dev.createShaderModule({ code: this.kernel(off) }), entryPoint: 'main' } });
-        const pack = dev.createComputePipeline({ layout: 'auto', compute: { entryPoint: 'main', module: dev.createShaderModule({ code: `
-          @group(0) @binding(0) var<storage, read> A: array<f32>;
-          @group(0) @binding(1) var<storage, read_write> B: array<u32>;
-          @group(0) @binding(2) var<uniform> U: vec4<u32>;             // count, pairs, dispatch width
-          @compute @workgroup_size(64) fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-            let g = id.y * U.z + id.x;
-            if (g >= U.y) { return; }
-            let i = 2u * g;
-            B[g] = pack2x16float(vec2<f32>(A[i], select(0.0, A[min(i + 1u, U.x - 1u)], i + 1u < U.x)));
-          }` }) } });
-        this.gp = { pipe, pack, wbuf, bufs: {} };
-      }
-      const Rc = (R + 1) >> 1, n = R * R * R, nc = Rc * Rc * Rc * 3;
-      let bf = this.gp.bufs[R];
-      if (!bf) {
-        const mk = (bytes, usage) => dev.createBuffer({ size: bytes, usage });
-        const SU = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC, RD = GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST;
-        const hs = 4 * Math.ceil(n / 2), hc = 4 * Math.ceil(nc / 2), UU = GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST;
-        bf = this.gp.bufs[R] = { s: mk(n * 4, GPUBufferUsage.STORAGE), c: mk(nc * 4, GPUBufferUsage.STORAGE), hs: mk(hs, SU), hc: mk(hc, SU),
-          rs: mk(hs, RD), rc: mk(hc, RD), u: mk(16, UU), us: mk(16, UU), uc: mk(16, UU) };
-      }
-      const Pr = R === P.shape[1] ? P : tf.image.resizeBilinear(P, [R, R], true);
-      const src = Pr.dataToGPU();
-      const groups = Math.ceil(n / 64), gx = Math.min(groups, 65535), gy = Math.ceil(groups / gx);
-      dev.queue.writeBuffer(bf.u, 0, new Uint32Array([R, Rc, n, gx * 64]));
-      const bind = dev.createBindGroup({ layout: this.gp.pipe.getBindGroupLayout(0), entries: [
-        { binding: 0, resource: { buffer: src.buffer, size: 3 * R * R * CH * 4 } }, { binding: 1, resource: { buffer: this.gp.wbuf } },
-        { binding: 2, resource: { buffer: bf.s } }, { binding: 3, resource: { buffer: bf.c } }, { binding: 4, resource: { buffer: bf.u } }] });
-      const enc = dev.createCommandEncoder(), pass = enc.beginComputePass();
-      pass.setPipeline(this.gp.pipe); pass.setBindGroup(0, bind); pass.dispatchWorkgroups(gx, gy);
-      for (const [a, h, u, cnt] of [[bf.s, bf.hs, bf.us, n], [bf.c, bf.hc, bf.uc, nc]]) {
-        const pairs = Math.ceil(cnt / 2), pg = Math.ceil(pairs / 64), px = Math.min(pg, 65535);
-        dev.queue.writeBuffer(u, 0, new Uint32Array([cnt, pairs, px * 64, 0]));
-        pass.setPipeline(this.gp.pack);
-        pass.setBindGroup(0, dev.createBindGroup({ layout: this.gp.pack.getBindGroupLayout(0), entries: [
-          { binding: 0, resource: { buffer: a } }, { binding: 1, resource: { buffer: h } }, { binding: 2, resource: { buffer: u } }] }));
-        pass.dispatchWorkgroups(px, Math.ceil(pg / px));
-      }
-      pass.end();
-      enc.copyBufferToBuffer(bf.hs, 0, bf.rs, 0, bf.hs.size); enc.copyBufferToBuffer(bf.hc, 0, bf.rc, 0, bf.hc.size);
-      dev.queue.submit([enc.finish()]);
-      await Promise.all([bf.rs.mapAsync(GPUMapMode.READ), bf.rc.mapAsync(GPUMapMode.READ)]);
-      src.tensorRef.dispose();
-      if (Pr !== P) Pr.dispose();
-      const sdf = new Uint16Array(bf.rs.getMappedRange(), 0, n), rgb = new Uint16Array(bf.rc.getMappedRange(), 0, nc);
-      let open = true;
-      return { sdf, rgb, R, Rc, half: true, done: () => { if (open) { open = false; bf.rs.unmap(); bf.rc.unmap(); } } };
+          ${colour}
+        }` };
     }
   };
 

@@ -90,9 +90,20 @@
     const resTop = resLo, LADDER = [48, 56, 64, 80, 96, 128].filter((r) => r <= resTop);
     st.res = resLo; st.resHi = resHi; st.phone = phone;
     const fast = st.backend === 'webgpu' && qs.get('fast') !== '0';
-    const grid = (P, R) => (fast ? model.gridGPU(P, R) : model.grid(P, R));
+    // HD (?hd=1, the HD button, h): a resting object's grid at 256^3 (WebGPU kernel or WebGL shaders), plus curvature
+    // shading (?detail=0..3 sets that on its own). A narrow band runs the network only within tau of the coarse 64^3
+    // surface (research/hd256: lossless from tau 0.04, ~15% of the voxels), so 256^3 costs what a dense 160^3 did
+    const BAND = { Rg: 64, tau: 0.06 }, hiBase = resHi, band = (R) => (R > 192 ? BAND : null);
+    const grid = (P, R) => (fast ? model.gridGPU(P, R, band(R)) : model.grid(P, R));
     const glgrid = st.backend === 'webgl' && qs.get('glgrid') !== '0' && R3.gridInit(model);
     st.fast = fast; st.glgrid = !!glgrid;
+    let hd = qs.get('hd') === '1';
+    const setHD = (on) => {
+      hd = on; st.hd = on;
+      resHi = on ? Math.max(hiBase, fast || glgrid ? 256 : hiBase) : hiBase; st.resHi = resHi;
+      R3.detail = num('detail', on ? 1 : 0, 0, 3);
+    };
+    setHD(hd);
 
     let pc = null, floorHint;                            // planes of the last latent: a hold's fine grid reuses them
     const planesFor = (spec) => {
@@ -105,7 +116,7 @@
     };
     const decode = async (spec, R, floorGuess) => {
       const P = planesFor(spec);
-      if (glgrid) return lev(await R3.gridVolume(model, P, R, floorGuess));   // its exact floor arrives a frame or two later
+      if (glgrid) return lev(await R3.gridVolume(model, P, R, floorGuess, band(R)));   // its exact floor arrives a frame or two later
       const g = await grid(P, R);
       try { const v = R3.volume(g); v.floor = floorHint = floorOf(g, floorHint); return lev(v); } finally { if (g.done) g.done(); }
     };
@@ -127,18 +138,40 @@
           let m = 0; for (let i = 0; i < lv.length; i++) m = Math.max(m, Math.abs(lv[i] - ref.sdf_level[i]));
           st.levelErr = m;
         }
+        if (hd && (fast || glgrid)) {                    // the narrow band against the dense 256^3 grid of the same shape
+          const z2 = model.tensor({ terms: [[ref.anchor, 1]] }), P2 = model.planes(z2); z2.dispose();
+          const sdf = async (R, bd) => {                 // a grid's sdf from this page's fast path, as float32
+            if (fast) return M.Model.toFloat(await model.gridGPU(P2, R, bd)).sdf;
+            const v = await R3.gridVolume(model, P2, R, undefined, bd), s = R3.readVolume(v); R3.release(v); return s;
+          };
+          const d = await sdf(256, null), b = await sdf(256, BAND);
+          let mism = 0, err = 0;
+          for (let i = 0; i < d.length; i++) {
+            if ((d[i] < 0) !== (b[i] < 0)) mism++;
+            if (Math.abs(d[i]) < 0.01) err = Math.max(err, Math.abs(d[i] - b[i]));
+          }
+          st.bandMism = mism; st.bandErr = err;
+          if (glgrid) {                                  // WebGL: planes resized on the GPU vs by TF.js, a dense 160^3 grid
+            R3.gpuResize = false; const t = await sdf(160, null); R3.gpuResize = true; const u = await sdf(160, null);
+            let m = 0; for (let i = 0; i < t.length; i++) if (Math.abs(t[i]) < 0.05) m = Math.max(m, Math.abs(t[i] - u[i]));
+            st.resizeErr = m;
+          }
+          P2.dispose();
+        }
       } catch (e) { console.warn('no reference', e); }
     }
     if (qs.has('bench')) {
       R3.profile = true;
       const sync = async (t) => { const s = tf.slice(t, [0, 0, 0, 0], [1, 1, 1, 1]); await s.data(); s.dispose(); }, out = {};
-      for (let rep = 0; rep < 2; rep++) for (const R of [64, 96, 128, 160]) {
+      const sizes = [[64], [96], [128], [160]].concat(hd && (fast || glgrid) ? [[256], [256, 'dense']] : []);
+      for (let rep = 0; rep < 2; rep++) for (const [R, how] of sizes) {
         const z = model.tensor({ terms: [[0, 1]] }), t1 = performance.now(), P = model.planes(z); z.dispose(); await sync(P);
         const t2 = performance.now(); let v;
-        if (glgrid) v = lev(await R3.gridVolume(model, P, R)); else { const g = await grid(P, R); v = lev(R3.volume(g)); if (g.done) g.done(); }
+        if (glgrid) v = lev(await R3.gridVolume(model, P, R, undefined, how ? null : band(R)));
+        else { const g = how ? await model.gridGPU(P, R) : await grid(P, R); v = lev(R3.volume(g)); if (g.done) g.done(); }
         R3.gl.finish(); const t3 = performance.now(); R3.release(v); P.dispose();
-        if (glgrid && R3.times) out['gl' + R] = Object.fromEntries(R3.times);
-        if (rep) out[R] = { planes: +(t2 - t1).toFixed(1), grid: +(t3 - t2).toFixed(1) };
+        if (glgrid && R3.times) out['gl' + R + (how || '')] = Object.fromEntries(R3.times);
+        if (rep) out[R + (how ? how : '')] = { planes: +(t2 - t1).toFixed(1), grid: +(t3 - t2).toFixed(1) };
       }
       st.bench = out; R3.profile = false;
     }
@@ -198,7 +231,9 @@
       if (R === resLo) decEma = decEma ? 0.8 * decEma + 0.2 * ms : ms;
       else if (R === resHi && R > resLo) {               // a slow fine grid steps down (160 -> 128 -> 96) instead of stalling holds
         hiEma = hiEma ? 0.7 * hiEma + 0.3 * ms : ms;
-        if (hiEma > 150 && resHi > Math.max(resLo, 96) && !qs.get('hi')) { resHi = resHi > 128 ? 128 : 96; st.resHi = resHi; hiEma = 0; }
+        if (hiEma > (hd ? 700 : 150) && resHi > Math.max(resLo, 96) && !qs.get('hi')) {   // HD waits longer, steps 256 -> 192 -> 160
+          resHi = hd ? (resHi > 192 ? 192 : 160) : resHi > 128 ? 128 : 96; st.resHi = resHi; hiEma = 0;
+        }
       }
       st.decodeMs = +decEma.toFixed(1); keyTimes.push(performance.now());
       if (last) drop(last.vol);
@@ -356,6 +391,8 @@
       get tau() { return tauDisp; }, get paused() { return paused; }, get speed() { return speed; }, get spin() { return spin; }, cam,
       shown, setPaused, loadChunks,
       setSpin(v) { spin = st.spin = v === null ? null : clamp(+v, 0, 8); },
+      get hd() { return hd; },
+      setHD(on) { setHD(!!on); refineAt = null; },          // the next resting grid (or the paused keyframe) uses it
       setSpeed(x) { speed = st.speed = clamp(x, 0.25, 3); },
       setMode(m) { if (!M.isWalk(m)) return; retarget((tr) => walker.setMode(tr, m)); st.walk = walker.mode; },
       next() { retarget((tr) => walker.next(tr)); },

@@ -7,7 +7,7 @@ Two neural networks that run entirely on your device (TensorFlow.js with WebGPU 
 - **Drawings** (`pixel-morph/`) — a small convolutional decoder turns a 48×48 grid of codes into a 384-pixel drawing and
   wanders endlessly between the codes of 88 real photographs (11 subjects), drawing every step in dots, lines or cartoon.
   Optional piano music from a small transformer.
-- **3D Objects** (`morph3d/`) — a triplane variational autoencoder packs each of 588 real 3D models (98 classes) into
+- **3D Objects** (`morph3d/`) — a triplane variational autoencoder packs each of 582 real 3D models (98 classes) into
   3 × 32 × 32 × 8 numbers; a 1.31 M-weight decoder turns any code into a coloured signed-distance field, evaluated on a
   dense grid (WebGPU compute or WebGL shaders), cleaned up by a calibrated level pass and sphere-traced every frame.
 
@@ -28,8 +28,10 @@ Everything is static: any static file host serves it as it is.
 | `?spin` or `?spin=1` | the object always rotates — also while paused and with the system's "reduce motion" on (the **spin** button and the `r` key toggle it) |
 | `?spin=2` | rotates twice as fast (any rate from 0 to 8) |
 | `?spin=0` | never rotates |
+| `?hd=1` | HD: a resting object is decoded on a 256³ grid instead of 160³, with curvature shading that brings out creases and grooves (the **HD** button and the `h` key toggle it). A narrow band runs the network only near the surface — exact, and as fast as the old 160³ |
+| `?detail=0` … `3` | the curvature shading on its own: 0 off, 1 as in HD, up to 3 stronger |
 
-The site passes its URL on to the app, so https://daniil-777.github.io/real-time-web-2D3D-generation/?spin=1#objects works.
+The site passes its URL on to the app, so https://daniil-777.github.io/real-time-web-2D3D-generation/?hd=1&spin=1#objects works.
 The frame rate is always shown in the top-right corner of the 3D view.
 
 ## Credits and licences

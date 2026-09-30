@@ -219,6 +219,7 @@ html :focus-visible { outline: 3px solid rgba(0, 113, 227, 0.5); outline-offset:
     <button id="back" type="button" class="wide" title="previous object (←)">‹ back</button>
     <button id="pause" type="button" title="pause (space)">pause</button>
     <button id="spin" type="button" aria-pressed="false" title="always rotate the object (r)">spin</button>
+    <button id="hd" type="button" aria-pressed="false" title="HD: resting objects on a 256³ grid, with curvature shading (h)">HD</button>
     <button id="next" type="button" title="next object (→)">next ›</button>
     <label class="wide">find <input id="find" list="classes" size="10" placeholder="a class…" autocomplete="off" aria-label="find a class"></label>
     <datalist id="classes"></datalist>
@@ -249,13 +250,14 @@ html :focus-visible { outline: 3px solid rgba(0, 113, 227, 0.5); outline-offset:
   pairs. The bottom-up sweep halves the debris again. The map is a t-SNE of the latents, so distances on it are approximate.</p>
   <h3>keys</h3>
   <p class="muted"><kbd>space</kbd> pause · <kbd>→</kbd> next · <kbd>←</kbd> back · <kbd>1</kbd>–<kbd>6</kbd> walks ·
-  <kbd>s</kbd> save png · <kbd>/</kbd> find · <kbd>m</kbd> map · <kbd>r</kbd> spin · <kbd>i</kbd> about · <kbd>d</kbd> debug</p>
+  <kbd>s</kbd> save png · <kbd>/</kbd> find · <kbd>m</kbd> map · <kbd>r</kbd> spin · <kbd>h</kbd> HD · <kbd>i</kbd> about · <kbd>d</kbd> debug</p>
   <h3>credits</h3>
   <p class="muted" id="aboutCredit"></p>
 </dialog>
 <script src="m3d-model.js"></script>
 <script src="m3d-model2.js"></script>
 <script src="m3d-render.js"></script>
+<script src="m3d-glgrid.js"></script>
 <script src="m3d-level.js"></script>
 <script src="m3d-walk.js"></script>
 <script src="m3d-map.js"></script>

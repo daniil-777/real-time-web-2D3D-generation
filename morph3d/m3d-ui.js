@@ -39,6 +39,8 @@
       app.onpause = (p) => { $('pause').textContent = p ? 'play' : 'pause'; };
       $('spin').setAttribute('aria-pressed', String(!!app.spin));
       $('spin').addEventListener('click', () => this.toggleSpin());
+      $('hd').setAttribute('aria-pressed', String(app.hd));
+      $('hd').addEventListener('click', () => this.toggleHD());
       app.oninteract = () => this.fadeHint();
       if (matchMedia('(pointer: coarse)').matches) $('hint').textContent = 'drag to orbit · pinch to zoom';
       // find: the class labels; committing travels to a loaded object of that class not seen lately
@@ -101,6 +103,12 @@
       $('spin').setAttribute('aria-pressed', String(on));
       this.touched();
     }
+    toggleHD() {                                          // HD button / h: 256^3 resting grids + curvature shading
+      const on = !this.app.hd;
+      this.app.setHD(on);
+      $('hd').setAttribute('aria-pressed', String(on));
+      this.touched();
+    }
     setMap(v) { this.map.show(v); $('mapBtn').setAttribute('aria-pressed', String(v)); }
     fadeHint() { $('hint').style.opacity = '0'; }
     firstFrame() {
@@ -122,6 +130,7 @@
       if (this.style() !== 'lit') p.set('style', this.style()); else p.delete('style');
       if (this.app.speed !== 1) p.set('speed', String(this.app.speed)); else p.delete('speed');
       if (this.app.spin !== null) p.set('spin', String(this.app.spin)); else p.delete('spin');
+      if (this.app.hd) p.set('hd', '1'); else p.delete('hd');
       history.replaceState(null, '', u);
     }
 
@@ -208,6 +217,7 @@
       else if (e.key === '/') { e.preventDefault(); $('find').focus(); }
       else if (e.key === 'm') this.setMap(!this.map.visible);
       else if (e.key === 'r') this.toggleSpin();
+      else if (e.key === 'h') this.toggleHD();
       else if (e.key === 'i') this.about();
       else if (e.key === 'd') $('dbg').hidden = !$('dbg').hidden;
       else return;
