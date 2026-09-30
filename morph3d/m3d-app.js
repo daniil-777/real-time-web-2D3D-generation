@@ -97,11 +97,20 @@
     const grid = (P, R) => (fast ? model.gridGPU(P, R, band(R)) : model.grid(P, R));
     const glgrid = st.backend === 'webgl' && qs.get('glgrid') !== '0' && R3.gridInit(model);
     st.fast = fast; st.glgrid = !!glgrid;
+    // per-pixel detail (m3d-neural.js): a resting object's surface, normal and colour from the decoder itself -- on with
+    // HD and for 256^2-plane models; ?neural=0 / 1 decides alone
+    const neural = !!(R3.neuralInit && R3.neuralInit(model)), nflag = qs.get('neural');
     let hd = qs.get('hd') === '1';
     const setHD = (on) => {
       hd = on; st.hd = on;
       resHi = on ? Math.max(hiBase, fast || glgrid ? 256 : hiBase) : hiBase; st.resHi = resHi;
       R3.detail = num('detail', on ? 1 : 0, 0, 3);
+      R3.neuralOn = neural && (nflag !== null ? nflag !== '0' : on || meta.planes_res >= 256); st.neural = R3.neuralOn;
+    };
+    const neuralFor = (vol, spec) => {                   // tag a resting grid; its planes go up to the texture meanwhile
+      if (!R3.neuralOn) return;
+      vol.nkey = spec.key;
+      R3.neuralPlanes(planesFor(spec), spec.key).catch((e) => console.warn('per-pixel detail:', e));
     };
     setHD(hd);
 
@@ -228,6 +237,7 @@
       const t1 = performance.now(), vol = await decode(spec, R), ms = performance.now() - t1;
       busy.push([performance.now(), ms]);
       if (g !== gen) { R3.release(vol); return; }        // the walk changed course while this was decoding
+      if (R === resHi && spec.still) neuralFor(vol, spec);
       if (R === resLo) decEma = decEma ? 0.8 * decEma + 0.2 * ms : ms;
       else if (R === resHi && R > resLo) {               // a slow fine grid steps down (160 -> 128 -> 96) instead of stalling holds
         hiEma = hiEma ? 0.7 * hiEma + 0.3 * ms : ms;
@@ -250,6 +260,7 @@
       const at = tauDisp, vol = await decode(k.spec, resHi, k.vol.floor);
       if (g !== gen || !paused || tauDisp !== at || queue[0] !== k) { R3.release(vol); return; }
       drop(k.vol); k.vol = hold(vol); k.R = resHi;
+      neuralFor(vol, k.spec);
       refineAt = at;
     }
     async function produce() {

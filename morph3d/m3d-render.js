@@ -7,13 +7,15 @@
   const VS = `#version 300 es
   out vec2 vP; void main() { vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); vP = p * 2.0 - 1.0; gl_Position = vec4(vP, 0, 1); }`;
 
-  const MARCH = `#version 300 es
+  // x.decl / x.hit: extensions (m3d-neural.js: the decoder per pixel) -- declarations, and code run at a hit that may
+  // move p onto a finer surface and replace the normal n and the albedo alb
+  const MARCH = (x = {}) => `#version 300 es
   precision highp float; precision highp sampler3D;
   uniform sampler3D uS0, uS1, uC0, uC1;
   uniform vec4 uGrid;          // R0, R1, colour-grid sizes Rc0, Rc1
   uniform float uT, uFloor, uAspect, uTanF, uIso, uDetail, uTexel;
   uniform vec3 uEye; uniform mat3 uRot; uniform vec3 uKey; uniform vec3 uPaper;
-  in vec2 vP; out vec4 oC;
+  in vec2 vP; out vec4 oC;${x.decl || ''}
   vec3 tc(vec3 p, float R) { return (((p * 0.5 + 0.5) * (R - 1.0)) + 0.5) / R; }
   vec3 tcc(vec3 p, float R, float Rc) { return (((p * 0.5 + 0.5) * (R - 1.0) * 0.5) + 0.5) / Rc; }
   // uIso: a coarse grid can straddle a thin sheet (the EPS shell) with no negative sample; tracing that much further
@@ -65,7 +67,7 @@
       }
     }
     if (hit) {
-      vec3 p = ro + rd * t, n = nrm(p), alb = pow(clamp(C(p), 0.0, 1.0), vec3(2.2));
+      vec3 p = ro + rd * t, n = nrm(p), alb = pow(clamp(C(p), 0.0, 1.0), vec3(2.2));${x.hit || ''}
       float dif = max(dot(n, L), 0.0), sh = dif > 0.0 ? shadow(p + n * 0.01, L) : 0.0, ao = occl(p, n);
       float sky = 0.5 + 0.5 * n.y, fre = pow(1.0 - max(dot(n, -rd), 0.0), 4.0);
       if (uDetail > 0.0) {             // curvature shading: the field's Laplacian (2 x mean curvature) over two plane
@@ -119,7 +121,8 @@
     for (let i = 0; i < n; i++) { const name = gl.getActiveUniform(p, i).name; u[name] = gl.getUniformLocation(p, name); }
     return { p, u };
   }
-  M.glProg = (gl, fs) => prog(gl, fs);      // for the renderer extensions (m3d-level.js)
+  M.glProg = (gl, fs) => prog(gl, fs);      // for the renderer extensions (m3d-level.js, m3d-glgrid.js, m3d-neural.js)
+  M.marchSource = MARCH;                    // the tracing shader with extensions (m3d-neural.js)
 
   M.Renderer = class {
     constructor(canvas) {
@@ -128,7 +131,7 @@
       if (!gl) throw new Error('WebGL2 is not available');
       this.pendingFloors = []; this.lastFloor = -0.9;
       this.canvas = canvas;
-      this.march = prog(gl, MARCH); this.post = prog(gl, POST);
+      this.march = prog(gl, MARCH()); this.post = prog(gl, POST);
       this.vao = gl.createVertexArray();
       this.fbo = gl.createFramebuffer(); this.img = null; this.imgSize = [0, 0];
       this.pool = [];                         // recycled volume textures, keyed by size
@@ -142,7 +145,7 @@
     alloc(R, Rc, rgba) {                      // a pooled pair of volume textures; rgba = renderable colour (GL grid path)
       const gl = this.gl;
       const i = this.pool.findIndex((t) => t.R === R && t.Rc === Rc && t.rgba === rgba);
-      if (i >= 0) return this.pool.splice(i, 1)[0];
+      if (i >= 0) { const v = this.pool.splice(i, 1)[0]; v.nkey = null; return v; }   // nkey: m3d-neural.js planes tag
       const s = gl.createTexture(), c = gl.createTexture();
       for (const [t, f, n] of [[s, gl.R16F, R], [c, rgba ? gl.RGBA16F : gl.RGB16F, Rc]]) {
         gl.bindTexture(gl.TEXTURE_3D, t); gl.texStorage3D(gl.TEXTURE_3D, 1, f, n, n, n);
@@ -195,7 +198,7 @@
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filt); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filt);
       gl.bindVertexArray(this.vao);
       // pass 1: sphere tracing into the low-res buffer
-      const m = this.march, u = m.u;
+      const m = (this.pickMarch && this.pickMarch(a, b, t)) || this.march, u = m.u;     // m3d-neural.js: at rest
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo); gl.viewport(0, 0, iw, ih); gl.useProgram(m.p);
       [[a.s, 'uS0'], [b.s, 'uS1'], [a.c, 'uC0'], [b.c, 'uC1']].forEach(([tex, name], i) => {
         gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_3D, tex); gl.uniform1i(u[name], i); });
@@ -216,6 +219,7 @@
       gl.uniform1f(u.uIso, iso(a.R) + (iso(b.R) - iso(a.R)) * t); gl.uniform1f(u.uDetail, this.detail || 0); gl.uniform1f(u.uTexel, this.texel);
       gl.uniform1f(u.uAspect, iw / ih); gl.uniform1f(u.uTanF, Math.tan(cam.fov / 2));
       gl.uniform3fv(u.uEye, cam.eye); gl.uniformMatrix3fv(u.uRot, false, cam.rot); gl.uniform3fv(u.uKey, cam.key); gl.uniform3fv(u.uPaper, this.paper);
+      if (m !== this.march) this.bindNeural(m);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       // pass 2: to the canvas
       const q = this.post;

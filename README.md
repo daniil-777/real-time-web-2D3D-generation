@@ -30,6 +30,7 @@ Everything is static: any static file host serves it as it is.
 | `?spin=0` | never rotates |
 | `?hd=1` | HD: a resting object is decoded on a 256³ grid instead of 160³, with curvature shading that brings out creases and grooves (the **HD** button and the `h` key toggle it). A narrow band runs the network only near the surface — exact, and as fast as the old 160³ |
 | `?detail=0` … `3` | the curvature shading on its own: 0 off, 1 as in HD, up to 3 stronger |
+| `?neural=1` / `?neural=0` | per-pixel detail on / off: a resting object's surface, normal and colour come from the network itself at every pixel, not from the grid (on with HD, and for models with 256² planes) |
 
 The site passes its URL on to the app, so https://daniil-777.github.io/real-time-web-2D3D-generation/?hd=1&spin=1#objects works.
 The frame rate is always shown in the top-right corner of the 3D view.
