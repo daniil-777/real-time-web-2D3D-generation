@@ -1,20 +1,31 @@
 // Morph 3D v2 decoder family (m3d_model.DecoderV2: attention trunk, 1x1 or 3x3 128^2 stage, 256^2 detail plane,
-// deeper / product MLP, separate colour stream) in TensorFlow.js, plus one generated WebGPU kernel for the grid.
-// Weights in the m3d_export2.py layout. Same interface as M.Model (anchors, compose, planes -> one tensor, grid, gridGPU):
-// P is [3, R, R, hid + chc], geometry features first, then colour features with the global palette folded into the xy
-// plane (the colour stream sums the three planes, so a constant on one plane is exact after bilinear sampling).
+// deeper / product MLP, separate colour stream; m3d3_model.DecoderA3 = arch3: 64^2 latent, the detail stage on the colour
+// planes too, meta.dec.cdetail) in TensorFlow.js, plus one generated WebGPU kernel for the grid.
+// Weights in the m3d_export2.py / m3d3_codec.py layout. Same interface as M.Model (anchors, compose, planes -> one
+// tensor, grid, gridGPU): P is [3, R, R, hid + chc], geometry features first, then colour features with the global
+// palette folded into the xy plane (the colour stream sums the three planes, so a constant on one plane is exact after
+// bilinear sampling).
 (function (M) {
   'use strict';
   M.Model2 = class extends M.Model {
     constructor(meta, raw) {
       super(meta, raw);
       this.D = meta.dec; this.hid = meta.hid; this.chc = meta.dec.chc; this.CH = meta.hid + meta.dec.chc;
+      // colour detail runs at the geometry detail's 8L (P is one tensor); DecoderA3 only exports it with a colour stream
+      if (this.D.cdetail && !(this.D.detail && this.chc)) throw new Error('meta.dec.cdetail needs dec.detail and a colour stream');
     }
 
     lin(t, k, act) { return tf.fused.matMul({ a: t, b: this.W[k + '.w'], bias: this.W[k + '.b'], activation: act || 'linear' }); }
 
     // per-pixel linear layer on one plane [1, r, r, cin] -> [1, r, r, cout] (the grouped 1x1 heads, the detail pw)
     pix(t, k, act) { const [, r, s, c] = t.shape; return tf.reshape(this.lin(tf.reshape(t, [r * s, c]), k, act), [1, r, s, -1]); }
+
+    // the detail stage on plane p, u [1, 8L, 8L, C] already bilinear x2: u + pw(relu(depthwise 3x3 (u))) -- geometry
+    // (dw, pw: m3d_model.DecoderV2) and colour (cdw, cpw: m3d3_model.DecoderA3)
+    detail(u, p, dw, pw) {
+      return tf.add(u, this.pix(tf.fused.depthwiseConv2d({ x: u, filter: this.W[dw + p + '.w'], strides: 1, pad: 'same',
+        bias: this.W[dw + p + '.b'], activation: 'relu' }), pw + p));
+    }
 
     // TokenMixer: 2x2-merged tokens of all three planes, pre-norm attention blocks, 1x1 unmerge + pixel shuffle, residual
     mixer(x) {
@@ -48,18 +59,21 @@
         x = this.res(this.conv(tf.image.resizeNearestNeighbor(x, [2 * L, 2 * L]), 'up1', 'relu'), 'res1');
         x = D.hi === 'conv3' ? this.conv(tf.image.resizeNearestNeighbor(x, [4 * L, 4 * L]), 'up2', 'relu')
           : this.res(this.conv(tf.image.resizeBilinear(x, [4 * L, 4 * L], true), 'up2', 'relu'), 'res2');
-        const R = 4 * L, pl = tf.split(x, 3, 0);
-        let g = tf.concat(pl.map((t, p) => this.pix(t, 'head' + p)), 0);
-        if (D.detail) {                      // 256^2 geometry: bilinear x2, then + pw(relu(depthwise 3x3)), per plane
-          const u = tf.image.resizeBilinear(g, [2 * R, 2 * R], true);
-          g = tf.add(u, tf.concat(tf.split(u, 3, 0).map((t, p) => this.pix(tf.fused.depthwiseConv2d({ x: t, filter: W['dw' + p + '.w'],
-            strides: 1, pad: 'same', bias: W['dw' + p + '.b'], activation: 'relu' }), 'pw' + p)), 0));
-        }
-        if (!chc) return g;
-        let c = tf.concat(pl.map((t, p) => this.pix(t, 'chead' + p)), 0);
-        if (pal) c = tf.add(c, tf.concat([tf.reshape(pal, [1, 1, 1, chc]), tf.zeros([2, 1, 1, chc])], 0));
-        if (D.detail) c = tf.image.resizeBilinear(c, [2 * R, 2 * R], true);
-        return tf.concat([g, c], 3);
+        const R2 = 8 * L, pl = tf.split(x, 3, 0);
+        // one plane at a time, each in its own tidy so the 8L intermediates never pile up (arch3: 512^2 x 64 floats =
+        // 67 MB a plane): geometry head (1x1) [-> bilinear x2 -> detail]; colour head [+ palette, xy plane] [-> bilinear
+        // x2] [-> colour detail (cdetail), the palette after it]; then the plane's geometry and colour channels side by side
+        return tf.concat(pl.map((t, p) => tf.tidy(() => {
+          let g = this.pix(t, 'head' + p);
+          if (D.detail) g = this.detail(tf.image.resizeBilinear(g, [R2, R2], true), p, 'dw', 'pw');
+          if (!chc) return g;
+          let c = this.pix(t, 'chead' + p);
+          const pp = pal && p === 0 ? tf.reshape(pal, [1, 1, 1, chc]) : null;
+          if (pp && !D.cdetail) c = tf.add(c, pp);
+          if (D.detail) c = tf.image.resizeBilinear(c, [R2, R2], true);
+          if (D.cdetail) { c = this.detail(c, p, 'cdw', 'cpw'); if (pp) c = tf.add(c, pp); }
+          return tf.concat([g, c], 3);
+        })), 0);
       });
     }
 

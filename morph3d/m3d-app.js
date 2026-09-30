@@ -136,7 +136,10 @@
         let g;
         if (glgrid) { const v = await R3.gridVolume(model, P, ref.R); g = { sdf: R3.readVolume(v), rgb: R3.readVolume(v, true) }; R3.release(v); }
         else g = M.Model.toFloat(await grid(P, ref.R));
-        const gt = fast || glgrid ? await model.grid(P, ref.R) : g; P.dispose();
+        const gt = fast || glgrid ? await model.grid(P, ref.R) : g;
+        if (neural) Object.assign(st, await R3.neuralCheck(P, ref, gt)     // the per-pixel field on the same grid
+          .catch((e) => { st.warnings.push('per-pixel check: ' + ((e && e.message) || e)); return {}; }));
+        P.dispose();
         let e = 0, f = 0; for (let i = 0; i < g.sdf.length; i++) { e += Math.abs(g.sdf[i] - ref.sdf[i]); f = Math.max(f, Math.abs(g.sdf[i] - gt.sdf[i])); }
         for (let i = 0; i < g.rgb.length; i++) f = Math.max(f, Math.abs(g.rgb[i] - gt.rgb[i]));
         st.refErr = e / g.sdf.length; st.fastVsTfjs = f;
@@ -185,8 +188,9 @@
       st.bench = out; R3.profile = false;
     }
 
-    // one promise per anchor chunk (nothing is fetched twice); a failed chunk is retried 3 times with backoff, and
-    // model.streaming turns false once every chunk has loaded or given up (the walker stops waiting for partners)
+    // one promise per anchor chunk (nothing is fetched twice); a failed chunk is retried 3 times with backoff. After the
+    // first frame the chunks stream in two at a time (arch3: ~106 chunks of ~0.8 MB), the start object's chunk first,
+    // and model.streaming turns false once every chunk has loaded or given up (the walker stops waiting for partners)
     const chunkP = [], tries = [];
     const loadChunk = (c) => chunkP[c] || (chunkP[c] = (async () => {
       const r = await fetch(F.dir + '/' + meta.anchor_chunks[c].file); if (!r.ok) throw new Error('chunk ' + c + ' ' + r.status);
@@ -198,7 +202,13 @@
       chunkP[c] = null; return loadChunk(c);
     }));
     model.streaming = true;
-    const loadChunks = () => Promise.all(meta.anchor_chunks.map((_, c) => (c ? loadChunk(c) : null))).then(() => { model.streaming = false; });
+    let allChunks = null;
+    const loadChunks = () => allChunks || (allChunks = (async () => {
+      const s = chunkOf(start), todo = [s].concat(meta.anchor_chunks.map((_, c) => c).filter((c) => c !== s)).filter((c) => c > 0);
+      const lane = async () => { while (todo.length) await loadChunk(todo.shift()); };
+      await Promise.all([lane(), lane()]);
+      model.streaming = false;
+    })());
     const chunkOf = (i) => { let c = 0; while (c + 1 < model.first.length && model.first[c + 1] <= i) c++; return c; };
     const only = qs.get('cls') ? new Set(qs.get('cls').split(',')) : null;
     let start = qs.get('anchor') != null ? clamp(+qs.get('anchor') | 0, 0, meta.anchors.length - 1) : Math.floor(rnd() * model.nLoaded);

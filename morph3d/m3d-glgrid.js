@@ -46,27 +46,40 @@
     o = uColor == 1 ? vec4(acc.yzw, 1.0) : vec4(acc.x, 0.0, 0.0, 1.0);
   }` };
   };
-  // The same for the v2 family (m3d-model2.js): planes hold hid geometry + chc colour channels (layer p*CH4 + c);
-  // geometry = [first (prod)] -> mlp_layers hidden layers -> out_g; colour (chc > 0, the stride-2 pass) = relu(sum of the
-  // colour planes) -> c2 (-> 32) -> c3 (-> 3). Every [in, out] matrix is padded to whole vec4 outputs and split into
-  // uniform blocks of <= 1024 vec4 (16 KB); all biases share one block. -> { src, blocks: [[name, Float32Array]] }.
-  const GRID2 = (model) => {
-    const F = model.F, D = model.meta.dec, H = model.meta.hid, C = D.chc, H4 = H / 4, C4 = C / 4, CH4 = H4 + C4;
-    const blocks = [], decl = [], bias = [], boff = {};
-    const addBias = (name, vals, n4) => { boff[name] = bias.length / 4; const b = new Float32Array(n4 * 4); b.set(vals); bias.push(...b); };
-    const mat = (key, IN, OUT, src, dst, bname, relu) => {          // GLSL for dst[0..OUT4) = act(W src + bias)
-      const OUT4 = Math.ceil(OUT / 4), w = F[key], rows = Math.max(4, Math.floor(1024 / OUT4 / 4) * 4);
-      let code = `for (int m = 0; m < ${OUT4}; m++) { vec4 s = bias[${boff[bname]} + m];`;
-      for (let a = 0, i = 0; a < IN; a += rows, i++) {
-        const b = Math.min(IN, a + rows), nm = `${key.replace(/\W/g, '_')}_${i}`, pad = new Float32Array((b - a) * OUT4 * 4);
-        for (let r = a; r < b; r++) pad.set(w.subarray(r * OUT, (r + 1) * OUT), (r - a) * OUT4 * 4);
-        blocks.push([nm, pad]); decl.push(`layout(std140) uniform B_${nm} { vec4 ${nm}[${(b - a) * OUT4}]; };`);
-        code += `
+  // Small [in, out] matrix layers in GLSL with every weight in std140 uniform blocks: each matrix is padded to whole vec4
+  // outputs and split into blocks of <= 1024 vec4 (16 KB); all biases share one block, added last by done(). pre prefixes
+  // every GLSL name (GRID2: none; the v2 per-pixel field of m3d-neural.js: 'n'). -> { bias(name, values, n4) -> its vec4
+  // offset, mat(...) -> GLSL, done() -> the declarations, blocks: [[name, Float32Array]] for uniform blocks B_<name> }
+  M.glLayers = (F, pre = '') => {
+    const blocks = [], decl = [], bv = [], boff = {};
+    return {
+      blocks, boff,
+      bias(name, vals, n4) { boff[name] = bv.length / 4; const b = new Float32Array(n4 * 4); b.set(vals); bv.push(...b); return boff[name]; },
+      mat(key, IN, OUT, src, dst, bname, relu) {          // GLSL for dst[0..OUT4) = act(W src + bias)
+        const OUT4 = Math.ceil(OUT / 4), w = F[key], rows = Math.max(4, Math.floor(1024 / OUT4 / 4) * 4);
+        let code = `for (int m = 0; m < ${OUT4}; m++) { vec4 s = ${pre}bias[${boff[bname]} + m];`;
+        for (let a = 0, i = 0; a < IN; a += rows, i++) {
+          const b = Math.min(IN, a + rows), nm = `${pre}${key.replace(/\W/g, '_')}_${i}`, pad = new Float32Array((b - a) * OUT4 * 4);
+          for (let r = a; r < b; r++) pad.set(w.subarray(r * OUT, (r + 1) * OUT), (r - a) * OUT4 * 4);
+          blocks.push([nm, pad]); decl.push(`layout(std140) uniform B_${nm} { vec4 ${nm}[${(b - a) * OUT4}]; };`);
+          code += `
         for (int c = ${a / 4}; c < ${b / 4}; c++) { vec4 v = ${src}[c]; int r = (4 * c - ${a}) * ${OUT4} + m;
           s += v.x * ${nm}[r] + v.y * ${nm}[r + ${OUT4}] + v.z * ${nm}[r + ${2 * OUT4}] + v.w * ${nm}[r + ${3 * OUT4}]; }`;
-      }
-      return code + ` ${dst}[m] = ${relu ? 'max(s, 0.0)' : 's'}; }`;
+        }
+        return code + ` ${dst}[m] = ${relu ? 'max(s, 0.0)' : 's'}; }`;
+      },
+      done() {
+        blocks.push([pre + 'small', Float32Array.from(bv)]);
+        return decl.concat([`layout(std140) uniform B_${pre}small { vec4 ${pre}bias[${bv.length / 4}]; };`]).join('\n  ');
+      },
     };
+  };
+  // The same for the v2 family (m3d-model2.js): planes hold hid geometry + chc colour channels (layer p*CH4 + c);
+  // geometry = [first (prod)] -> mlp_layers hidden layers -> out_g; colour (chc > 0, the stride-2 pass) = relu(sum of the
+  // colour planes) -> c2 (-> 32) -> c3 (-> 3); weights as M.glLayers. -> { src, blocks: [[name, Float32Array]] }.
+  const GRID2 = (model) => {
+    const F = model.F, D = model.meta.dec, H = model.meta.hid, C = D.chc, H4 = H / 4, C4 = C / 4, CH4 = H4 + C4;
+    const lay = M.glLayers(F), addBias = lay.bias, mat = lay.mat, boff = lay.boff;
     const fetch = (p, c) => `texelFetch(uP, ivec3(${['j, i', 'k, i', 'k, j'][p]}, ${p} * ${CH4} + ${c}), 0)`;
     let geo;
     if (D.prod) {
@@ -97,14 +110,13 @@
         ${mat('c3.w', 32, 3, 'r1', 'oc', 'c3', false)}
         o = vec4(oc[0].xyz, 1.0);`;
     }
-    blocks.push(['small', Float32Array.from(bias)]);
-    return { blocks, src: `#version 300 es
+    const decl = lay.done();
+    return { blocks: lay.blocks, src: `#version 300 es
   precision highp float; precision highp int; precision highp sampler2DArray;
   #define H4 ${H4}
   uniform sampler2DArray uP; uniform int uLayer, uStride, uColor;
   ${BAND_DECL}
-  ${decl.join('\n  ')}
-  layout(std140) uniform B_small { vec4 bias[${bias.length / 4}]; };
+  ${decl}
   out vec4 o;
   void main() {
     int i = uLayer * uStride, j = int(gl_FragCoord.y) * uStride, k = int(gl_FragCoord.x) * uStride;${BAND}
@@ -224,23 +236,34 @@
     }
   };
 
+  // P (tf, [3, Rp, Rp, H]) at size r, resized by TF.js, -> the size-r planes texture ([3*H4, r, r, 4]: one texture layer
+  // per 4-channel chunk); T: profile marks after the readback and the upload
+  RP.upPlanes = async function (P, r, H4, T) {
+    const gl = this.gl, planes = tf.tidy(() => {
+      const Pr = r === P.shape[1] ? P : tf.image.resizeBilinear(P, [r, r], true);
+      return tf.transpose(tf.reshape(Pr, [3, r, r, H4, 4]), [0, 3, 1, 2, 4]);
+    });
+    const data = await planes.data(); planes.dispose(); if (T) T.push(performance.now());
+    const pt = this.planeTex(r, H4);
+    gl.bindTexture(gl.TEXTURE_2D_ARRAY, pt); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, r, r, 3 * H4, gl.RGBA, gl.FLOAT, data);
+    if (T && this.profile) { gl.finish(); T.push(performance.now()); }
+    return pt;
+  };
+
   // P: tf tensor [3, Rp, Rp, H] on the WebGL backend -> volume handle (+ .floor). band = { Rg, tau } (HD): a dense Rg^3
   // sdf pass first, then the R^3 grid runs the network only near the coarse surface. Planes go up at R (resized by
-  // TF.js) up to their own size Rp; above it, and for a band, they go up once at Rp and the GPU resizes them (a 256^3
-  // grid would otherwise read 50 MB back out of TF.js). ?check compares the two routes on a dense grid (gpuResize = false).
+  // TF.js) up to their own size Rp; above it, and for a band, they go up once at Rp -- at most max(R, UP): arch3's 512^2
+  // x 80 channels would be ~250 MB of RGBA32F -- and the GPU resizes them (a 256^3 grid would otherwise read 50 MB back
+  // out of TF.js). When that cap binds, the band's coarse planes come from TF.js as well (4 MB at 64^2): a GPU resize of
+  // the capped planes samples them twice, up to ~0.01 off in the coarse field, against a margin of 0.005 in tau.
+  // ?check compares the two routes on a dense grid (gpuResize = false).
+  const UP = 256;
   RP.gridVolume = async function (model, P, R, floorGuess, band) {
     const gl = this.gl, H4 = this.hid / 4, Rp = P.shape[1], Rc = (R + 1) >> 1, T = [performance.now()];
-    const src = (R > Rp || band) && this.gpuResize !== false ? Rp : R;
-    const planes = tf.tidy(() => {         // [3, src, src, H] -> [3*H4, src, src, 4]: one texture layer per 4-channel chunk
-      const Pr = src === Rp ? P : tf.image.resizeBilinear(P, [src, src], true);
-      return tf.transpose(tf.reshape(Pr, [3, src, src, H4, 4]), [0, 3, 1, 2, 4]);
-    });
-    const data = await planes.data(); planes.dispose(); T.push(performance.now());
-    const pt = this.planeTex(src, H4);
-    gl.bindTexture(gl.TEXTURE_2D_ARRAY, pt); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
-    gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, src, src, 3 * H4, gl.RGBA, gl.FLOAT, data);
-    if (this.profile) { gl.finish(); T.push(performance.now()); }
-    const at = (r) => (r === src ? pt : this.resizePlanes(pt, src, r, H4)), v = this.alloc(R, Rc, true);
+    const src = (R > Rp || band) && this.gpuResize !== false ? Math.min(Rp, Math.max(R, UP)) : R;
+    const pt = await this.upPlanes(P, src, H4, T), cpt = band && src < Rp && band.Rg !== src ? await this.upPlanes(P, band.Rg, H4) : null;
+    const at = (r) => (r === src ? pt : cpt && r === band.Rg ? cpt : this.resizePlanes(pt, src, r, H4)), v = this.alloc(R, Rc, true);
     let bd = null;
     if (band) {
       if (this.coR !== band.Rg) { if (this.co) gl.deleteTexture(this.co); this.co = tex3D(gl, gl.R16F, band.Rg, gl.LINEAR); this.coR = band.Rg; }
