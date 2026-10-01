@@ -7,10 +7,10 @@ Two neural networks that run entirely on your device (TensorFlow.js with WebGPU 
 - **Drawings** (`pixel-morph/`) — a small convolutional decoder turns a 48×48 grid of codes into a 384-pixel drawing and
   wanders endlessly between the codes of 88 real photographs (11 subjects), drawing every step in dots, lines or cartoon.
   Optional piano music from a small transformer.
-- **3D Objects** (`morph3d/`) — a triplane variational autoencoder packs real 3D models into 3 × 32 × 32 × 8 numbers; a
-  decoder turns any code into a coloured signed-distance field, evaluated on a dense grid (WebGPU compute or WebGL
-  shaders), cleaned up by a calibrated level pass and sphere-traced every frame. The **model** menu switches between
-  three trained networks (below).
+- **3D Objects** (`morph3d/`) — a triplane variational autoencoder packs real 3D models into 3 × 32 × 32 × 8 numbers
+  (3 × 64 × 64 × 8 for architecture HD); a decoder turns any code into a coloured signed-distance field, evaluated on a
+  dense grid (WebGPU compute or WebGL shaders), cleaned up by a calibrated level pass and sphere-traced every frame. The
+  **model** menu switches between four trained networks (below).
 
 ## Layout
 
@@ -18,7 +18,7 @@ Two neural networks that run entirely on your device (TensorFlow.js with WebGPU 
 |---|---|
 | `index.html` | the site: switches between the two apps (one runs at a time) |
 | `pixel-morph/` | the drawing app (also works on its own; `pixel-morph.html` is a single-file version) |
-| `morph3d/` | the 3D app (also works on its own); `model/` objects (default), `model-arch/` architecture, `model-v1/` the original objects network — the **model** menu switches between them, or link straight in with `?model=` |
+| `morph3d/` | the 3D app (also works on its own); `model/` objects (default), `model-arch/` architecture, `model-arch3/` architecture HD, `model-v1/` the original objects network — the **model** menu switches between them, or link straight in with `?model=` |
 
 Everything is static: any static file host serves it as it is.
 
@@ -26,7 +26,7 @@ Everything is static: any static file host serves it as it is.
 
 | URL | effect |
 |---|---|
-| `?model=model-arch` | loads a folder of this site as the decoder — `model` (default), `model-arch` (architecture), `model-v1` (the original objects network), or any future model dropped in beside them (the **model** menu sets this) |
+| `?model=model-arch` | loads a folder of this site as the decoder — `model` (default), `model-arch` (architecture), `model-arch3` (architecture HD), `model-v1` (the original objects network), or any future model dropped in beside them (the **model** menu sets this) |
 | `?spin` or `?spin=1` | the object always rotates — also while paused and with the system's "reduce motion" on (the **spin** button and the `r` key toggle it) |
 | `?spin=2` | rotates twice as fast (any rate from 0 to 8) |
 | `?spin=0` | never rotates |
@@ -45,14 +45,22 @@ object for the description, and the walk morphs to it and carries on through sim
 variation. The prior only works with the decoder it was trained for (its `model_sha16` must match the model's
 checkpoint fingerprint).
 
+**Architecture HD** (`model-arch3/`, the **architecture HD** menu entry): 782 buildings in 12 classes on 64² latents and
+512² planes, with a detail stage on the colour planes too — IoU 0.91 against 0.83 for `model-arch` (1.14 M weights). Its
+anchors stream in two chunks at a time after the first frame. The decoder was trained on distances clamped to 0.05 on
+both sides, so beyond that band its field only says "outside" (and reaches hundreds): `meta.json` declares
+`"trunc": 0.05`, and the page then reads the field truncated at 0.1, keeps every tracing step within 0.045, and clamps the
+HD band's coarse pass. Exports without `trunc` render exactly as before. Descriptions work in the find box (`clip.bin`
+from `research/text3d/clip_table_arch3.py`); it has no text prior yet, so no create button.
+
 The site passes its URL on to the app, so https://daniil-777.github.io/real-time-web-2D3D-generation/?hd=1&spin=1#objects works.
 The frame rate is always shown in the top-right corner of the 3D view.
 
 ## Credits and licences
 
 - 3D shapes: [Objaverse](https://objaverse.allenai.org) models under CC-BY / CC0, re-encoded by the network — authors and
-  licences of every object in `morph3d/model/sources.json` (also `morph3d/model-arch/sources.json` and
-  `morph3d/model-v1/sources.json`).
+  licences of every object in `morph3d/model/sources.json` (also `morph3d/model-arch/sources.json`,
+  `morph3d/model-arch3/sources.json` and `morph3d/model-v1/sources.json`).
 - Drawings: distilled from [Wikimedia Commons](https://commons.wikimedia.org/wiki/Category:Featured_pictures) featured and
   quality pictures (CC licences) — sources in `pixel-morph/model*/sources.json`.
 - Music: the piano transformer in `pixel-morph/audio/` was trained on the [MAESTRO](https://magenta.tensorflow.org/datasets/maestro)

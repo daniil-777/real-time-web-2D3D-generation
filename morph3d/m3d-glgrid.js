@@ -3,8 +3,9 @@
 (function (M) {
   'use strict';
   // HD narrow band (m3d-app.js), as the WebGPU kernel in m3d-model.js: a voxel whose coarse (trilinear) value lies more
-  // than tau from the surface keeps that value and skips the network; i, j, k are its indices in the fine grid
-  const BAND_DECL = 'uniform highp sampler3D uCo; uniform int uBand; uniform float uTau; uniform vec2 uCoMap;';
+  // than tau from the surface keeps that value and skips the network; i, j, k are its indices in the fine grid. uLim:
+  // the sdf a pass writes is clamped to it -- the coarse pass of a meta.trunc export (band.lim), else no clamp
+  const BAND_DECL = 'uniform highp sampler3D uCo; uniform int uBand; uniform float uTau, uLim; uniform vec2 uCoMap;';
   const BAND = `
     if (uBand == 1) {
       float cv = texture(uCo, vec3(k, j, i) * uCoMap.x + uCoMap.y).r;
@@ -43,7 +44,7 @@
       s = max(s, 0.0);
       acc += s.x * w3[4 * m] + s.y * w3[4 * m + 1] + s.z * w3[4 * m + 2] + s.w * w3[4 * m + 3];
     }
-    o = uColor == 1 ? vec4(acc.yzw, 1.0) : vec4(acc.x, 0.0, 0.0, 1.0);
+    o = uColor == 1 ? vec4(acc.yzw, 1.0) : vec4(clamp(acc.x, -uLim, uLim), 0.0, 0.0, 1.0);
   }` };
   };
   // Small [in, out] matrix layers in GLSL with every weight in std140 uniform blocks: each matrix is padded to whole vec4
@@ -100,7 +101,7 @@
     addBias('og', F['out_g.b'], 1);
     geo += `
         ${mat('out_g.w', H, C ? 1 : 4, 'h', 'og', 'og', false)}
-        o = uColor == 1 ? vec4(og[0].yzw, 1.0) : vec4(og[0].x, 0.0, 0.0, 1.0);`;
+        o = uColor == 1 ? vec4(og[0].yzw, 1.0) : vec4(clamp(og[0].x, -uLim, uLim), 0.0, 0.0, 1.0);`;
     let col = '';
     if (C) {
       addBias('c2', F['c2.b'], 8); addBias('c3', F['c3.b'], 1);
@@ -220,12 +221,13 @@
 
   // the grid program over the n layers of the 3D texture tex (layer i = x, pixel (z, y)); bd: the band, if any. The
   // band sampler always gets its own unit and a texture that is not being drawn into (a feedback loop is an error).
-  RP.slices = function (tex, n, stride, col, pt, bd) {
+  // lim: the written sdf is clamped to +-lim (the band's coarse pass of a meta.trunc export)
+  RP.slices = function (tex, n, stride, col, pt, bd, lim = 1e4) {
     const gl = this.gl, g = this.gridProg;
     gl.bindVertexArray(this.vao); gl.useProgram(g.p); gl.disable(gl.BLEND);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D_ARRAY, pt); gl.uniform1i(g.u.uP, 0);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_3D, bd ? bd.co : this.nocoarse); gl.uniform1i(g.u.uCo, 1);
-    gl.uniform1i(g.u.uBand, bd ? 1 : 0);
+    gl.uniform1i(g.u.uBand, bd ? 1 : 0); gl.uniform1f(g.u.uLim, lim);
     if (bd) { gl.uniform1f(g.u.uTau, bd.tau); gl.uniform2f(g.u.uCoMap, bd.map[0], bd.map[1]); }
     this.ubos.forEach((b, i) => gl.bindBufferBase(gl.UNIFORM_BUFFER, i, b));
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.gfbo);
@@ -267,7 +269,7 @@
     let bd = null;
     if (band) {
       if (this.coR !== band.Rg) { if (this.co) gl.deleteTexture(this.co); this.co = tex3D(gl, gl.R16F, band.Rg, gl.LINEAR); this.coR = band.Rg; }
-      this.slices(this.co, band.Rg, 1, 0, at(band.Rg), null);
+      this.slices(this.co, band.Rg, 1, 0, at(band.Rg), null, band.lim);
       bd = { co: this.co, tau: band.tau, map: [(band.Rg - 1) / ((R - 1) * band.Rg), 0.5 / band.Rg] };   // index -> texcoord
     }
     const pr = at(R);

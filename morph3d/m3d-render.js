@@ -13,14 +13,16 @@
   precision highp float; precision highp sampler3D;
   uniform sampler3D uS0, uS1, uC0, uC1;
   uniform vec4 uGrid;          // R0, R1, colour-grid sizes Rc0, Rc1
-  uniform float uT, uFloor, uAspect, uTanF, uIso, uDetail, uTexel;
+  uniform float uT, uFloor, uAspect, uTanF, uIso, uDetail, uTexel, uFar, uStep;
   uniform vec3 uEye; uniform mat3 uRot; uniform vec3 uKey; uniform vec3 uPaper;
   in vec2 vP; out vec4 oC;${x.decl || ''}
   vec3 tc(vec3 p, float R) { return (((p * 0.5 + 0.5) * (R - 1.0)) + 0.5) / R; }
   vec3 tcc(vec3 p, float R, float Rc) { return (((p * 0.5 + 0.5) * (R - 1.0) * 0.5) + 0.5) / Rc; }
   // uIso: a coarse grid can straddle a thin sheet (the EPS shell) with no negative sample; tracing that much further
-  // out keeps sheets closed (a sub-pixel dilation, zero at >= 1/EPS + 1 samples per axis)
-  float S(vec3 p) { return mix(texture(uS0, tc(p, uGrid.x).zyx).r, texture(uS1, tc(p, uGrid.y).zyx).r, uT) - uIso; }
+  // out keeps sheets closed (a sub-pixel dilation, zero at >= 1/EPS + 1 samples per axis). uFar: an export that declares
+  // meta.trunc is read truncated at 0.1, as the v1 decoders learnt it -- a decoder trained on a clamped loss (arch3) is
+  // free beyond its band and reaches hundreds there, so the steps, shadows and occlusion would skip or ignore the object
+  float S(vec3 p) { return clamp(mix(texture(uS0, tc(p, uGrid.x).zyx).r, texture(uS1, tc(p, uGrid.y).zyx).r, uT), -uFar, uFar) - uIso; }
   vec3 C(vec3 p) { return mix(texture(uC0, tcc(p, uGrid.x, uGrid.z).zyx).rgb, texture(uC1, tcc(p, uGrid.y, uGrid.w).zyx).rgb, uT); }
   vec2 box(vec3 ro, vec3 rd, float b) {
     vec3 m = 1.0 / rd, n = m * ro, k = abs(m) * b, t1 = -n - k, t2 = -n + k;
@@ -62,7 +64,7 @@
         float d = S(ro + rd * t);
         if (d < 0.0) { float a = tp, b = t; for (int j = 0; j < 6; j++) { float m = 0.5 * (a + b); if (S(ro + rd * m) < 0.0) b = m; else a = m; } t = b; hit = true; break; }
         if (d < 4e-4) { hit = true; break; }
-        tp = t; t += max(d * 0.9, 0.003);
+        tp = t; t += clamp(d * 0.9, 0.003, uStep);                   // uStep: within the export's metric band
         if (t > hb.y) break;
       }
     }
@@ -139,6 +141,7 @@
       this.eps = 0.01;                        // the SDF shell half-thickness (meta.eps)
       this.levels = V1_LEVELS;
       this.texel = 2 / 127;                   // a plane texel in world units (setLevels: from the export's planes)
+      this.far = this.step = 1e4;             // field truncation and longest tracing step: none (setLevels: meta.trunc)
     }
 
     // Upload one decoded keyframe; returns a handle {s, c, R, Rc} to pass to draw(). Textures are recycled via release().
@@ -177,6 +180,12 @@
       const p = meta.post, iso = (R) => Math.max(0, 1 / (R - 1) - (meta.eps || 0.01));
       this.calibrated = !!p;
       this.texel = 2 / ((meta.planes_res || 128) - 1);              // one texel of this export's planes (normal, curvature)
+      // meta.trunc: how far from the surface the decoder's distances were trained when its loss clamps both sides (arch3:
+      // 0.05). Beyond it a value only says "outside", so the field is read truncated at 0.1 and a step stays within
+      // 0.9 x trunc: a 128^3 trace then misses 0.2 % of the object's pixels against a dense march (unbounded: 99.5 %,
+      // 0.09: 1.2 %). Exports without it (v1: the prediction itself learnt the 0.1 truncation) trace as before
+      const tr = meta.trunc;
+      this.far = tr ? 0.1 : 1e4; this.step = tr ? 0.9 * tr : 1e4;
       this.levels = p ? [64, 96, 128].map((R) => [R, p['R' + R].T_k0 - iso(R)]) : meta.arch === 'v2' ? [[64, 0], [96, 0], [128, 0]] : V1_LEVELS;
     }
 
@@ -216,7 +225,7 @@
         const T = Math.max(0, 1 / (R - 1) - this.eps) + d;
         return this.calibrated ? T : Math.max(0, T);     // meta.post: exactly the T the notebook scored; v1 table: clamped
       };
-      gl.uniform1f(u.uIso, iso(a.R) + (iso(b.R) - iso(a.R)) * t); gl.uniform1f(u.uDetail, this.detail || 0); gl.uniform1f(u.uTexel, this.texel);
+      gl.uniform1f(u.uIso, iso(a.R) + (iso(b.R) - iso(a.R)) * t); gl.uniform1f(u.uDetail, this.detail || 0); gl.uniform1f(u.uTexel, this.texel); gl.uniform1f(u.uFar, this.far); gl.uniform1f(u.uStep, this.step);
       gl.uniform1f(u.uAspect, iw / ih); gl.uniform1f(u.uTanF, Math.tan(cam.fov / 2));
       gl.uniform3fv(u.uEye, cam.eye); gl.uniformMatrix3fv(u.uRot, false, cam.rot); gl.uniform3fv(u.uKey, cam.key); gl.uniform3fv(u.uPaper, this.paper);
       if (m !== this.march) this.bindNeural(m);

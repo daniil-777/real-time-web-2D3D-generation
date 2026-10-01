@@ -284,7 +284,8 @@
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.deleteFramebuffer(fbo); gl.deleteTexture(tex);
     let e = 0, m = 0;
-    for (let x = 0; x < n; x++) { e += Math.abs(f[4 * x] - ref.sdf[x]); m = Math.max(m, Math.abs(f[4 * x] - gt.sdf[x])); }
+    const L = this.far, cl = (v) => Math.max(-L, Math.min(L, v));   // the field as traced (m3d-render.js: meta.trunc)
+    for (let x = 0; x < n; x++) { e += Math.abs(cl(f[4 * x]) - cl(ref.sdf[x])); m = Math.max(m, Math.abs(cl(f[4 * x]) - cl(gt.sdf[x]))); }
     const Rc = (R + 1) >> 1;
     for (let i = 0; i < R; i += 2) for (let j = 0; j < R; j += 2) for (let k = 0; k < R; k += 2) {
       const x = (i * R + j) * R + k, c = (((i >> 1) * Rc + (j >> 1)) * Rc + (k >> 1)) * 3;

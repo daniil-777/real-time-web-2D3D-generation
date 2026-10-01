@@ -1,0 +1,310 @@
+{
+ "selected": "raw",
+ "eval": {
+  "selected": "raw",
+  "raw": {
+   "iou": {
+    "cb": 0.9133055172587538,
+    "mean": 0.9169867349970325,
+    "p10": 0.783676826953888,
+    "share_ge_0.9": 0.7072243346007605
+   },
+   "sign": {
+    "cb": 0.9383958521321393,
+    "mean": 0.940105810515932,
+    "p10": 0.903961181640625,
+    "share_ge_0.9": 0.9125475285171103
+   },
+   "psnr": {
+    "cb": 22.810445171596996,
+    "mean": 22.722300731853235,
+    "p10": 18.717597714919705,
+    "share_ge_0.9": 1.0
+   }
+  },
+  "ema": {
+   "iou": {
+    "cb": 0.913129272814913,
+    "mean": 0.9167372844593908,
+    "p10": 0.7828174710273743,
+    "share_ge_0.9": 0.7034220532319392
+   },
+   "sign": {
+    "cb": 0.9384422184336946,
+    "mean": 0.9401554160849375,
+    "p10": 0.904058837890625,
+    "share_ge_0.9": 0.9125475285171103
+   },
+   "psnr": {
+    "cb": 22.809032629887984,
+    "mean": 22.720594043513294,
+    "p10": 18.707466492242165,
+    "share_ge_0.9": 1.0
+   }
+  },
+  "surface": {
+   "chamfer": 0.005554509463808244,
+   "p1": 0.8459260317460319,
+   "r1": 0.9930437057737321,
+   "f1": 0.907946192381958,
+   "p2": 0.8791699285714286,
+   "r2": 0.99871705675882,
+   "f2": 0.931062584382024,
+   "nc": 0.9009347725955266,
+   "edge_p": 0.4189234378731914,
+   "edge_r": 0.6578987745720534,
+   "edge_f": 0.4891696358231547
+  },
+  "post": {
+   "R64": {
+    "sel_F1a": 0.7874,
+    "sel_F1b": 0.7874,
+    "F1b_at_grid_edge": false,
+    "R0": 0.73047,
+    "F1a": 0.75102,
+    "F1b": 0.75102,
+    "cfg": {
+     "F1a": {
+      "delta": -0.0055,
+      "kappa": 0.0
+     },
+     "F1b": {
+      "delta": -0.0055,
+      "kappa": 0.0
+     }
+    }
+   },
+   "R96": {
+    "sel_F1a": 0.85148,
+    "sel_F1b": 0.85148,
+    "F1b_at_grid_edge": false,
+    "R0": 0.82838,
+    "F1a": 0.82713,
+    "F1b": 0.82713,
+    "cfg": {
+     "F1a": {
+      "delta": -0.0015,
+      "kappa": 0.0
+     },
+     "F1b": {
+      "delta": -0.0015,
+      "kappa": 0.0
+     }
+    }
+   },
+   "R128": {
+    "sel_F1a": 0.87398,
+    "sel_F1b": 0.87398,
+    "F1b_at_grid_edge": false,
+    "R0": 0.853,
+    "F1a": 0.86025,
+    "F1b": 0.86025,
+    "cfg": {
+     "F1a": {
+      "delta": 0.0005,
+      "kappa": 0.0
+     },
+     "F1b": {
+      "delta": 0.0005,
+      "kappa": 0.0
+     }
+    }
+   },
+   "cont": {
+    "R0": 0.90968,
+    "F1a": 0.90968,
+    "cfg": {
+     "F1a": {
+      "delta": 0.0,
+      "kappa": 0.0
+     }
+    }
+   }
+  }
+ },
+ "qa": {
+  "built": 848,
+  "ok": 789,
+  "dropped": {
+   "fill": 7,
+   "far_pair": 15,
+   "mostly": 30,
+   "timeout": 6,
+   "LoadError": 1
+  },
+  "mean_far_pair": 0.001597,
+  "mean_fill": 0.059745,
+  "mean_sheet_share": 0.158073,
+  "mean_flipped_share": 0.156995,
+  "mean_colour_fallback_share": 0.0,
+  "mean_glass_share": 0.012932,
+  "mean_seconds": 128.947072
+ },
+ "anchors": {
+  "n": 782,
+  "chunks": 98,
+  "classes": 12,
+  "left_out": {
+   "licence": 0,
+   "enclosure": 4,
+   "iou": 3
+  },
+  "iou_mean": 0.9183205990382778,
+  "int8_vs_fp32": {
+   "n": 256,
+   "iou_fp32": 0.9204915162118934,
+   "iou_shipped": 0.9203546969666673,
+   "d_iou_mean": -0.0001778402365744114,
+   "d_iou_min": -0.0065670013427734375,
+   "psnr_fp32": 23.301866224308615,
+   "psnr_shipped": 23.29736025579247,
+   "d_psnr_mean": -0.004105097142651254,
+   "note": "fp32 = the selected fp32 decoder + fp32 latents (autocast as trained); shipped = fp16 weights + int8 anchors, fp32 compute"
+  }
+ },
+ "decoder_params": 1144036,
+ "gflop_per_keyframe": 111.6,
+ "bytes": {
+  "anchors-0.bin.gz": 993075,
+  "anchors-1.bin.gz": 648741,
+  "anchors-10.bin.gz": 650442,
+  "anchors-11.bin.gz": 655499,
+  "anchors-12.bin.gz": 657595,
+  "anchors-13.bin.gz": 646162,
+  "anchors-14.bin.gz": 652796,
+  "anchors-15.bin.gz": 657758,
+  "anchors-16.bin.gz": 652754,
+  "anchors-17.bin.gz": 645043,
+  "anchors-18.bin.gz": 656575,
+  "anchors-19.bin.gz": 653266,
+  "anchors-2.bin.gz": 653012,
+  "anchors-20.bin.gz": 649458,
+  "anchors-21.bin.gz": 652758,
+  "anchors-22.bin.gz": 650409,
+  "anchors-23.bin.gz": 649696,
+  "anchors-24.bin.gz": 650807,
+  "anchors-25.bin.gz": 660942,
+  "anchors-26.bin.gz": 654276,
+  "anchors-27.bin.gz": 650529,
+  "anchors-28.bin.gz": 651047,
+  "anchors-29.bin.gz": 650353,
+  "anchors-3.bin.gz": 657209,
+  "anchors-30.bin.gz": 648421,
+  "anchors-31.bin.gz": 653132,
+  "anchors-32.bin.gz": 657480,
+  "anchors-33.bin.gz": 650609,
+  "anchors-34.bin.gz": 639981,
+  "anchors-35.bin.gz": 650143,
+  "anchors-36.bin.gz": 650523,
+  "anchors-37.bin.gz": 656830,
+  "anchors-38.bin.gz": 657376,
+  "anchors-39.bin.gz": 654528,
+  "anchors-4.bin.gz": 654162,
+  "anchors-40.bin.gz": 645487,
+  "anchors-41.bin.gz": 648904,
+  "anchors-42.bin.gz": 643886,
+  "anchors-43.bin.gz": 658518,
+  "anchors-44.bin.gz": 650455,
+  "anchors-45.bin.gz": 663999,
+  "anchors-46.bin.gz": 649232,
+  "anchors-47.bin.gz": 647895,
+  "anchors-48.bin.gz": 642330,
+  "anchors-49.bin.gz": 659323,
+  "anchors-5.bin.gz": 650347,
+  "anchors-50.bin.gz": 652878,
+  "anchors-51.bin.gz": 645286,
+  "anchors-52.bin.gz": 656327,
+  "anchors-53.bin.gz": 641248,
+  "anchors-54.bin.gz": 647406,
+  "anchors-55.bin.gz": 648599,
+  "anchors-56.bin.gz": 658339,
+  "anchors-57.bin.gz": 656135,
+  "anchors-58.bin.gz": 655849,
+  "anchors-59.bin.gz": 650504,
+  "anchors-6.bin.gz": 655391,
+  "anchors-60.bin.gz": 650473,
+  "anchors-61.bin.gz": 662137,
+  "anchors-62.bin.gz": 656902,
+  "anchors-63.bin.gz": 659121,
+  "anchors-64.bin.gz": 657807,
+  "anchors-65.bin.gz": 657503,
+  "anchors-66.bin.gz": 655578,
+  "anchors-67.bin.gz": 653401,
+  "anchors-68.bin.gz": 652097,
+  "anchors-69.bin.gz": 649319,
+  "anchors-7.bin.gz": 649456,
+  "anchors-70.bin.gz": 652699,
+  "anchors-71.bin.gz": 645426,
+  "anchors-72.bin.gz": 657778,
+  "anchors-73.bin.gz": 637180,
+  "anchors-74.bin.gz": 651094,
+  "anchors-75.bin.gz": 651747,
+  "anchors-76.bin.gz": 645590,
+  "anchors-77.bin.gz": 653323,
+  "anchors-78.bin.gz": 651429,
+  "anchors-79.bin.gz": 652130,
+  "anchors-8.bin.gz": 644077,
+  "anchors-80.bin.gz": 652300,
+  "anchors-81.bin.gz": 650534,
+  "anchors-82.bin.gz": 656926,
+  "anchors-83.bin.gz": 638327,
+  "anchors-84.bin.gz": 644023,
+  "anchors-85.bin.gz": 644685,
+  "anchors-86.bin.gz": 646794,
+  "anchors-87.bin.gz": 648003,
+  "anchors-88.bin.gz": 661639,
+  "anchors-89.bin.gz": 643456,
+  "anchors-9.bin.gz": 656783,
+  "anchors-90.bin.gz": 655573,
+  "anchors-91.bin.gz": 655487,
+  "anchors-92.bin.gz": 658515,
+  "anchors-93.bin.gz": 653308,
+  "anchors-94.bin.gz": 649404,
+  "anchors-95.bin.gz": 652872,
+  "anchors-96.bin.gz": 647605,
+  "anchors-97.bin.gz": 162003,
+  "decoder.bin.gz": 2124316,
+  "map.json": 224099,
+  "meta.json": 41204,
+  "ref.json": 647302,
+  "report.json": 7286,
+  "sources.json": 209494
+ },
+ "first_load_bytes": 3158595,
+ "verify": {
+  "weights_equal": true,
+  "anchors_equal": true,
+  "ref_max_abs_err": 5.364418029785156e-07,
+  "n_anchors": 782,
+  "ok": true
+ },
+ "train": {
+  "batch": 16,
+  "points": 65536,
+  "minutes": 360.0,
+  "steps": 36462,
+  "plan": 48303,
+  "total": 36462,
+  "epochs": 739.41,
+  "rollbacks": 0,
+  "lr_scale": 1.0,
+  "t_train_min": 253.2,
+  "data": "/content/arch3/data",
+  "early_stop": {
+   "cool": {
+    "s0": 35012,
+    "ep0": 710.0025348542459,
+    "f0": 0.22646157646362824,
+    "steps": 1450
+   },
+   "best_step": 35999,
+   "patience": 20.0,
+   "eval_every": 5,
+   "min_epochs": 200,
+   "min_delta_iou": 0.0005,
+   "min_delta_psnr": 0.05,
+   "cooldown": 0
+  }
+ },
+ "step": 36462
+}

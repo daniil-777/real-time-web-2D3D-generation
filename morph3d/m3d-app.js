@@ -92,8 +92,10 @@
     const fast = st.backend === 'webgpu' && qs.get('fast') !== '0';
     // HD (?hd=1, the HD button, h): a resting object's grid at 256^3 (WebGPU kernel or WebGL shaders), plus curvature
     // shading (?detail=0..3 sets that on its own). A narrow band runs the network only within tau of the coarse 64^3
-    // surface (research/hd256: lossless from tau 0.04, ~15% of the voxels), so 256^3 costs what a dense 160^3 did
-    const BAND = { Rg: 64, tau: 0.06 }, hiBase = resHi, band = (R) => (R > 192 ? BAND : null);
+    // surface (research/hd256: lossless from tau 0.04, ~15% of the voxels), so 256^3 costs what a dense 160^3 did.
+    // A meta.trunc export (arch3) is far from Lipschitz past its band: the coarse values are clamped to 0.1 and tau is
+    // 0.08 -- 0.01-0.04 % of the inside voxels differ from the dense 256^3 grid (unclamped at 0.06: 1-5 %, holes in walls)
+    const BAND = meta.trunc ? { Rg: 64, tau: 0.08, lim: 0.1 } : { Rg: 64, tau: 0.06 }, hiBase = resHi, band = (R) => (R > 192 ? BAND : null);
     const grid = (P, R) => (fast ? model.gridGPU(P, R, band(R)) : model.grid(P, R));
     const glgrid = st.backend === 'webgl' && qs.get('glgrid') !== '0' && R3.gridInit(model);
     st.fast = fast; st.glgrid = !!glgrid;
@@ -140,7 +142,9 @@
         if (neural) Object.assign(st, await R3.neuralCheck(P, ref, gt)     // the per-pixel field on the same grid
           .catch((e) => { st.warnings.push('per-pixel check: ' + ((e && e.message) || e)); return {}; }));
         P.dispose();
-        let e = 0, f = 0; for (let i = 0; i < g.sdf.length; i++) { e += Math.abs(g.sdf[i] - ref.sdf[i]); f = Math.max(f, Math.abs(g.sdf[i] - gt.sdf[i])); }
+        // sdf compared as the renderer reads it: a meta.trunc export's far field (hundreds, stored as float16) is clamped
+        const L = R3.far, cl = (v) => Math.max(-L, Math.min(L, v));
+        let e = 0, f = 0; for (let i = 0; i < g.sdf.length; i++) { e += Math.abs(cl(g.sdf[i]) - cl(ref.sdf[i])); f = Math.max(f, Math.abs(cl(g.sdf[i]) - cl(gt.sdf[i]))); }
         for (let i = 0; i < g.rgb.length; i++) f = Math.max(f, Math.abs(g.rgb[i] - gt.rgb[i]));
         st.refErr = e / g.sdf.length; st.fastVsTfjs = f;
         const want = ref.rgb_mean_c2 || ref.rgb_mean, mean = [0, 0, 0], n3 = g.rgb.length / 3;   // colour vs PyTorch too

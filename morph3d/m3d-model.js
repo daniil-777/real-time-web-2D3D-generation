@@ -164,6 +164,7 @@
     // buffer directly. band = { Rg, tau }: narrow band (MISE-style) -- a dense Rg^3 pass first, then the R^3 grid in 4x4x4
     // bricks where only points whose coarse (trilinear) value lies within tau of the surface run the network; the rest
     // keep the coarse value. tau above sqrt(3) x the coarse spacing keeps every surface (the field is ~1-Lipschitz).
+    // band.lim (a meta.trunc export, whose field is not Lipschitz beyond its band): coarse values are read clamped to it.
     async gridGPU(P, R, band) {
       const dev = tf.backend().device, f = this.gpuField(), CH = f.CH;
       if (!this.gp) {
@@ -176,7 +177,7 @@
           @group(0) @binding(3) var<storage, read_write> Cc: array<f32>;
           @group(0) @binding(4) var<uniform> U: vec4<u32>;             // R, colour-grid size, threads, dispatch width
           @group(0) @binding(5) var<storage, read> Co: array<f32>;     // band: the coarse sdf grid
-          @group(0) @binding(6) var<uniform> V: vec4<u32>;             // mode (0 dense, 1 band), coarse size, tau bits, -
+          @group(0) @binding(6) var<uniform> V: vec4<u32>;             // mode (0 dense, 1 band), coarse size, tau bits, lim bits
           const CH = ${CH}u;
           ${f.code}
           @compute @workgroup_size(64) fn main(@builtin(global_invocation_id) id: vec3<u32>) {
@@ -195,9 +196,12 @@
               let x = f32(i) * s; let y = f32(j) * s; let z = f32(k) * s;
               let x0 = min(u32(x), Rg - 2u); let y0 = min(u32(y), Rg - 2u); let z0 = min(u32(z), Rg - 2u);
               let fx = x - f32(x0); let fy = y - f32(y0); let fz = z - f32(z0);
-              let o0 = (x0 * Rg + y0) * Rg + z0; let o1 = o0 + Rg * Rg;
-              let cv = mix(mix(mix(Co[o0], Co[o0 + 1u], fz), mix(Co[o0 + Rg], Co[o0 + Rg + 1u], fz), fy),
-                           mix(mix(Co[o1], Co[o1 + 1u], fz), mix(Co[o1 + Rg], Co[o1 + Rg + 1u], fz), fy), fx);
+              let o0 = (x0 * Rg + y0) * Rg + z0; let o1 = o0 + Rg * Rg; let L = bitcast<f32>(V.w);
+              let c000 = clamp(Co[o0], -L, L); let c001 = clamp(Co[o0 + 1u], -L, L);
+              let c010 = clamp(Co[o0 + Rg], -L, L); let c011 = clamp(Co[o0 + Rg + 1u], -L, L);
+              let c100 = clamp(Co[o1], -L, L); let c101 = clamp(Co[o1 + 1u], -L, L);
+              let c110 = clamp(Co[o1 + Rg], -L, L); let c111 = clamp(Co[o1 + Rg + 1u], -L, L);
+              let cv = mix(mix(mix(c000, c001, fz), mix(c010, c011, fz), fy), mix(mix(c100, c101, fz), mix(c110, c111, fz), fy), fx);
               if (abs(cv) > bitcast<f32>(V.z)) {
                 S[g] = cv;
                 if (even) { Cc[gc] = 0.5; Cc[gc + 1u] = 0.5; Cc[gc + 2u] = 0.5; }
@@ -231,14 +235,14 @@
       };
       const Rc = (R + 1) >> 1, n = R * R * R, nc = Rc * Rc * Rc * 3, bf = bufsFor(R), temps = [];
       const enc = dev.createCommandEncoder(), pass = enc.beginComputePass();
-      const tauBits = new Uint32Array(new Float32Array([band ? band.tau : 0]).buffer)[0];
+      const [tauBits, limBits] = new Uint32Array(new Float32Array([band ? band.tau : 0, (band && band.lim) || 1e4]).buffer);
       const run = (r, b, co) => {                                      // the field kernel over r^3 into b; co: band source
         const Pr = r === P.shape[1] ? P : tf.image.resizeBilinear(P, [r, r], true), src = Pr.dataToGPU();
         temps.push([Pr, src]);
         const nb = (r + 3) >> 2, threads = co ? nb * nb * nb * 64 : r * r * r;
         const groups = Math.ceil(threads / 64), gx = Math.min(groups, 65535), gy = Math.ceil(groups / gx);
         dev.queue.writeBuffer(b.u, 0, new Uint32Array([r, (r + 1) >> 1, threads, gx * 64]));
-        dev.queue.writeBuffer(b.v, 0, new Uint32Array([co ? 1 : 0, band ? band.Rg : 0, tauBits, 0]));
+        dev.queue.writeBuffer(b.v, 0, new Uint32Array([co ? 1 : 0, band ? band.Rg : 0, tauBits, limBits]));
         const bind = dev.createBindGroup({ layout: this.gp.pipe.getBindGroupLayout(0), entries: [
           { binding: 0, resource: { buffer: src.buffer, size: 3 * r * r * CH * 4 } }, { binding: 1, resource: { buffer: this.gp.wbuf } },
           { binding: 2, resource: { buffer: b.s } }, { binding: 3, resource: { buffer: b.c } }, { binding: 4, resource: { buffer: b.u } },
