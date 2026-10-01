@@ -236,6 +236,13 @@
     knob.style.setProperty('--kw', t.offsetWidth + 'px');
   }
 
+  // ?model= names a model folder of ONE app (3D: model-arch3, drawings: model-hq): a view gets it only when its app has
+  // that folder (one HEAD request), so a link to a 3D model does not stop the drawings with "meta.json 404", or back
+  const modelQ = new URLSearchParams(location.search).get('model'), modelIn = {};
+  const hasModel = (view) => !modelQ ? Promise.resolve(true) : modelIn[view] || (modelIn[view] =
+    !/^([a-z]+:)?\/\//i.test(modelQ) && !modelQ.startsWith('/') && /^[\w.\/-]+$/.test(modelQ)
+      ? fetch(VIEWS[view].src + modelQ + '/meta.json', { method: 'HEAD' }).then((r) => r.ok, () => false) : Promise.resolve(false));
+
   // the app runs in a fresh iframe per view: the old one is removed outright (its GPU context goes with it), and a new
   // element adds no history entries (a changed src would)
   function show(view) {
@@ -247,14 +254,17 @@
     document.querySelectorAll('.copy').forEach((c) => c.setAttribute('aria-hidden', c.dataset.view !== view));
     stage.setAttribute('aria-labelledby', 'tab-' + view);
     $('#loadText').textContent = v.load; live('load', 'Loading…');
-    const q = new URLSearchParams(location.search); q.set('embed', '1');
-    $('#full').href = v.src + (location.search || '');
     placeKnob();
     stage.classList.add('busy');
     if (location.hash.slice(1) !== view) history.replaceState(null, '', '#' + view);
     const old = frame;
-    setTimeout(() => {
+    setTimeout(async () => {
+      const ok = await hasModel(view);
       if (my !== token) return;
+      const q = new URLSearchParams(location.search);
+      if (!ok) q.delete('model');
+      $('#full').href = v.src + (q.toString() ? '?' + q.toString() : '');
+      q.set('embed', '1');
       if (old) old.remove();
       frame = document.createElement('iframe');
       frame.title = v.title; frame.allow = 'fullscreen; autoplay';
