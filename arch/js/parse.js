@@ -5,7 +5,7 @@
 //   parse(text) → { spec, interpretation, confidence, unknown, outOfScope, message, suggestions, warnings }
 // spec holds only what the text states or clearly implies (plus element); normalize() fills the rest.
 
-import { ENTRIES, GROUPS, UNITS, DEGREE_WORDS, NUMBER_MORPHEMES, fold, foldPlain } from './lexicon.js';
+import { ENTRIES, GROUPS, UNITS, DEGREE_WORDS, NUMBER_MORPHEMES, COMMON_WORDS, fold, foldPlain } from './lexicon.js';
 import { normalize, DEFAULTS, SCHEMA } from './spec.js';
 import { describe } from './describe.js';
 
@@ -46,6 +46,8 @@ for (const [lang, forms, m] of ENTRIES) {
   }
 }
 for (const u of [...Object.keys(UNITS), ...DEGREE_WORDS]) addForm([u], '*', { fill: true, unitWord: true });
+// everyday words are known (so never typo-corrected into architecture) but carry no meaning
+for (const w of COMMON_WORDS) { const f = fold(w); if (f.length >= 3 && !WORDS.has(f)) addForm([f], '*', { word: true }); }
 for (const arr of PHRASES.values()) arr.sort((x, y) => y.words.length - x.words.length);
 const isFunction = (m) => m.stop || m.prep || m.negator || m.corr || m.most;
 function letterMask(w) { let m = 0; for (let i = 0; i < w.length; i++) { const c = w.charCodeAt(i) - 97; if (c >= 0 && c < 26) m |= 1 << c; } return m; }
@@ -53,7 +55,7 @@ function popcount(x) { x -= (x >>> 1) & 0x55555555; x = (x & 0x33333333) + ((x >
 const vowels = (w) => w.replace(/[^aeiouy]/g, '').split('').sort().join('');
 for (const [w, arr] of WORDS) {
   if (w.length < 4 || /\d/.test(w)) continue;
-  if (arr.every((e) => isFunction(e.m))) continue;
+  if (arr.every((e) => isFunction(e.m) || e.m.word)) continue;
   if (arr.some((e) => e.m.num !== undefined || e.m.mul) && w.length < 6) continue;
   (FUZZY[w.length] ||= []).push({ w, mask: letterMask(w) });
 }
@@ -67,7 +69,7 @@ const DOMES = new Set(GROUPS.dome);
 const STYLE_VALUES = new Set(SCHEMA.style.values);
 const CLASSICAL = new Set(['tuscan', 'doric', 'greek-doric', 'ionic', 'corinthian', 'composite', 'solomonic']);
 const BOUNDARY = new Set([',', ';', '.', ':', '!', '?', '(', ')', '[', ']', '/', '...', '..', '|', '\n', '•']);
-const FOREIGN = new Set(['vehicle', 'animal', 'person', 'furniture', 'food']);
+const FOREIGN = new Set(['vehicle', 'animal', 'person', 'furniture', 'food', 'thing', 'geo']);
 const MAIN_DIM = {
   column: 'height', pilaster: 'height', capital: 'height', base: 'height', pedestal: 'height', baluster: 'height',
   finial: 'height', urn: 'height', obelisk: 'height', spire: 'height', console: 'height', window: 'height', door: 'height',
@@ -94,6 +96,7 @@ function prepare(text) {
     .replace(/[’‘‛′`´]/g, "'").replace(/[”“„″«»]/g, '"').replace(/''/g, '"')
     .replace(/[×✕✖]/g, ' x ').replace(/[−–—]/g, '-').replace(/…/g, '...').replace(/⌀/g, ' ø ')
     .replace(/\bw\/o\b/g, ' without ').replace(/\bw\//g, ' with ')
+    .replace(/\b\d+(?:[.,]\d+)?e[+-]?\d+\b/g, ' ')                  // 1e3: not a size anyone types
     .replace(/\b(st|ste|ss)\.\s?/g, '$1 ')
     .replace(/(\d+)\s?m\s?(\d{1,2})\s?cm\b/g, (_, a, b) => `${a}.${b.padStart(2, '0')} m`)   // 1 m 20 cm
     .replace(/\b(\d+)m(\d{2})\b/g, '$1.$2 m')                 // 1m20 (French / Swiss notation)
@@ -162,61 +165,69 @@ function slipCost(a, b) {
 }
 const skeleton = (w) => w.replace(/(.)\1+/g, '$1').replace(/[aeiouy]/g, '');
 
-/** Inflected forms to try: plurals (EN/FR/IT), German adjective endings, Italian/French gender and number. */
+/** Inflected forms to try. Plurals (EN/FR/IT) may leave a 3-letter stem ("arcs" → arc); German endings and Romance
+ *  gender/number swaps need a stem of 5+ letters, so "turn" never becomes "Tür". */
 function variants(f) {
   const out = [];
-  const add = (s) => { if (s.length >= 3 && s !== f && !out.includes(s)) out.push(s); };
-  const L = f.length;
-  if (L < 4) return out;
+  const add = (s, min) => { if (s.length >= min && s !== f && !out.includes(s)) out.push(s); };
+  if (f.length < 4) return out;
+  if (f.endsWith('ies')) add(f.slice(0, -3) + 'y', 3);
+  if (f.endsWith('es')) add(f.slice(0, -2), 3);
+  if (f.endsWith('s')) add(f.slice(0, -1), 3);
+  if (f.endsWith('x')) add(f.slice(0, -1), 4);
   const base = [f];
-  if (f.endsWith('s')) base.push(f.slice(0, -1));
+  if (f.endsWith('s') && f.length > 5) base.push(f.slice(0, -1));
   for (const w of base) {
-    add(w);
-    if (w.endsWith('ies')) add(w.slice(0, -3) + 'y');
-    if (w.endsWith('es')) add(w.slice(0, -2));
-    if (w.endsWith('x')) add(w.slice(0, -1));
-    if (w.endsWith('en') || w.endsWith('em') || w.endsWith('er') || w.endsWith('es')) add(w.slice(0, -2));
-    if (w.endsWith('e') || w.endsWith('n')) add(w.slice(0, -1));
-    if (w.endsWith('nne')) add(w.slice(0, -2));
-    if (w.endsWith('che')) { add(w.slice(0, -3) + 'ca'); add(w.slice(0, -3) + 'co'); }
-    if (w.endsWith('chi')) add(w.slice(0, -3) + 'co');
-    if (w.endsWith('ghe')) add(w.slice(0, -3) + 'ga');
-    if (w.endsWith('i')) { add(w.slice(0, -1) + 'o'); add(w.slice(0, -1) + 'e'); add(w.slice(0, -1) + 'a'); }
-    if (w.endsWith('e')) { add(w.slice(0, -1) + 'a'); add(w.slice(0, -1) + 'o'); }
-    if (w.endsWith('a')) { add(w.slice(0, -1) + 'o'); add(w.slice(0, -1) + 'e'); }
-    if (w.endsWith('ee')) add(w.slice(0, -1));
+    if (/(en|em|er|es)$/.test(w)) add(w.slice(0, -2), 5);
+    if (/[en]$/.test(w)) add(w.slice(0, -1), 5);
+    if (w.endsWith('nne')) add(w.slice(0, -2), 5);
+    if (w.endsWith('che')) { add(w.slice(0, -3) + 'ca', 5); add(w.slice(0, -3) + 'co', 5); }
+    if (w.endsWith('chi')) add(w.slice(0, -3) + 'co', 5);
+    if (w.endsWith('ghe')) add(w.slice(0, -3) + 'ga', 5);
+    if (w.endsWith('i')) for (const x of 'oea') add(w.slice(0, -1) + x, 5);
+    if (w.endsWith('e')) for (const x of 'ao') add(w.slice(0, -1) + x, 5);
+    if (w.endsWith('a')) for (const x of 'oe') add(w.slice(0, -1) + x, 5);
+    if (w.endsWith('ee')) add(w.slice(0, -1), 5);
   }
-  return out.filter((v) => v !== f);
+  return out;
 }
 
+const LOOKUP_CACHE = new Map();
 function lookupWord(f) {
   const direct = WORDS.get(f);
   if (direct) return { cands: direct, via: 'exact' };
-  for (const v of variants(f)) { const c = WORDS.get(v); if (c) return { cands: c, via: 'variant' }; }
-  return null;
+  if (LOOKUP_CACHE.has(f)) return LOOKUP_CACHE.get(f);
+  let r = null;
+  for (const v of variants(f)) { const c = WORDS.get(v); if (c) { r = { cands: c, via: 'variant' }; break; } }
+  if (LOOKUP_CACHE.size > 20000) LOOKUP_CACHE.clear();
+  LOOKUP_CACHE.set(f, r);
+  return r;
 }
 
-/** Split a (German) compound into known parts, head last: "Walmdach" → walm + dach. */
+/** Split a German compound into known parts, head last: "Walmdach" → walm + dach, "Rundbogenarkade" → rund + bogen + arkade.
+ *  The head must be a German (or shared) word and every known part German or shared, so English words such as
+ *  "baseball" (base + ball) or "database" are never split. */
+const germanish = (w) => /(sch|tz|ck|ae|oe|ue|ss|ei|ie|ch)/.test(w);
+const isDe = (cands) => cands && cands.some((c) => (c.lang === 'de' || (c.lang === '*' && (c.m.el || c.m.mat || c.m.ord || c.m.os || c.m.sty))) && !isFunction(c.m) && !c.m.word);
 function splitCompound(f, depth = 0) {
   if (f.length < 6 || depth > 2) return null;
   for (let i = 2; i <= f.length - 3; i++) {
     const head = f.slice(i), pre = f.slice(0, i);
     if (head.length < 3) break;
     const h = lookupWord(head);
-    if (!h || h.cands.every((c) => isFunction(c.m))) continue;
-    const hm = h.cands.find((c) => c.lang === 'de' || c.lang === '*') || h.cands[0];
-    const preExact = WORDS.get(pre);
-    // German compounds; other languages only as two exact words ("hiproof")
-    if (!(hm.lang === 'de' || hm.lang === '*' || head.length >= 5 || (preExact && h.via === 'exact' && pre.length >= 3 && !preExact.every((c) => isFunction(c.m))))) continue;
+    if (!h || !isDe(h.cands)) continue;
     // prefix, with linking elements (Säule-n-, Dreieck-s-, Triglyph-en-)
     for (const p of [pre, pre.replace(/s$/, ''), pre.replace(/n$/, ''), pre.replace(/en$/, ''), pre.replace(/es$/, ''), pre.replace(/e$/, '')]) {
       if (p.length < 3) continue;
       const q = lookupWord(p);
-      if (q && !q.cands.every((c) => isFunction(c.m))) return [{ f: p, cands: q.cands }, { f: head, cands: h.cands }];
+      if (q && isDe(q.cands)) return [{ f: p, cands: q.cands }, { f: head, cands: h.cands }];
+      if (q) continue;
       const deeper = splitCompound(p, depth + 1);
       if (deeper) return [...deeper, { f: head, cands: h.cands }];
     }
-    if (h.via === 'exact' && h.cands.some((c) => c.m.el) && pre.length >= 3 && head.length >= 5) return [{ f: pre, cands: null }, { f: head, cands: h.cands }];
+    // an unknown modifier in front of a German element noun: "Glasdach", "Eckpilaster"
+    if (h.via === 'exact' && h.cands.some((c) => c.m.el && (c.lang === 'de' || c.lang === '*')) && pre.length >= 3 && !WORDS.get(pre)
+      && (head.length >= 5 || germanish(f))) return [{ f: pre, cands: null }, { f: head, cands: h.cands }];
   }
   return null;
 }
@@ -230,10 +241,12 @@ function fuzzyLookup(f, maxD = 2) {
     if (!bucket) continue;
     for (const { w, mask } of bucket) {
       if (popcount(fmask ^ mask) > 2 * maxD) continue;   // letter sets too different for maxD edits
-      // a four-letter word is only reached through a doubled consonant ("rooff", "domme"), never "steep" → step
-      if (w.length < 5 && !(f.length === w.length + 1 && [...f].some((c, i) => !/[aeiouy]/.test(c) && f[i - 1] === c && f.slice(0, i) + f.slice(i + 1) === w))) continue;
+      // a four-letter word is only reached through a doubled consonant ("rooff") or two swapped neighbours of an
+      // element or feature noun ("arhc" → arch, "dmoe" → dome); never "steep" → step
+      const swap4 = w.length === 4 && f.length === 4 && slipCost(f, w) === 0.5 && dl(f, w, 1) === 1 && WORDS.get(w).some((e) => e.m.el || e.m.cls);
+      if (w.length < 5 && !swap4 && !(f.length === w.length + 1 && [...f].some((c, i) => !/[aeiouy]/.test(c) && f[i - 1] === c && f.slice(0, i) + f.slice(i + 1) === w))) continue;
       const L = Math.max(w.length, f.length);
-      let k = Math.min(maxD, L >= 9 ? 2 : L >= 5 ? 1 : 0);
+      let k = Math.min(maxD, L >= 9 ? 2 : L >= 5 || swap4 ? 1 : 0);
       if (!k) continue;
       if (k === 2 && w[0] !== f[0]) k = 1;
       const d = dl(f, w, k);
@@ -245,13 +258,13 @@ function fuzzyLookup(f, maxD = 2) {
       if (cost < bestD || (cost === bestD && (rank < bestRank || (rank === bestRank && sim > bestSim)))) { best = w; bestD = cost; bestRank = rank; bestSim = sim; }
     }
   }
-  if (best) return { cands: WORDS.get(best), via: 'fuzzy', to: best, d: Math.ceil(bestD) };
+  if (best) return { cands: WORDS.get(best), via: 'fuzzy', to: best, d: Math.ceil(bestD), cost: bestD };
   // same consonant skeleton (vowel slips: "copula" → cupola)
   if (f.length >= 5 && maxD >= 2) {
     const sk = skeleton(f), vw = vowels(f);
     for (const { w, mask } of FUZZY[f.length] || []) {
       if (mask !== fmask || w[0] !== f[0]) continue;
-      if (skeleton(w) === sk && vowels(w) === vw && WORDS.get(w).some((e) => e.m.el || e.m.ord || e.m.os)) return { cands: WORDS.get(w), via: 'fuzzy', to: w, d: 2 };
+      if (skeleton(w) === sk && vowels(w) === vw && WORDS.get(w).some((e) => e.m.el || e.m.ord || e.m.os)) return { cands: WORDS.get(w), via: 'fuzzy', to: w, d: 2, cost: 2 };
     }
   }
   return null;
@@ -404,11 +417,22 @@ function readNumbers(toks, warnings) {
           if (b && b.k === 'w' && ['a', 'un', 'ein'].includes(b.f) && c && c.k === 'w' && ['half', 'halb'].includes(c.f)) return 3;
         }
         return 0; };
-      let h = half(end + 1);
-      if (h && v !== null) { v += 0.5 * (unit && !unit.deg ? unit.factor : 1); end += h; }
-      else if (!unit && (h = half(idx + 1))) {
-        const u2 = readUnit(toks, idx + 1 + h);
-        if (u2 && !u2.deg) { v = ((tok.word ? tok.val : parseNum(tok.s, u2.factor)) + 0.5) * u2.factor; unit = u2; end = idx + h + u2.n; }
+      const h = half(end + 1);
+      if (h && v !== null) {
+        end += h;
+        const u2 = unit ? null : readUnit(toks, end + 1);
+        if (u2 && !u2.deg) { unit = u2; v = (v + 0.5) * u2.factor; end += u2.n; }
+        else v += 0.5 * (unit && !unit.deg ? unit.factor : 1);
+      } else if (unit && unit.factor === 1 && v !== null) {
+        // "1 m 20", "trois mètres cinquante", "tre metri e cinquanta": the centimetres after the metres
+        let j = end + 1;
+        const conj = toks[j] && toks[j].k === 'w' && ['e', 'et', 'und', 'and'].includes(toks[j].f);
+        if (conj) j++;
+        const c = toks[j], after = toks[j + 1];
+        const cv = c && c.k === 'n' ? (c.word ? c.val : /^\d{1,2}$/.test(c.s) ? +c.s : null) : null;
+        const free = !after || (after.k === 'p' && !["'", '"', '-', '/'].includes(after.s))
+          || (after.k === 'w' && !UNITS[after.f] && !['x', 'by', 'per', 'sur', 'mal', 'auf', 'times'].includes(after.f) && !(WORDS.get(after.f) || []).some((e) => e.m.cnt || e.m.el));
+        if (cv !== null && cv > 0 && cv < 100 && Number.isInteger(cv) && free && !c.used && c.p >= toks[end].e) { v += cv / 100; end = j; }
       }
       return { v, unit, end, raw: tok.word ? String(tok.val) : tok.s, int: tok.word || /^\d+$/.test(tok.s) };
     };
@@ -486,14 +510,14 @@ function annotate(toks) {
     const look = lookupWord(t.f);
     if (look) { out.push({ ...t, cands: look.cands, via: look.via }); continue; }
     const near = fuzzyLookup(t.f, 1);
-    if (near) { out.push({ ...t, cands: near.cands, via: 'fuzzy', to: near.to }); continue; }
+    if (near) { out.push({ ...t, cands: near.cands, via: 'fuzzy', to: near.to, fcost: near.cost }); continue; }
     const parts = splitCompound(t.f);
     if (parts) {
       parts.forEach((q, n) => out.push({ ...t, f: q.f, cands: q.cands, via: 'compound', comp: true, compLast: n === parts.length - 1, compPart: n }));
       continue;
     }
     const fz = fuzzyLookup(t.f);
-    if (fz) { out.push({ ...t, cands: fz.cands, via: 'fuzzy', to: fz.to }); continue; }
+    if (fz) { out.push({ ...t, cands: fz.cands, via: 'fuzzy', to: fz.to, fcost: fz.cost }); continue; }
     out.push({ ...t, cands: null });
   }
   return out;
@@ -552,8 +576,10 @@ export function parse(text) {
   for (const t of toks) {
     if (t.k !== 'w') continue;
     t.m = t.used ? null : resolveMeaning(t.cands, lang);
+    if (t.m && t.m.word) { t.m = null; t.common = true; }   // an ordinary word: never corrected into an element
     if (t.s === 'à' || (t.f === 'a' && (lang === 'fr' || lang === 'it') && !t.used)) t.m = { prep: 'w' };
   }
+  if (/\d(?:[.,]\d+)?e[+-]?\d/i.test(raw)) warnings.push('numbers written with an exponent (1e3) are not read');
   // "no," / "non," / "nein," / "no wait" are corrections, not negations
   for (let i = 0; i < toks.length; i++) {
     const t = toks[i];
@@ -603,7 +629,7 @@ function chunkUp(S) {
     if (t.used && t.used !== 'num') { t.chunk = cur; return; }
     if (t.k === 'p' && BOUNDARY.has(t.s)) { open('main'); t.chunk = cur; return; }
     if (t.k === 'w' && t.m) {
-      if (t.m.corr) { seg++; open('main', { corr: true }); t.chunk = cur; return; }
+      if (t.m.corr) { seg++; (S.corrPos ||= {})[seg] = i; open('main', { corr: true }); t.chunk = cur; return; }
       if (t.m.prep) {
         const type = t.m.prep === 'and' ? cur.type : t.m.prep === 'but' ? 'main' : t.m.prep;
         open(type, { top: !!t.m.top, prepTok: i });
@@ -690,7 +716,48 @@ function impliedCandidates(S, onlyMain) {
   return out;
 }
 
+const METAPHOR = new Set(['vehicle', 'animal', 'person', 'furniture', 'food', 'thing', 'geo']);
+const CUE_KEYS = ['el', 'ord', 'os', 'sty', 'mat', 'set', 'ctx', 'mod', 'cnt', 'vag', 'dim', 'imp', 'top', 'land', 'place', 'oos', 'fl', 'colCue', 'frontCue', 'temple'];
 function chooseHead(S) {
+  const { toks } = S;
+  const live = (t) => t.k === 'w' && t.m && !t.neg;
+  const flag = (f) => toks.some((t) => live(t) && t.m[f]);
+  let h = chooseHeadCore(S);
+  // a portico by meaning: "the front of a Greek temple", "a classical columned front", "Tempel mit sechs Säulen"
+  const colNoun = toks.some((t) => isEl(t) && (t.m.el === 'column' || t.m.el === 'pilaster'));
+  const temple = flag('temple'), front = flag('frontCue'), columned = flag('colCue');
+  const otherEl = h.el && h.via === 'noun' && !['column', 'pilaster'].includes(h.el);
+  if (!otherEl && ((temple && (front || columned || colNoun)) || (columned && front))) {
+    return { el: 'portico', tok: -1, via: 'implied', impTok: toks.findIndex((t) => live(t) && (t.m.temple || t.m.colCue || t.m.frontCue)) };
+  }
+  if (h.oos || h.tok < 0) {
+    if (!h.oos && h.impTok >= 0 && needsCue(toks[h.impTok]) && !hasCue(S, h.impTok)) return { oos: true, reason: 'unknown', hint: h.el };
+    return h;
+  }
+  const ht = toks[h.tok];
+  // a corrected word needs another architectural cue ("basil" is not a base, "chapter 4" not a capital), unless the
+  // slip is a swap / doubled letter, or a single edit of a long word ("pedastal")
+  if (needsCue(ht) && !hasCue(S, h.tok)) return { oos: true, reason: 'unknown', hint: h.el };
+  // figures of speech: "column of smoke", "the capital of France", "a newspaper column", "pillar of the community"
+  const next = toks.slice(h.tok + 1).find((q) => !(q.used && q.used !== 'num') && !(q.k === 'w' && q.m && q.m.stop));
+  if (next && next.k === 'w' && next.m && next.m.prep === 'o') {
+    const ofNoun = toks.find((q) => q.chunk === next.chunk && q.k === 'w' && q.m && (METAPHOR.has(q.m.oos) || q.m.metaY));
+    if (ofNoun) return { oos: true, reason: 'figure', word: `${ht.s} ${next.s} ${ofNoun.s}` };
+  }
+  const prev = toks[h.tok - 1];
+  if (prev && prev.k === 'w' && prev.m && prev.m.oos === 'thing' && prev.chunk === ht.chunk) return { oos: true, reason: 'figure', word: `${prev.s} ${ht.s}` };
+  if (ht.m.pierWarn) h.warn = 'a free-standing pier is built as a square pier (pilaster)';
+  return h;
+}
+
+const needsCue = (t) => t.fcost >= 1 && !(t.fcost === 1 && t.f.length >= 7);
+/** Is there anything architectural besides token `skip`? (a unit size, an order, a material, a feature, …) */
+function hasCue(S, skip) {
+  if (S.meas.some((m) => !m.bare && !m.deg)) return true;
+  return S.toks.some((t, i) => i !== skip && t.k === 'w' && t.m && !t.m.stop && !t.m.fill && !t.m.prep && CUE_KEYS.some((k) => t.m[k] !== undefined) && !FOREIGN.has(t.m.oos));
+}
+
+function chooseHeadCore(S) {
   const { toks, chunks } = S;
   // element nouns in main chunks; a later correction segment overrides an earlier one
   let elTok = -1, elSeg = -1;
@@ -712,7 +779,9 @@ function chooseHead(S) {
     const nm = toks[headNoun].m, cat = nm.land ? 'building' : nm.oos;
     if (FOREIGN.has(cat)) {
       const support = toks.findIndex((t) => isEl(t) && (t.chunkType === 'on' || t.chunkType === 'un'));
-      if (support < 0) return { oos: true, reason: cat, word: toks[headNoun].s, tokIdx: headNoun };
+      const before = toks[headNoun - 1];
+      const word = before && before.k === 'w' && before.m && before.m.el && before.chunk === toks[headNoun].chunk ? `${before.s} ${toks[headNoun].s}` : toks[headNoun].s;
+      if (support < 0) return { oos: true, reason: cat, word, tokIdx: headNoun };
       return { el: toks[support].m.el, tok: support, via: 'support', warn: `only the ${toks[support].m.el} is built; “${toks[headNoun].s}” is not something this tool makes` };
     }
     if (anyEl >= 0) {
@@ -889,39 +958,41 @@ function bindCounts(S) {
     const meas = toks[mIdx].meas;
     meas.usedAs = 'count';
     const n = meas.vals[0];
-    countTo(S, cnt, t.m.el, n, i);
+    const field = countTo(S, cnt, t.m.el, n, i);
+    if (field) (S.numLog ||= []).push({ pos: mIdx, field, kind: 'count' });
   });
 }
 function countable(m) { return m.bare && !m.usedAs && m.vals.length === 1 && Number.isInteger(m.vals[0]) && m.vals[0] >= 0 && m.vals[0] <= 1000; }
 
+/** Puts a count on the field it means for this head; returns that field (or null when the count is not used). */
 function countTo(S, cnt, nounEl, n, pos) {
   const head = S.head;
   switch (cnt) {
     case 'columns':
-      if (head === 'portico') put(S, 'columns', n, 3, pos);
-      else if (head === 'arcade' && n >= 2) { put(S, 'bays', n - 1, 3, pos); S.notes.push(`${n} columns → ${n - 1} bays`); }
-      else if (head === 'arch' || head === 'arcade') put(S, 'supports', 'columns', 3, pos);
-      else if (n >= 2 && head === 'column' && S.toks.some((q) => isEl(q) && q.m.el === 'portico')) { S.head = 'portico'; put(S, 'columns', n, 3, pos); }
-      else if (n >= 2 && (head === 'column' || head === 'pilaster')) S.notes.push(`one ${head} is built (the request named ${n})`);
-      break;
+      if (head === 'portico') { put(S, 'columns', n, 3, pos); return 'columns'; }
+      if (head === 'arcade' && n >= 2) { put(S, 'bays', n - 1, 3, pos); S.notes.push(`${n} columns → ${n - 1} bays`); return 'bays'; }
+      if (head === 'arch' || head === 'arcade') { put(S, 'supports', 'columns', 3, pos); return null; }
+      if (n >= 2 && head === 'column' && S.toks.some((q) => isEl(q) && q.m.el === 'portico')) { S.head = 'portico'; put(S, 'columns', n, 3, pos); return 'columns'; }
+      if (n >= 2 && (head === 'column' || head === 'pilaster')) S.notes.push(`one ${head} is built (the request named ${n})`);
+      return null;
     case 'balusters':
       if (head === 'baluster' && n >= 2) { S.head = 'balustrade'; S.notes.push(`${n} balusters → a balustrade`); }
-      if (S.head === 'balustrade') put(S, 'balusters', n, 3, pos);
-      break;
+      if (S.head === 'balustrade') { put(S, 'balusters', n, 3, pos); return 'balusters'; }
+      return null;
     case 'bays':
       if (head === 'arch' && n >= 2) { S.head = 'arcade'; S.notes.push(`${n} arches → an arcade`); }
-      if (S.head === 'arcade') put(S, 'bays', n, 3, pos);
-      break;
-    case 'flutes': put(S, 'flutes', n, 3, pos); break;
-    case 'ribs': if (n === 0 || DOMES.has(head)) put(S, 'ribs', n, 3, pos); break;
-    case 'steps': put(S, 'steps', n, 3, pos); break;
+      if (S.head === 'arcade') { put(S, 'bays', n, 3, pos); return 'bays'; }
+      return null;
+    case 'flutes': put(S, 'flutes', n, 3, pos); return 'flutes';
+    case 'ribs': if (n === 0 || DOMES.has(head)) { put(S, 'ribs', n, 3, pos); return 'ribs'; } return null;
+    case 'steps': put(S, 'steps', n, 3, pos); return 'steps';
     case 'sides':
       if (head === 'spire' || head === 'roof') {
         if (n === 8) put(S, 'spireType', 'octagonal', 3, pos);
         else if (n === 4) put(S, head === 'roof' ? 'roofType' : 'spireType', head === 'roof' ? 'hip' : 'square', 3, pos);
       }
-      break;
-    default: break;
+      return null;
+    default: return null;
   }
 }
 
@@ -935,7 +1006,6 @@ function bindMeasures(S) {
   const dimAt = (j) => { const q = toks[j]; return q && q.k === 'w' && q.m && q.m.dim && !usedDim.has(j) ? q.m.dim : null; };
   for (const m of S.meas) {
     if (m.usedAs) continue;
-    if (m.word && m.bare) continue;   // "a fluted one", "two": a word number without a unit is never a size
     let dim = null;
     // a dimension word right after ("6 m long", "5 m de long", "4 m span") or right before ("height 5 m", "Ø 6 m")
     for (let j = m.i1 + 1, n = 0; j < toks.length && n < 3; j++) {
@@ -964,10 +1034,41 @@ function bindMeasures(S) {
         break;
       }
     }
+    // a self-correction repeats the field of the last number before it: "four bays, no wait, five", "4 m, make that 5"
+    const corr = !dim && correctionBase(S, m);
+    if (corr && !m.deg && m.vals.length === 1) {
+      m.usedAs = 'correction';
+      if (corr.kind === 'count' && m.bare) { if (Number.isInteger(m.vals[0])) put(S, corr.field, m.vals[0], 3, m.i0); }
+      else put(S, corr.field, Math.round((m.bare ? m.vals[0] * (corr.factor || 1) : m.vals[0]) * 1e6) / 1e6, 3, m.i0);
+      (S.numLog ||= []).push({ pos: m.i0, field: corr.field, kind: corr.kind, factor: m.bare ? corr.factor : m.factor });
+      continue;
+    }
+    if (m.word && m.bare) continue;   // "a fluted one", "two": a word number without a unit is never a size
+    // a number without unit or size word is a size only right next to the element noun ("column 6", "Kuppel 12")
+    if (m.bare && !dim && !m.deg && !nextToHead(S, m)) { m.usedAs = 'dropped'; S.notes.push(`“${m.raws.join(' x ')}” has no unit or size word; not used`); continue; }
     m.usedAs = 'size';
     if (dim === 'spacing') { S.notes.push(`spacing (${m.raws[0]}${m.unitName ? ' ' + m.unitName : ''}) is set by the generator; not used`); continue; }
     assignMeasure(S, m, dim);
   }
+}
+
+function correctionBase(S, m) {
+  const seg = S.toks[m.i0].chunk ? S.toks[m.i0].chunk.seg : 0;
+  const at = seg && S.corrPos ? S.corrPos[seg] : undefined;
+  if (at === undefined || !S.numLog) return null;
+  const before = S.numLog.filter((x) => x.pos < at);
+  return before.length ? before[before.length - 1] : null;
+}
+const NEAR_SKIP = new Set(['about', 'approx', 'approximately', 'ca', 'circa', 'roughly', 'around', 'some', 'etwa', 'um', 'environ', 'circa', 'ungefaehr']);
+function nextToHead(S, m) {
+  const h = S.headTok;
+  if (h < 0 || S.toks[h].fcost >= 1) return false;
+  let j = m.i0 - 1;
+  while (j >= 0 && S.toks[j].k === 'w' && NEAR_SKIP.has(S.toks[j].f)) j--;
+  if (j === h || (j === h + 1 && S.toks[j].k === 'p' && S.toks[j].s === ',')) return true;
+  let k = m.i1 + 1;
+  while (k < S.toks.length && S.toks[k].used === 'phrase') k++;
+  return k === h;
 }
 
 function assignMeasure(S, m, dim) {
@@ -1050,6 +1151,7 @@ function putSize(S, field, v, m, pos) {
     S.bareSizes = (S.bareSizes || 0) + 1;
   }
   put(S, field, Math.round(v * 1e6) / 1e6, 3, pos);
+  (S.numLog ||= []).push({ pos, field, kind: 'size', factor: m.bare ? null : m.factor });
 }
 
 // ------------------------------------------------------------------------------------------------- modifiers
@@ -1096,13 +1198,16 @@ function postRules(S, spec) {
     const op = toks.find((t) => isEl(t) && (t.m.el === 'door' || t.m.el === 'window'));
     if (op) { spec.element = op.m.el; if (!spec.pediment) spec.pediment = 'triangular'; }
   }
-  // a pointy church or tower roof is a spire
-  if (spec.element === 'roof') {
-    const hint = toks.some((t) => t.m && t.m.spireHint);
-    const church = toks.some((t) => t.m && t.m.topEl === 'spire');
-    const tower = toks.some((t) => t.m && t.m.tower);
+  // a pointy church or tower roof is a spire, unless a roof type is stated or the roof only sits on the tower
+  // ("a pyramid-shaped roof sitting on a clock tower" stays a roof)
+  if (spec.element === 'roof' && !S.assign.some((a) => a.field === 'roofType' && a.prio === 3)) {
+    const own = (t) => t.m && !['on', 'ov', 'un', 'at'].includes(t.chunkType);
+    const hint = toks.some((t) => own(t) && t.m.spireHint);
+    const church = toks.some((t) => own(t) && t.m.topEl === 'spire');
+    const tower = toks.some((t) => own(t) && t.m.tower);
     if ((hint && church) || tower) { spec.element = 'spire'; delete spec.roofType; delete spec.pitch; }
   }
+  if (['column', 'pilaster'].includes(spec.element) && toks.some((t) => t.neg && t.m && t.m.el === 'capital')) S.notes.push('a column always has a capital; it is kept');
   if (S.head !== spec.element) S.head = spec.element;
   // fields that only make sense for other elements are dropped (kept honest for the spec card)
   const el = spec.element;
@@ -1115,7 +1220,8 @@ function postRules(S, spec) {
   if (el !== 'arcade') delete spec.bays;
   if (!['balustrade', 'baluster'].includes(el)) delete spec.baluster;
   if (el !== 'spire') delete spec.spireType;
-  if (!['column', 'pilaster'].includes(el)) { delete spec.pedestal; delete spec.entasis; }
+  if (!['column', 'pilaster', 'obelisk', 'urn', 'finial'].includes(el)) delete spec.pedestal;
+  if (!['column', 'pilaster'].includes(el)) delete spec.entasis;
   if (el === 'urn' && spec.finial === 'urn') delete spec.finial;
   if (el !== 'dome' && el !== 'cupola' && el !== 'window' && el !== 'door') delete spec.oculus;
   for (const n of S.notes) if (!S.warnings.includes(n)) S.warnings.push(n);
@@ -1181,9 +1287,13 @@ const MSG = {
     furniture: (w) => `“${w}” is furniture. I build architectural elements; in that spirit, try:`,
     food: (w) => `“${w}” is not an architectural element. Try one of these instead:`,
     object: (w) => `“${w}” is not one of the elements I can build yet. Try:`,
+    thing: (w) => `“${w}” is not an architectural element. I build columns, capitals, porticos, arches, domes, roofs and their details, for example:`,
+    geo: (w) => `“${w}” is a place, not an architectural element. Try for example:`,
+    generic: (w) => `“${w}” is not an architectural element. Try for example:`,
     building: (w) => `I build single elements, not a whole ${w}. Try one of its parts:`,
     missing: (w) => `There is no ${w} element yet. The closest things I can build:`,
     unknown: () => `I couldn't find an architectural element in that. Try for example:`,
+    figure: (w) => `“${w}” is not an architectural element. Try for example:`,
     help: () => `Describe one architectural element in words (English, Deutsch, français or italiano): its type, order or style, size, material and details. For example:`,
     empty: () => `Describe one architectural element, for example:`,
     hint: (el) => `Did you mean ${NOUN_EL[el] || el}? For example:`,
@@ -1216,7 +1326,7 @@ const MSG = {
 };
 function msg(lang, key, arg) {
   const L = MSG[lang] || MSG.en;
-  const f = L[key] || (['unsure', 'unknown', 'empty', 'hint', 'help'].includes(key) ? null : L.generic) || MSG.en[key];
+  const f = L[key] || (['unsure', 'unknown', 'empty', 'hint', 'help'].includes(key) ? null : L.generic) || MSG.en[key] || MSG.en.generic;
   return f(arg);
 }
 
@@ -1248,7 +1358,7 @@ export function explain(text) {
   readNumbers(toks, warnings);
   toks = annotate(toks);
   const { lang, score } = detectLang(toks);
-  for (const t of toks) if (t.k === 'w') t.m = t.used ? null : resolveMeaning(t.cands, lang);
+  for (const t of toks) if (t.k === 'w') { t.m = t.used ? null : resolveMeaning(t.cands, lang); if (t.m && t.m.word) { t.m = null; t.common = true; } }
   const S = { toks, lang };
   chunkUp(S); markNegation(S);
   return { lang, score, tokens: toks.map((t) => ({ s: t.s, k: t.k, via: t.via || t.used || '', to: t.to, chunk: t.chunkType, neg: t.neg || undefined,

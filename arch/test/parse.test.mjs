@@ -20,13 +20,17 @@ let failures = 0;
 // ================================================================================================= 1. dev library
 const { prompts } = JSON.parse(fs.readFileSync(file, 'utf8'));
 const rows = [];
-const times = [];
+const times = [], cold = [];
 parse('warm-up: Ionic column 3 m');   // first call compiles the code paths; not a prompt time
 for (const p of prompts) {
   const t0 = performance.now();
   let r;
   try { r = parse(p.text); } catch (e) { r = { error: e.message, spec: null, unknown: [] }; }
-  times.push(performance.now() - t0);
+  cold.push(performance.now() - t0);
+  // the cost of a prompt: median of 5 runs (single calls include GC pauses of the whole process)
+  const runs = [];
+  for (let k = 0; k < 5; k++) { const a = performance.now(); try { parse(p.text); } catch (e) { /* reported above */ } runs.push(performance.now() - a); }
+  times.push(runs.sort((x, y) => x - y)[2]);
   const fields = [];
   for (const [k, v] of Object.entries(p.expect || {})) {
     if (k === 'why') continue;
@@ -51,7 +55,8 @@ const mean = times.reduce((a, b) => a + b, 0) / times.length;
 
 console.log(`dev library ${path.basename(file)}: ${prompts.length} prompts`);
 console.log(`  field accuracy ${pct(fieldAcc)} (${fieldRows.filter((f) => f.ok).length}/${fieldRows.length}) · prompts fully right ${pct(exact)} · out-of-scope recall ${pct(oosRecall)} (${oos.length}) · false out-of-scope ${falseOos}`);
-console.log(`  time per prompt: mean ${mean.toFixed(2)} ms · p95 ${times[Math.floor(0.95 * times.length)].toFixed(2)} ms · max ${times[times.length - 1].toFixed(2)} ms`);
+cold.sort((a, b) => a - b);
+console.log(`  time per prompt (median of 5): mean ${mean.toFixed(2)} ms · p95 ${times[Math.floor(0.95 * times.length)].toFixed(2)} ms · max ${times[times.length - 1].toFixed(2)} ms · first call: mean ${(cold.reduce((a, b) => a + b, 0) / cold.length).toFixed(2)} ms, max ${cold[cold.length - 1].toFixed(2)} ms`);
 const byCat = {};
 for (const x of rows) (byCat[x.p.cat] ||= []).push(x);
 console.log('  per category: ' + Object.entries(byCat).map(([c, xs]) => `${c} ${pct(acc(xs.flatMap((x) => x.fields)))}`).join(' · '));
@@ -199,7 +204,7 @@ const PARA = [
   ['corinthean capitel', { element: 'capital', order: 'corinthian' }],
   ['balustrad with 8 ballusters', { element: 'balustrade', balusters: 8 }],
   ['copula with lantern', { element: 'cupola', lantern: true }],
-  ['hiproof', { element: 'roof', roofType: 'hip' }],
+  ['hiproof', { outOfScope: true }],   // English words are never split into compounds (review finding 3)
   ['a steep Alpine roof', { element: 'roof', pitch: undefined }],
   ['hip roof with a 1.2 m overhang', { element: 'roof', overhang: 1.2 }],
   ['Satteldach, Dachüberstand 60 cm, mit Gauben', { element: 'roof', roofType: 'gable', overhang: 0.6, dormers: true }],
@@ -210,6 +215,73 @@ const PARA = [
   ['Säule ohni Basis', { element: 'column', base: 'none' }],
 ];
 for (const [t, want] of PARA) check(`para “${t}”`, has(t, want));
+
+// review round 1: one block per finding (rules and vocabulary, checked on words the dev library does not contain)
+const REVIEW = [
+  // 1. inflection stems need 5+ letters: "turn" is not Tür
+  ['F1', 'turn left', { outOfScope: true }],
+  ['F1', 'Ionic column, turn it round', { element: 'column', order: 'ionic' }],
+  // 2. everyday words are never corrected into architecture; swaps of 4-letter element words are
+  ['F2', 'basil', { outOfScope: true }], ['F2', 'chapter 4', { outOfScope: true }], ['F2', 'tonic', { outOfScope: true }],
+  ['F2', 'pilates class', { outOfScope: true }], ['F2', 'a basket', { outOfScope: true }], ['F2', 'Kapitel 3 lesen', { outOfScope: true }],
+  ['F2', 'a true Corinthian column', { element: 'column', order: 'corinthian', unknown: ['true'] }],
+  ['F2', 'the final version of the capital', { element: 'capital', finial: undefined }],
+  ['F2', 'start with a column', { element: 'column', order: undefined }],
+  ['F2', 'arhc with a keystone', { element: 'arch', keystone: true }], ['F2', 'dmoe', { element: 'dome' }], ['F2', 'onion doem', { element: 'dome', domeType: 'onion' }],
+  ['F2', 'pedastal', { element: 'pedestal' }], ['F2', 'copula with lantern', { element: 'cupola', lantern: true }],
+  // 3. compounds only for German words, head last
+  ['F3', 'baseball', { outOfScope: true }], ['F3', 'a baseball cap', { outOfScope: true }], ['F3', 'database', { outOfScope: true }],
+  ['F3', 'Zeltdach', { element: 'roof', roofType: 'pyramid' }], ['F3', 'Glasdach', { element: 'roof' }], ['F3', 'Rundbogenarkade', { element: 'arcade', archType: 'semicircular' }],
+  // 4. a number without unit or size word is a size only next to the element noun
+  ['F4', 'Windows 11 update', { outOfScope: true }],
+  ['F4', 'Ionic column for room 12', { element: 'column', height: undefined, warns: 'not used' }],
+  ['F4', 'Doric column 6', { height: 6 }],
+  // 5. "1 m 20", word numbers with halves, centimetres after metres in words
+  ['F5', 'column 1 m 20', { height: 1.2 }], ['F5', 'a column two and a half metres tall', { height: 2.5 }],
+  ['F5', 'Säule dreieinhalb Meter hoch', { height: 3.5 }], ['F5', 'colonne de trois mètres cinquante', { height: 3.5 }],
+  ['F5', 'colonna di tre metri e cinquanta', { height: 3.5 }], ['F5', 'balustrade 3 m 12 balusters', { length: 3, balusters: 12 }],
+  // 6. cintré / centinato: an arched head, not a pediment (unless it qualifies the fronton)
+  ['F6', 'fenêtre cintrée', { element: 'window', archType: 'segmental', pediment: undefined }],
+  ['F6', 'porte cintrée en pierre', { element: 'door', archType: 'segmental', pediment: undefined }],
+  ['F6', 'finestra centinata', { element: 'window', archType: 'segmental', pediment: undefined }],
+  ['F6', 'fenêtre avec fronton cintré', { element: 'window', pediment: 'segmental' }],
+  // 7. self-corrections: the later value of the same field wins, for counts and word numbers too
+  ['F7', 'a portico with six columns, sorry, eight', { columns: 8 }],
+  ['F7', 'balustrade with 12 balusters, I mean 16', { balusters: 16 }],
+  ['F7', 'dôme à douze nervures, pardon, seize', { ribs: 16 }],
+  ['F7', 'Säule mit 20 Kanneluren, ich meine 24', { flutes: 24 }],
+  ['F7', 'colonna di 3 m, anzi 4', { height: 4 }],
+  ['F7', '4 m column, make that 5', { height: 5 }],
+  ['F7', 'column diameter 50 cm, no, 60 cm', { diameter: 0.6 }],
+  // 8. pedestal on obelisks, urns, finials
+  ['F8', 'obelisk on a pedestal', { element: 'obelisk', pedestal: true }], ['F8', 'Obelisk ohne Sockel', { element: 'obelisk', pedestal: false }],
+  ['F8', 'urn without a plinth', { element: 'urn', pedestal: false }], ['F8', 'finial on a small pedestal', { element: 'finial', pedestal: true }],
+  // 9. a portico by meaning
+  ['F9', 'a classical columned front for a courthouse', { element: 'portico' }],
+  ['F9', 'something like the front of a Greek temple', { element: 'portico' }],
+  ['F9', 'a colonnaded facade for the museum', { element: 'portico' }],
+  ['F9', 'Tempel mit sechs Säulen', { element: 'portico', columns: 6 }],
+  ['F9', 'a temple with Ionic columns', { element: 'portico', order: 'ionic' }],
+  ['F9', 'la façade à colonnes d un temple', { element: 'portico' }],
+  ['F9', 'the front of a house', { outOfScope: true }], ['F9', 'a Greek temple', { outOfScope: true }],
+  // 10. "X sitting on / over Y": X is the head
+  ['F10', 'a pyramid-shaped roof sitting on a clock tower', { element: 'roof', roofType: 'pyramid' }],
+  ['F10', 'a gable roof over the bell tower', { element: 'roof', roofType: 'gable' }],
+  ['F10', 'a pointy church roof', { element: 'spire' }],
+  // 11. figures of speech are not architecture; the real thing next to them still is
+  ...['column of smoke', 'pillar of the community', 'a column chart', 'a pillar box', 'dome tent', 'door handle', 'the capital of France',
+    'the base of the pyramid', 'a newspaper column', 'a spinal column', 'a capital city', 'Rauchsäule aus dem Schornstein'].map((t) => ['F11', t, { outOfScope: true }]),
+  ['F11', 'the capital of a Corinthian column', { element: 'capital', order: 'corinthian' }], ['F11', 'the base of a column', { element: 'base' }],
+  ['F11', 'the dome of St Peter\'s', { element: 'dome' }], ['F11', 'the roof of a house, gable', { element: 'roof' }],
+  // 12. rulings
+  ['F12', 'a stone pier 3 m', { element: 'pilaster', height: 3, warns: 'pier' }], ['F12', 'Pfeiler aus Sandstein', { element: 'pilaster', material: 'sandstone', warns: 'pier' }],
+  ['F12', 'arcade on piers', { element: 'arcade', supports: 'piers' }], ['F12', 'urn finial on a gate pier', { element: 'finial', finial: 'urn' }],
+  ['F12', 'the Pantheon', { element: 'dome', oculus: true }],
+  ['F12', 'a column with no base and no capital', { element: 'column', base: 'none', warns: 'capital' }],
+  // 13. exponents are not numbers
+  ['F13', 'column 1e3 m', { element: 'column', height: undefined, warns: 'exponent' }],
+];
+for (const [f, t, want] of REVIEW) check(`${f} “${t}”`, has(t, want));
 
 // every output is a valid spec: SCHEMA fields only, legal enums, finite numbers, element always present
 const ALL = [...prompts.map((p) => p.text), ...PARA.map((x) => x[0])];
