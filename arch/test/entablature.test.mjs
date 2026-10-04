@@ -8,7 +8,7 @@ import { initKernel } from './node-kernel.mjs';
 import { generate } from '../js/generate.js';
 import { SCHEMA } from '../js/spec.js';
 import { ORDER_KEYS, ORDERS } from '../js/orders.js';
-import { instanceCount } from '../js/kernel.js';
+import { instanceCount, partsBBox } from '../js/kernel.js';
 
 await initKernel();
 await generate({ element: 'entablature', order: 'corinthian' });   // warm-up (WASM compile, first allocations): not timed
@@ -83,6 +83,37 @@ function check(r, spec) {
   if (r.ms > BUDGET_MS) fails.push(`time ${Math.round(r.ms)} ms`);
   if (r.tris > MAX_TRIS) fails.push(`tris ${r.tris}`);
   if (spec.element === 'entablature' || spec.element === 'cornice') fails.push(...invariants(r));
+  if (['window', 'door', 'pediment'].includes(spec.element)) fails.push(...cluster(r));
+  return fails;
+}
+
+/** World bbox of every instance of every part. */
+function pieceBoxes(r) {
+  const out = [];
+  for (const p of r.parts) {
+    const n = instanceCount(p);
+    for (let i = 0; i < n; i++) out.push({ name: p.name, ...partsBBox([{ ...p, transforms: p.transforms ? p.transforms.slice(16 * i, 16 * i + 16) : null }]) });
+  }
+  return out;
+}
+/** Every piece inside the expected bbox (x centred, z from 0), and all pieces one cluster: no piece (or group of
+ *  pieces) separated from the rest by a gap > 1 cm (bboxes grown by 5 mm must chain together). */
+function cluster(r) {
+  const fails = [], e = r.expected.size, tol = e.tol ?? 0.005, boxes = pieceBoxes(r);
+  for (const b of boxes) {
+    if (e.x !== undefined && Math.max(-b.min[0], b.max[0]) > (e.x / 2) * (1 + tol) + 1e-6) { fails.push(`${b.name} outside x`); break; }
+    if (e.z !== undefined && (b.min[2] < -1e-6 * e.z - 1e-6 || b.max[2] > e.z * (1 + tol) + 1e-6)) { fails.push(`${b.name} outside z`); break; }
+  }
+  const g = 0.005, parent = boxes.map((_, i) => i), find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const near = (a, b) => [0, 1, 2].every((k) => a.min[k] - g <= b.max[k] + g && b.min[k] - g <= a.max[k] + g);
+  for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) if (find(i) !== find(j) && near(boxes[i], boxes[j])) parent[find(i)] = find(j);
+  const roots = new Set(boxes.map((_, i) => find(i)));
+  if (roots.size > 1) {
+    const sizes = {};
+    boxes.forEach((b, i) => { (sizes[find(i)] ||= []).push(b.name); });
+    const small = Object.values(sizes).sort((a, b) => a.length - b.length)[0];
+    fails.push(`${roots.size} clusters (e.g. ${[...new Set(small)].join(',')})`);
+  }
   return fails;
 }
 
@@ -199,6 +230,37 @@ await t('an arched head keeps the opening: clear height to the crown = height, w
     assert.ok(Math.abs(slice.min[2] - 3) < 0.003, `${archType} crown ${slice.min[2]}`);
     const jamb = band.trimByPlane([0, 0, -1], -0.5).trimByPlane([1, 0, 0], 0).boundingBox();   // right jamb below 0.5 m
     assert.ok(Math.abs(jamb.min[0] - 0.7) < 1e-5 && jamb.min[2] < 0.5, `${archType} jamb ${jamb.min[0]} ${jamb.min[2]}`);
+  }
+});
+await t('a stated pediment is kept (spec.given): Gothic window + triangular -> aedicule; baroque + triangular -> triangular', async () => {
+  const g = (await generate({ element: 'window', style: 'gothic', pediment: 'triangular' })).parts.map((p) => p.name);
+  for (const n of ['frame', 'hood-mould', 'spandrel', 'frieze', 'raking-cornice', 'tympanum']) assert.ok(g.includes(n), `gothic + triangular lacks ${n}`);
+  const plain = (await generate({ element: 'window', style: 'gothic' })).parts.map((p) => p.name);
+  assert.ok(!plain.includes('raking-cornice'), 'gothic alone: no pediment');
+  const b = await generate({ element: 'window', style: 'baroque', pediment: 'triangular' });
+  const bn = b.parts.map((p) => p.name);
+  assert.ok(bn.includes('raking-cornice') && !bn.includes('urn-body') && !bn.includes('pedestal'), 'baroque + triangular: an unbroken triangular pediment');
+  const rk = b.parts.find((p) => p.name === 'raking-cornice').manifold;
+  assert.equal(rk.decompose().length, 1, 'one continuous rake (not broken)');
+  const bk = (await generate({ element: 'window', style: 'baroque' })).parts.map((p) => p.name);
+  assert.ok(bk.includes('urn-body'), 'baroque alone: broken pediment with urn');
+  const nk = (await generate({ element: 'window', style: 'baroque', keystone: false })).parts.map((p) => p.name);
+  assert.ok(!nk.includes('keystone'), 'baroque without keystone: none');
+});
+await t('every style / arch variant of a window or door is one connected solid (true geometry, no floating piece)', async () => {
+  const { K } = await import('../js/kernel.js');
+  const specs = [];
+  for (const element of ['window', 'door']) {
+    for (const style of S.style.values) specs.push({ element, style });
+    for (const archType of S.archType.values) specs.push({ element, archType }, { element, archType, pediment: 'broken', keystone: true });
+    specs.push({ element, style: 'gothic', pediment: 'triangular' }, { element, style: 'moorish', pediment: 'segmental' });
+  }
+  for (const spec of specs) {
+    const r = await generate({ ...spec, detail: 'low' });
+    const solids = [];
+    for (const p of r.parts) for (let i = 0; i < instanceCount(p); i++) solids.push(p.transforms ? p.manifold.transform(p.transforms.subarray(16 * i, 16 * i + 16)) : p.manifold);
+    const n = K().Manifold.union(solids).decompose().length;
+    assert.equal(n, 1, `${JSON.stringify(spec)}: ${n} separate solids`);
   }
 });
 await t('broken pediments carry an urn on a pedestal in the gap', async () => {

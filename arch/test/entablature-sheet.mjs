@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import { initKernel } from './node-kernel.mjs';
 import { generate } from '../js/generate.js';
-import { mat, instances, placeParts } from '../js/kernel.js';
+import { mat, placeParts } from '../js/kernel.js';
 import { renderPNG, sheet } from './raster.mjs';
 
 await initKernel();
@@ -12,21 +12,19 @@ const imgs = [];
 for (const s of specs) {
   const spec = JSON.parse(s);
   const r = await generate(spec);
+  // clip honestly: every instance is baked and trimmed like a solid (a part kept by its origin would float)
   let parts = [];
   for (const p of r.parts) {
-    if (p.transforms && p.transforms.length > 16) {
-      const keep = [];
-      for (let i = 0; i < p.transforms.length / 16; i++) {
-        const m = p.transforms.subarray(16 * i, 16 * i + 16);
-        if (spec._x && (m[12] < spec._x[0] || m[12] > spec._x[1])) continue;
-        if (spec._z && (m[14] < spec._z[0] || m[14] > spec._z[1])) continue;
-        keep.push(m);
+    const n = p.transforms ? p.transforms.length / 16 : 1;
+    for (let i = 0; i < n; i++) {
+      let m = p.transforms ? p.manifold.transform(p.transforms.subarray(16 * i, 16 * i + 16)) : p.manifold;
+      if (spec._x || spec._z) {
+        const bb = m.boundingBox();
+        if (spec._x && (bb.max[0] < spec._x[0] || bb.min[0] > spec._x[1])) continue;
+        if (spec._z && (bb.max[2] < spec._z[0] || bb.min[2] > spec._z[1])) continue;
+        if (spec._x) m = m.trimByPlane([1, 0, 0], spec._x[0]).trimByPlane([-1, 0, 0], -spec._x[1]);
+        if (spec._z) m = m.trimByPlane([0, 0, 1], spec._z[0]).trimByPlane([0, 0, -1], -spec._z[1]);
       }
-      if (keep.length) parts.push({ ...p, transforms: instances(keep) });
-    } else {
-      let m = p.transforms ? p.manifold.transform(p.transforms) : p.manifold;
-      if (spec._x) m = m.trimByPlane([1, 0, 0], spec._x[0]).trimByPlane([-1, 0, 0], -spec._x[1]);
-      if (spec._z) m = m.trimByPlane([0, 0, 1], spec._z[0]).trimByPlane([0, 0, -1], -spec._z[1]);
       if (!m.isEmpty()) parts.push({ ...p, manifold: m, transforms: null });
     }
   }

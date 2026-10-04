@@ -107,5 +107,17 @@ await t('height = column height, width = overall width', async () => {
   const r2 = await generate({ element: 'portico', order: 'corinthian', width: 14 });
   assert.ok(Math.abs(r2.size[0] - 14) < 0.005 * 14, `width ${r2.size[0]}`);
 });
+await t('the entablature bears on the capitals and the columns on the stylobate (1 mm seats, no gap)', async () => {
+  const { partsBBox } = await import('../js/kernel.js');
+  for (const order of ['tuscan', 'doric', 'ionic', 'corinthian', 'composite']) for (const height of [4, 12]) {
+    const r = await generate({ element: 'portico', order, height }), bb = (n) => partsBBox(r.parts.filter((p) => p.name === n));
+    const arch = bb('architrave'), sty = bb('stylobate');
+    const capTop = Math.max(...r.parts.filter((p) => !['architrave', 'frieze', 'cornice', 'stylobate'].includes(p.name))
+      .map((p) => partsBBox([p])).filter((b) => b.max[2] < arch.min[2] + 0.01).map((b) => b.max[2]));
+    assert.ok(capTop >= arch.min[2] + 0.0009 && capTop - arch.min[2] < 0.0015, `${order} ${height}: capital top ${capTop} vs soffit ${arch.min[2]}`);
+    const foot = Math.min(...r.parts.filter((p) => p.name === 'base' || p.name === 'shaft').map((p) => partsBBox([p]).min[2]));
+    assert.ok(sty.max[2] - foot > 0.0009 && sty.max[2] - foot < 0.0015, `${order} ${height}: column foot ${foot} vs stylobate ${sty.max[2]}`);
+  }
+});
 console.log(`\n${pass} passed, ${fail} failed (${cases.length} builds + targeted checks)`);
 process.exit(fail ? 1 : 0);

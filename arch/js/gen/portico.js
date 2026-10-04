@@ -12,7 +12,7 @@
 import { ORDERS, columnDims } from '../orders.js';
 import { normalize } from '../spec.js';
 import { build as buildColumn } from './column.js';
-import { mat, instances, box, union, part, placeParts, partTris } from '../kernel.js';
+import { mat, instances, box, union, part, placeParts, partTris, partsBBox } from '../kernel.js';
 import { entablaturePlan, entablatureParts, pedimentPlan, pedimentParts, porticoKinds, roleFor } from './entablature.js';
 
 export const ELEMENTS = ['portico'];
@@ -54,7 +54,12 @@ export function porticoPlan(spec) {
   const cd = columnDims(order, { height: O.colD * D });
   // roof block depth behind the frieze face: `depth` when given (at least the upper diameter), else to y = 0.75 D
   const top = O.shaftTop * D, Le = (n - 1) * axis + top, yf = -top / 2, B = spec.depth ? Math.max(spec.depth, top) : 0.75 * D - yf, yb = yf + B;
-  const zs = steps * RISER, zc = zs + cd.H;
+  // the columns (column.js, memoised: a scale of a cached unit build) stand 1 mm into the stylobate; the entablature
+  // sits 1 mm into the real top of the capitals and the pediment 1 mm into the frieze, so the assembly is one solid
+  const cspec = normalize({ element: 'column', order, height: cd.H, flutes: spec.flutes, base: spec.base,
+    pedestal: false, entasis: spec.entasis, material: spec.material, detail: spec.detail }).spec;
+  const col = buildColumn(cspec), colTop = partsBBox(col).max[2];
+  const zs = steps * RISER, zcol = steps > 0 ? zs - EPS : zs, zc = zcol + colTop - EPS;
   const axes = Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * axis);
   const ent = entablaturePlan({ order, D, L: Le, B, returns: true, fk: k.fk, ck: k.ck, enrich: k.enrich, detail: k.detail,
     parts: pedKind === 'none' ? 'all' : 'lower', axes });
@@ -62,8 +67,8 @@ export function porticoPlan(spec) {
     : pedimentPlan({ order, D, W: Le, B, kind: pedKind, pitch: spec.pitch, ck: k.ck, enrich: k.enrich, detail: k.detail, axes });
   const Xs = axes[n - 1] + hp * D;
   const width = geom(D, axis);
-  const z = zc + ent.size.z + (ped ? ped.size.z : 0);
-  return { order, O, n, steps, D, axis, cd, top, Le, yf, yb, B, zs, zc, axes, ent, ped, Xs, plat, base, k,
+  const zp = zc + ent.size.z - EPS, z = ped ? zp + ped.size.z : zc + ent.size.z;
+  return { order, O, n, steps, D, axis, cd, top, Le, yf, yb, B, zs, zcol, zc, zp, col, axes, ent, ped, Xs, plat, base, k,
     size: { x: width, z } };
 }
 
@@ -79,17 +84,15 @@ export function build(spec) {
     parts.push(part('stylobate', 'stone', union(blocks)));
   }
   // columns: built once by the column family, placed as instances
-  const cspec = normalize({ element: 'column', order: pp.order, height: pp.cd.H, flutes: spec.flutes, base: spec.base,
-    pedestal: false, entasis: spec.entasis, material: spec.material, detail: spec.detail }).spec;
-  const col = buildColumn(cspec);
+  const col = pp.col;
   for (const p of col) {
     const local = p.transforms ? Array.from({ length: p.transforms.length / 16 }, (_, i) => p.transforms.subarray(16 * i, 16 * i + 16)) : [mat.I()];
-    const xf = pp.axes.flatMap((x) => local.map((m) => mat.mul(mat.T(x, 0, pp.zs), m)));
+    const xf = pp.axes.flatMap((x) => local.map((m) => mat.mul(mat.T(x, 0, pp.zcol), m)));
     parts.push(part(p.name, p.role, p.manifold, instances(xf), p.meta));
   }
   // entablature (with its cornice when there is no pediment) and the pediment on the frieze
-  parts.push(...placeParts(entablatureParts(pp.ent), mat.T(0, pp.yf, pp.zc - EPS)));
-  if (pp.ped) parts.push(...placeParts(pedimentParts(pp.ped), mat.T(0, pp.yf, pp.zc + pp.ent.size.z - 2 * EPS)));
+  parts.push(...placeParts(entablatureParts(pp.ent), mat.T(0, pp.yf, pp.zc)));
+  if (pp.ped) parts.push(...placeParts(pedimentParts(pp.ped), mat.T(0, pp.yf, pp.zp)));
   const role = roleFor(spec.material), fitted = fitBudget(parts, TRI_BUDGET, pp.D);
   return role === 'stone' ? fitted : fitted.map((p) => ({ ...p, role }));
 }
@@ -120,5 +123,5 @@ function fitBudget(parts, budget, D) {
  *  the apex of the pediment (or the top of the cornice when there is none). */
 export function expected(spec) {
   const pp = porticoPlan(spec);
-  return { size: { x: pp.size.x, z: pp.size.z - 2 * EPS }, counts: { shaft: pp.n }, tol: 0.005 };
+  return { size: { x: pp.size.x, z: pp.size.z }, counts: { shaft: pp.n }, tol: 0.005 };
 }

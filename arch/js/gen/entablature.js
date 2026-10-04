@@ -24,7 +24,6 @@ import { Prof } from '../profiles.js';
 import { acanthusLeaf, rosette, spiral } from '../ornament.js';
 import { socle, urnParts } from './finial.js';
 import { archGeom } from './arch.js';
-import { DEFAULTS } from '../spec.js';
 
 export const ELEMENTS = ['entablature', 'cornice', 'moulding', 'pediment', 'window', 'door'];
 
@@ -34,6 +33,9 @@ const EPS = 0.001;                                      // overlap so pieces mea
 // orders.js holds the orders' heights and axes; these are the cornice's own carving modules.
 const DENTIL = { w: 1 / 6, pitch: 1 / 4 };   // Ionic dentil 1/3 M wide, interval 1/6 M: 13 to the eustyle axis of 3.25 D
 const MODILLION = { pitch: 0.65, w: 0.22 };  // Corinthian modillion: 5 to the eustyle axis of 3.25 D (one on every axis)
+/** Was a field stated in the request? normalize() lists them in spec.given (a spec built by hand: any defined value). */
+const stated = (spec, f) => (spec.given ? spec.given.includes(f) : spec[f] !== undefined && spec[f] !== null);
+
 // Default enrichment of a moulding when none is stated (controller ruling 21): each profile's canonical carving.
 const MOULDING_ENRICH = { ovolo: 'egg-and-dart', bead: 'bead-and-reel', 'cyma-reversa': 'leaf-and-dart' };
 const RICH = new Set(['ionic', 'corinthian', 'composite', 'solomonic']);
@@ -718,7 +720,7 @@ export function mouldingPlan(spec) {
   const H = spec.height || 0.16, L = spec.length || 1.2, profile = MOULDINGS[spec.profile] ? spec.profile : 'ovolo';
   // stated enrichment ('none' = none), else the profile's canonical one: ovolo egg-and-dart, astragal bead-and-reel,
   // cyma reversa leaf-and-dart (acanthus leaves); torus, scotia, cavetto, cyma recta and crown plain
-  const en = spec.enrichment === undefined || spec.enrichment === null ? (MOULDING_ENRICH[profile] || null)
+  const en = !stated(spec, 'enrichment') || !spec.enrichment ? (MOULDING_ENRICH[profile] || null)
     : spec.enrichment !== 'none' ? spec.enrichment : null, n = curveN(spec.detail);
   const course = en && (en === 'dentils' || !HOSTS[en].includes(profile)) ? en : null;
   const fr = course === 'dentils' ? 0.42 : course === 'egg-and-dart' ? 0.36 : course === 'acanthus' ? 0.4 : course ? 0.2 : 0;
@@ -830,7 +832,10 @@ export function pedimentParts(pp) {
   const { Manifold } = K();
   const parts = [];
   // horizontal cornice and its ornaments
-  let hc = runSolid(shiftPts(pp.hor.pts, dq), W, B, true);
+  // seated (o.seat) the horizontal cornice reaches EPS down into what carries it (a surround's frieze): touching faces
+  // would leave two solids
+  const hp0 = shiftPts(pp.hor.pts, dq);
+  let hc = runSolid(pp.seat ? [[dq, hp0[0][1] - EPS], ...hp0] : hp0, W, B, true);
   const ho = runParts(pp.hpl, { tags: pp.tags, L: W, B, returns: true, D, detail });
   if (ho.cuts.length) hc = hc.subtract(union(ho.cuts));
   parts.push(part('cornice', 'stone', hc), ...ho.parts);
@@ -992,25 +997,25 @@ const STYLE_SURROUND = {
 const ARCH_TREATMENT = { pointed: 'gothic', tudor: 'gothic', horseshoe: 'moorish' };   // an arch without a style
 const D2R = Math.PI / 180;
 
-/** Head, treatment, pediment, keystone, ears... of a window or door spec. A pediment counts as asked for only when it
- *  differs from the element's default in spec.js (normalize fills the default, so an equal value cannot be told apart). */
+/** Head, treatment, pediment, keystone, ears... of a window or door spec. "Asked for" = stated in the request
+ *  (spec.given): an arched or Egyptian / Deco / Modern head takes a pediment only when one was asked for. */
 function surroundKind(spec) {
   const door = spec.element === 'door', st = STYLE_SURROUND[spec.style] || null;
   const arch = spec.archType || (st && st.arch) || null;
   let tr = st ? st.tr : arch ? ARCH_TREATMENT[arch] || 'classical' : 'classical';
   if (arch && ['baroque', 'egyptian', 'deco', 'modern'].includes(tr)) tr = tr === 'baroque' ? 'classical' : 'plain';
-  const def = (DEFAULTS[spec.element] || {}).pediment, stated = spec.pediment !== undefined && spec.pediment !== def;
+  const asked = stated(spec, 'pediment') && !!spec.pediment;
   let ped;
-  if (arch || ['egyptian', 'deco', 'modern'].includes(tr)) ped = stated ? spec.pediment : 'none';
-  else if (tr === 'baroque') ped = stated ? spec.pediment : door ? 'broken-segmental' : 'broken';
-  else ped = spec.pediment ?? def ?? (door ? 'segmental' : 'triangular');   // classical: spec.js's default, or Vignola's
+  if (arch || ['egyptian', 'deco', 'modern'].includes(tr)) ped = asked ? spec.pediment : 'none';
+  else if (tr === 'baroque') ped = asked ? spec.pediment : door ? 'broken-segmental' : 'broken';
+  else ped = spec.pediment ?? (door ? 'segmental' : 'triangular');   // classical: the spec's value (spec.js default)
   const flatOrder = { egyptian: 'egyptian', deco: 'art-deco', modern: 'modern' }[tr];
   const order = flatOrder || (spec.order ? orderKey(spec.order) : 'ionic');
   const classicalBottom = tr === 'classical' || tr === 'baroque';
   const round = arch && arch !== 'pointed' && arch !== 'tudor';
   return { door, arch, tr, ped, order, ears: !arch && classicalBottom, fasciae: classicalBottom,
-    keystone: tr === 'baroque' || (!!spec.keystone && (!arch || round) && tr !== 'gothic'),
-    frieze: spec.frieze === 'pulvinated' || (tr === 'baroque' && !spec.frieze) ? 'pulvinated' : 'plain',
+    keystone: tr === 'baroque' && !stated(spec, 'keystone') ? true : !!spec.keystone && (!arch || round) && tr !== 'gothic',
+    frieze: spec.frieze === 'pulvinated' || (tr === 'baroque' && !stated(spec, 'frieze')) ? 'pulvinated' : 'plain',
     ck: flatOrder || spec.cornice ? corniceKindFor(spec.cornice ? spec : { ...spec, cornice: undefined }, order) : 'plain',
     consoles: !door && classicalBottom, plinths: door && classicalBottom };
 }
@@ -1133,8 +1138,9 @@ export function surroundPlan(spec) {
     const iL = path.findIndex((p) => Math.abs(p[1] - zs) < 1e-9 && p[0] < 0), iR = path.length - 2;
     const archFrames = frames.slice(Math.max(1, iL), iR + 1);
     if (tr === 'gothic') {
-      // hood mould: offset 0.1 a beyond the frame, returned level at the springing as labels with stops
-      const Oh = W + 0.1 * a, Lr = 0.45 * a, hood = drawMembers([{ t: 'cavetto', h: 0.07 * a, p: 0.11 * a }, { t: 'fillet', h: 0.02 * a, p: 0.11 * a },
+      // hood mould: seated on the frame's outer edge (no wall carries it here), returned level at the springing as
+      // labels with stops
+      const Oh = W - 0.002, Lr = 0.45 * a, hood = drawMembers([{ t: 'cavetto', h: 0.07 * a, p: 0.11 * a }, { t: 'fillet', h: 0.02 * a, p: 0.11 * a },
         { t: 'torus', h: 0.05 * a, p: 0.11 * a, k: 1 }, { t: 'slope', h: 0.1 * a, p: 0.02 * a }], n, 0, 0);
       const q = archFrames.map((f) => [f.o[0] + Oh * f.B[0], f.o[2] + Oh * f.B[2]]);
       q[0] = [-s - Oh, zs]; q[q.length - 1] = [s + Oh, zs];
@@ -1185,7 +1191,7 @@ export function surroundPlan(spec) {
     const enrich = enrichSet(spec, K0.order, false);
     pl.enrich = enrich;
     if (K0.ped !== 'none') {
-      pl.pp = pedimentPlan({ order: K0.order, D, W: pl.Lf, B: t, kind: K0.ped, pitch: spec.pitch ?? defaultPitch(K0.order), ck: K0.ck, enrich, detail, dq: df, z0: pl.zc });
+      pl.pp = pedimentPlan({ order: K0.order, D, W: pl.Lf, B: t, kind: K0.ped, pitch: spec.pitch ?? defaultPitch(K0.order), ck: K0.ck, enrich, detail, dq: df, z0: pl.zc, seat: true });
       ext.push([pl.pp.size.x / 2, pl.zc + pl.pp.size.z]);
     } else {
       pl.cp = entablaturePlan({ order: K0.order, D, L: pl.Lf, B: t, returns: true, fk: 'plain', ck: K0.ck, enrich, detail, parts: 'cornice', z0: pl.zc });
