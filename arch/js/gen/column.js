@@ -403,7 +403,14 @@ function gothicCapital(d, segs) {
   }
   const half = 0.66 * D, oct = Array.from({ length: 8 }, (_, i) => [half * Math.cos((i + 0.5) * TAU / 8), half * Math.sin((i + 0.5) * TAU / 8)]);
   out.push(extrudeXY(oct, c * 0.2).translate([0, 0, c * 0.8]));
-  return [part('capital', 'stone', union(out))];
+  // Early English stiff-leaf: a tight curling leaf on each shaft's bell, turning out under the abacus
+  const leaf = acanthusLeaf({ h: c * 0.62, w: 0.2 * D, lobes: 3, curl: 0.95, lean: 0.32, wrap: 0.12 * D });
+  const xf = [];
+  for (let i = 0; i < 8; i++) {
+    const a = (i * TAU) / 8, big = i % 2 === 0, at = (big ? 0.36 : 0.4) * D + (big ? 0.15 : 0.085) * D * 0.98;
+    xf.push(mat.mul(mat.T(at * Math.cos(a), at * Math.sin(a), c * 0.1), mat.Rz(a + Math.PI / 2), mat.S(big ? 0.9 : 0.6)));
+  }
+  return [part('capital', 'stone', union(out)), part('leaf', 'stone', leaf, instances(xf))];
 }
 
 function capitalParts(spec, d, segs) {
