@@ -480,7 +480,9 @@ function defaultFinial(spec) {
 function domePlan(spec) {
   const cup = spec.element === 'cupola';
   const D = spec.diameter, R = D / 2, type = spec.domeType || 'hemisphere', onion = type === 'onion';
-  const ribs = spec.ribs > 0 ? spec.ribs : type === 'ribbed' ? (cup ? 8 : 16) : 0;
+  // ribs not stated (undefined): a ribbed dome gets 16 (St Peter's), a ribbed cupola 8 (one per corner of its octagon),
+  // other types none. Stated 0 on a ribbed dome is honoured: the smooth pointed "ribbed" profile without ribs.
+  const ribs = spec.ribs === undefined ? (type === 'ribbed' ? (cup ? 8 : 16) : 0) : spec.ribs;
   const prof = type === 'ribbed' ? 'pointed' : type;
   const lantern = !!spec.lantern, oculus = !!spec.oculus && !onion;
   // the Orthodox three-bar cross: asked for (russian), or a big onion dome without a lantern and no other style;
@@ -523,8 +525,9 @@ function lowerDomePlan(P, spec) {
   // (St Paul's, the Panthéon in Paris, the US Capitol)
   P.peri = spec.style === 'neoclassical' && P.classical && P.detail !== 'low' && !P.onion;
   const Hd = (P.onion ? 0.62 : 0.5) * D, ps = 0.07 * Hd, Ha0 = (P.peri ? 0.24 : 0.12) * Hd;
-  P.useCols = P.classical && P.detail !== 'low' && !(P.onion && !spec.order);
-  const eOrd = P.onion && !spec.order ? 'tuscan' : P.order;
+  const orderStated = spec.given ? spec.given.includes('order') : spec.order !== undefined;
+  P.useCols = P.classical && P.detail !== 'low' && !(P.onion && !orderStated);
+  const eOrd = P.onion && !orderStated ? 'tuscan' : P.order;
   const o = ORDERS[eOrd];
   const entRatio = entablatureDims(eOrd, 1).total / o.colD;
   const Hc = (Hd - ps - Ha0) / (1 + entRatio);
@@ -885,6 +888,7 @@ function upperParts(P, spec) {
   const meta = { domeType: P.type, profile: P.prof, ribs: P.ribs };
   if (spec.oculus && P.onion) meta.warning = 'an onion has no oculus: its crown is the spike that carries the cross';
   if (P.oculus && P.lantern) meta.note = 'oculus under an open lantern (the eye lights the dome through a ring of columns)';
+  if (P.type === 'ribbed' && !P.ribs) meta.note = 'ribbed dome asked with 0 ribs: the pointed ribbed profile, smooth';
   parts.push(part('dome-shell', shellRole, shell, null, meta));
   if (P.steps) {
     // the Pantheon's step rings: five risers up the haunch to 30° (they load the haunch of a Roman concrete dome)
@@ -1053,7 +1057,10 @@ function spirePlan(spec) {
   const n = type === 'square' ? 4 : 8;
   const hb = Math.min(0.06 * W, 0.04 * H);                   // base course (wall-plate cornice)
   const Hf = finial === 'none' ? 0 : Math.min(0.11 * H, 1.6 * W);
-  const zA = H - Hf;                                          // apex of the faces = foot of the finial
+  const capH = Math.min((finial === 'none' ? 0.05 : 0.025) * H, 0.6 * W);
+  const zTop = H - Hf;                                        // top of the capstone = foot of the finial
+  // apex of the faces: under the finial's foot, or, with no finial, inside the capstone so its point is the top
+  const zA = finial === 'none' ? zTop - 0.55 * capH : zTop;
   const aE = 0.47 * W;                                        // eaves apothem, inside the base course
   const aTop = Math.min(0.028 * W, 0.02 * H + 0.004 * W);
   const kick = type === 'broach' ? 0 : 0.035 * W, kickH = type === 'broach' ? 0 : Math.min(0.07 * (zA - hb), 0.45 * W);
@@ -1061,7 +1068,7 @@ function spirePlan(spec) {
   // coverings, crockets, bands and lucarnes only on something shaped like a spire (pitch > 63°, at least 1 m tall)
   const deco = zA - hb >= W && zA - hb >= 1 && W >= 0.3;
   return { W, H, type, n, hb, Hf, zA, aE, aTop, kick, kickH, finial, cover, mtl, detail: spec.detail || 'high', segs: segsFor(spec.detail),
-    hbB: type === 'broach' ? 0.45 * (zA - hb) : 0, deco, rr: Math.min(0.012 * W, 0.06, 0.05 * (zA - hb)) };
+    hbB: type === 'broach' ? 0.45 * (zA - hb) : 0, deco, rr: Math.min(0.012 * W, 0.06, 0.05 * (zA - hb)), capH, zTop };
 }
 
 /** Apothem of the main (above the kick) face plane at z. */
@@ -1108,7 +1115,7 @@ function slateFace(poly3, sz, out) {
   const ucen = (Math.min(...uv.map((q) => q[0])) + Math.max(...uv.map((q) => q[0]))) / 2;
   for (let k = 0; ; k++) {
     const v0 = k * e;
-    if (v0 + 0.5 * e > vmax) break;
+    if (v0 + l > vmax) break;                                // the top slate ends below the apex (capstone / finial)
     const ivs = sliceU(uv, Math.min(vmax - 1e-6, v0 + e));
     const st = (k % 2) * 0.5 * w;
     for (const [u0, u1] of ivs) {
@@ -1221,7 +1228,7 @@ function spireParts(S, spec) {
         const u = -hw + (k * 2 * hw) / ns;
         // length until the face's half width (tapering from hw to thw) equals |u|
         const fr = Math.abs(u) <= thw ? 1 : (hw - Math.abs(u)) / (hw - thw);
-        const len = fr * L;
+        const len = 0.97 * fr * L;                          // stops short of the apex / hip
         if (len < 0.05 * L) continue;
         const p = [bc[0] + U[0] * u + V[0] * len / 2 + Nn[0] * 0.006 * W, bc[1] + U[1] * u + V[1] * len / 2 + Nn[1] * 0.006 * W, bc[2] + V[2] * len / 2 + Nn[2] * 0.006 * W];
         const Rm = Float64Array.from([U[0], U[1], U[2], 0, V[0], V[1], V[2], 0, Nn[0], Nn[1], Nn[2], 0, 0, 0, 0, 1]);
@@ -1232,7 +1239,12 @@ function spireParts(S, spec) {
   }
   // hip rolls (lead) or, on a stone spire, plain hip arrises with crockets
   const rr = S.rr;
-  const hipM = union(hips.map((h) => tube(h.length === 3 ? h : h, rr, 8)));
+  // each roll stops a little short of its top end so its rounded end stays under the apex
+  const shorten = (h) => {
+    const a = h[h.length - 2], b = h[h.length - 1], L = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]), k = Math.min(0.5, (2 * rr) / L);
+    return [...h.slice(0, -1), [b[0] - (b[0] - a[0]) * k, b[1] - (b[1] - a[1]) * k, b[2] - (b[2] - a[2]) * k]];
+  };
+  const hipM = union(hips.map((h) => tube(shorten(h), rr, 8)));
   parts.push(part('hip', roleCover === 'stone' ? 'stone' : 'roof', hipM));
   if (S.deco && S.cover === 'stone' && S.detail !== 'low') {
     // Gothic crockets: curled leaves climbing the hips about every metre (Salisbury, Freiburg), and two moulded bands
@@ -1295,11 +1307,18 @@ function spireParts(S, spec) {
     }
   }
   // capstone collar and finial
-  const capH = Math.min(0.025 * S.H, 0.6 * W), capR = aTop * 1.5;
-  const capP = scaleH(new Prof(0).fillet(0.3).ovolo(0.25 * capR, 0.35, 4).fillet(0.35, -0.1 * capR), capH);
-  parts.push(part('capstone', 'metal', lathe(capP, capR, zA - capH, 0, 32)));
-  parts.push(...finialAt(S.finial, S.Hf, capR * 0.9, segs, spec.style === 'russian', zA));
+  const capH = S.capH, capR = aTop * 1.5;
+  const capP = capstoneProf(capR, capH, S.finial);
+  parts.push(part('capstone', 'metal', lathe(capP, capR, S.zTop - capH, 0, 32)));
+  parts.push(...finialAt(S.finial, S.Hf, capR * 0.9, segs, spec.style === 'russian', S.zTop));
   return parts;
+}
+
+/** The lead capstone at the apex: a moulded collar that seats the finial, or, with no finial, a collar finished in a
+ *  short point so the spire ends cleanly at its stated height. */
+function capstoneProf(capR, capH, finial) {
+  if (finial === 'none') return scaleH(new Prof(0).fillet(0.12).ovolo(0.25 * capR, 0.18, 4).fillet(0.12, -0.1 * capR).slope(-1.15 * capR, 0.58), capH);
+  return scaleH(new Prof(0).fillet(0.3).ovolo(0.25 * capR, 0.35, 4).fillet(0.35, -0.1 * capR), capH);
 }
 
 /**
@@ -1334,12 +1353,13 @@ function decoSpire(S, parts, role) {
   // needle: a slender octagonal pyramid with ribbed arrises
   const a0 = aE * (1 - 0.19 * 4) * 1.03;
   parts.push(part('needle', role, loft([ngon(8, a0), ngon(8, aTop)], [z - EPS, zA])));
-  const hip = tube([[a0 / Math.cos(Math.PI / 8), 0, z], [aTop / Math.cos(Math.PI / 8), 0, zA]], Math.min(0.006 * W, 0.4 * a0), 6);
+  const rN = Math.min(0.006 * W, 0.4 * a0), zN = zA - 2 * rN, aN = aTop + ((a0 - aTop) * 2 * rN) / (zA - z);
+  const hip = tube([[a0 / Math.cos(Math.PI / 8), 0, z], [aN / Math.cos(Math.PI / 8), 0, zN]], rN, 6);
   parts.push(part('needle-rib', 'metal', hip, radial(8, mat.Rz(Math.PI / 8 - Math.PI / 2))));
-  const capH = Math.min(0.025 * S.H, 0.6 * W), capR = aTop * 1.5;
-  const capP = scaleH(new Prof(0).fillet(0.3).ovolo(0.25 * capR, 0.35, 4).fillet(0.35, -0.1 * capR), capH);
-  parts.push(part('capstone', 'metal', lathe(capP, capR, zA - capH, 0, 32)));
-  parts.push(...finialAt(S.finial === 'cross' ? 'spike' : S.finial, S.Hf, capR * 0.9, segs, false, zA));
+  const capH = S.capH, capR = aTop * 1.5;
+  const capP = capstoneProf(capR, capH, S.finial);
+  parts.push(part('capstone', 'metal', lathe(capP, capR, S.zTop - capH, 0, 32)));
+  parts.push(...finialAt(S.finial === 'cross' ? 'spike' : S.finial, S.Hf, capR * 0.9, segs, false, S.zTop));
   return parts;
 }
 

@@ -29,6 +29,12 @@ for (const finial of finials) {
 // ribs (0 = none; a ribbed dome without a count gets 16, a ribbed cupola 8)
 for (const ribs of [0, 5, 8, 12, 16, 24, 48]) for (const domeType of domeTypes) add({ element: 'dome', domeType, ribs });
 for (const ribs of [0, 8, 16]) add({ element: 'cupola', domeType: 'ribbed', ribs });
+// finial none everywhere it can stand: every spire type and style, dome and cupola crowns and lanterns
+for (const spireType of spireTypes) for (const style of [undefined, 'art-deco', 'gothic']) for (const material of ['slate', 'copper', 'limestone'])
+  add({ element: 'spire', spireType, style, material, finial: 'none' });
+for (const element of ['dome', 'cupola']) for (const domeType of domeTypes) for (const lantern of [true, false])
+  add({ element, domeType, lantern, finial: 'none' });
+for (const finial of finials) for (const spireType of spireTypes) add({ element: 'spire', spireType, finial, height: 9, width: 2 });
 // drum orders (non-classical orders fall back to pilaster strips)
 for (const order of ORDER_KEYS) add({ element: 'dome', order });
 // materials and styles
@@ -85,6 +91,9 @@ for (const c of cases) {
       assert.equal(p.transforms ? p.transforms.length / 16 : 1, n, `${name} count`);
     }
     if (c.spec.ribs > 0 && SCHEMA.ribs.max >= c.spec.ribs) assert.equal(ex.counts.rib, c.spec.ribs, 'ribs promised as asked');
+    // ribs not stated: ribbed → 16 (cupola 8), others none; stated 0: none, also on a ribbed dome
+    if (el !== 'spire' && c.spec.ribs === undefined) assert.equal(ex.counts.rib, r.spec.domeType === 'ribbed' ? (el === 'cupola' ? 8 : 16) : undefined, 'default ribs');
+    if (c.spec.ribs === 0) assert.ok(!r.parts.some((p) => p.name === 'rib'), 'ribs: 0 builds no ribs');
     assert.ok(r.tris < TRI_MAX, `${r.tris} triangles`);
     assert.ok(r.ms < BUDGET[el], `${r.ms.toFixed(0)} ms over ${BUDGET[el]} ms`);
     assert.ok(r.total < BUDGET[el], `${r.total.toFixed(0)} ms with evaluation, over ${BUDGET[el]} ms`);
