@@ -15,10 +15,22 @@ export function kernelGeneration() { return GEN; }
  *  (e.g. manifold.scale(k)), which share the cached geometry and are safe to delete. */
 export function memo(key, build) {
   if (!MEMO.has(key)) {
-    if (MEMO.size > 64) MEMO.delete(MEMO.keys().next().value);
+    if (MEMO.size > 64) {
+      const oldest = MEMO.keys().next().value;
+      release(MEMO.get(oldest)); // derived handles already handed out keep the shared geometry alive
+      MEMO.delete(oldest);
+    }
     MEMO.set(key, build());
   }
   return MEMO.get(key);
+}
+
+/** Delete the kernel objects inside a memoised value (a manifold, parts, arrays or plain objects of them). */
+function release(v, seen = new Set()) {
+  if (!v || typeof v !== 'object' || seen.has(v)) return;
+  seen.add(v);
+  if (typeof v.delete === 'function' && typeof v.isDeleted === 'function') { if (!v.isDeleted()) v.delete(); return; }
+  for (const x of Array.isArray(v) ? v : Object.values(v)) release(x, seen);
 }
 export function K() { if (!W) throw new Error('arch kernel: setKernel(wasm) was not called'); return W; }
 
