@@ -336,10 +336,10 @@ function corinthianCapital(d, segs, composite = false) {
     const { egg, dart } = eggAndDart({ h: 0.08 * D, w: 0.065 * D, d: 0.035 * D });
     parts.push(part('egg', 'stone', egg, radial(28, mat.mul(mat.T(0, -(0.5 * D + (echR - 0.5 * D) * 0.6), ze + echH * 0.5), mat.Rx(-0.5)), Math.PI / 28)));
     parts.push(part('dart', 'stone', dart, radial(28, mat.mul(mat.T(0, -(0.5 * D + (echR - 0.5 * D) * 0.6) - 0.004 * D, ze + echH * 0.5), mat.Rx(-0.5)))));
-    const r0 = 0.17 * D, vol = voluteScroll({ r0, depth: 0.2 * D, side: 1, pinch: 0.05 });
+    const r0 = 0.2 * D, vol = voluteScroll({ r0, depth: 0.075 * D, side: 1, pinch: 0, turns: 2.5 });
     const vs = [];
     for (let k = 0; k < 4; k++) {
-      const phi = Math.PI / 4 + (k * Math.PI) / 2, rad = 0.66 * D;
+      const phi = Math.PI / 4 + (k * Math.PI) / 2, rad = 0.72 * D;
       // scroll seen from the diagonal: its plane faces outward along phi
       vs.push(mat.mul(mat.T(rad * Math.cos(phi), rad * Math.sin(phi), zab - r0 * 0.95), mat.Rz(phi - Math.PI / 2)));
     }
@@ -418,7 +418,11 @@ function capitalParts(spec, d, segs) {
     case 'egyptian': return papyrusCapital(d, segs);
     case 'art-deco': return decoCapital(d);
     case 'gothic': return gothicCapital(d, segs);
-    default: return d.cap > 0 ? [part('capital', 'stone', box(-0.55 * d.D, -0.55 * d.D, 0, 0.55 * d.D, 0.55 * d.D, d.cap))] : [];
+    default: {
+      // modern: a plain cap plate (on its own a capital still has to be something)
+      const h = Math.max(d.cap, 0.06 * d.D);
+      return d.cap > 0 || spec.element === 'capital' ? [part('capital', 'stone', box(-0.55 * d.D, -0.55 * d.D, 0, 0.55 * d.D, 0.55 * d.D, h))] : [];
+    }
   }
 }
 
