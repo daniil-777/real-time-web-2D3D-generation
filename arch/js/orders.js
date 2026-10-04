@@ -59,7 +59,8 @@ export const ORDER_KEYS = Object.keys(ORDERS);
 export const DEFAULT_D = 0.45;
 
 /**
- * Dimensions of a column in metres. `height` is the column proper (base + shaft + capital, without pedestal);
+ * Dimensions of a column in metres. `height` is the column proper (base + shaft + capital, without pedestal) — the
+ * column family passes the OVERALL height including a pedestal divided by 4/3 (Vignola gives the total and divides it);
  * when absent, `diameter` (lower shaft diameter) is used; when both are absent D = DEFAULT_D.
  */
 export function columnDims(order, { height, diameter, pedestal } = {}) {
