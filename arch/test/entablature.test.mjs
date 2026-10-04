@@ -32,9 +32,11 @@ for (const element of ['entablature', 'cornice']) {
   add({ element, order: 'doric', length: 6, cornice: 'mutules', frieze: 'triglyph' });
 }
 for (const frieze of S.frieze.values) for (const order of ['tuscan', 'doric', 'greek-doric', 'ionic', 'corinthian']) add({ element: 'entablature', order, frieze });
-// moulding: every profile x every enrichment, returns, sizes incl. extremes
+// moulding: every profile x every enrichment (stated), every profile with its default enrichment (ruling 21), returns,
+// sizes incl. extremes
 for (const profile of S.profile.values) for (const enrichment of S.enrichment.values) add({ element: 'moulding', profile, enrichment });
-for (const profile of ['ovolo', 'crown', 'bead']) for (const returns of [true, false]) add({ element: 'moulding', profile, returns });
+for (const profile of S.profile.values) add({ element: 'moulding', profile });
+for (const profile of ['ovolo', 'crown', 'bead', 'cyma-reversa']) for (const returns of [true, false]) add({ element: 'moulding', profile, returns });
 for (const length of [S.length.min, 2.4, S.length.max]) for (const height of [S.height.min, 0.18, 2]) add({ element: 'moulding', length, height });
 add({ element: 'moulding', profile: 'ovolo', height: S.height.max, length: 3 });
 for (const detail of S.detail.values) add({ element: 'moulding', profile: 'cyma-reversa', enrichment: 'acanthus', detail });
@@ -51,6 +53,17 @@ for (const element of ['window', 'door']) {
   for (const [width, height] of [[S.width.min, S.height.min], [0.9, 1.6], [1.3, 2.4], [3, 6], [S.width.max, S.height.max]]) add({ element, width, height });
   for (const order of ['doric', 'corinthian']) for (const cornice of S.cornice.values) add({ element, order, cornice });
   add({ element, frieze: 'pulvinated' }); add({ element, detail: 'low' }); add({ element, enrichment: 'egg-and-dart', order: 'ionic' });
+  // arched heads (ruling 22): every archType, with a keystone, with a pediment asked for (an aedicule), every style,
+  // a style with an explicit archType, flattened arches (too tall for the opening), extreme sizes, details
+  for (const archType of S.archType.values) {
+    add({ element, archType }); add({ element, archType, keystone: true });
+    add({ element, archType, pediment: element === 'window' ? 'segmental' : 'triangular' });
+    add({ element, archType, width: 3, height: 1.2 }); add({ element, archType, detail: 'low' });
+  }
+  for (const style of S.style.values) add({ element, style });
+  add({ element, style: 'gothic', archType: 'tudor' }); add({ element, style: 'romanesque', archType: 'segmental' });
+  add({ element, style: 'moorish', pediment: 'broken' }); add({ element, style: 'baroque', archType: 'semicircular' });
+  for (const [width, height] of [[S.width.min, S.height.min], [S.width.max, S.height.max]]) for (const style of ['gothic', 'moorish', 'baroque']) add({ element, style, width, height });
 }
 
 const count = (r, name) => r.parts.filter((p) => p.name === name).reduce((s, p) => s + instanceCount(p), 0);
@@ -142,7 +155,8 @@ await t('pediment rake dentils are all above the horizontal cornice, left and ri
 });
 await t('every instance matrix is rotation + translation (+ uniform scale): glTF TRS', async () => {
   for (const spec of [{ element: 'pediment', order: 'corinthian' }, { element: 'pediment', pediment: 'segmental' }, { element: 'window', pediment: 'broken' },
-    { element: 'entablature', order: 'ionic' }, { element: 'door', keystone: true }]) {
+    { element: 'entablature', order: 'ionic' }, { element: 'door', keystone: true }, { element: 'window', style: 'gothic' },
+    { element: 'door', style: 'romanesque' }, { element: 'door', style: 'baroque' }, { element: 'window', style: 'renaissance', keystone: true }]) {
     const r = await generate(spec);
     for (const p of r.parts) for (let i = 0; i < instanceCount(p) && p.transforms; i++) {
       const m = p.transforms.subarray(16 * i, 16 * i + 16), c = [0, 1, 2].map((k) => [m[4 * k], m[4 * k + 1], m[4 * k + 2]]);
@@ -150,6 +164,47 @@ await t('every instance matrix is rotation + translation (+ uniform scale): glTF
       assert.ok(Math.abs(dot(c[0], c[1])) + Math.abs(dot(c[0], c[2])) + Math.abs(dot(c[1], c[2])) < 1e-9 * Math.max(...len) ** 2, `${spec.element} ${p.name} not orthogonal`);
       assert.ok(Math.max(...len) - Math.min(...len) < 1e-9 * Math.max(...len), `${spec.element} ${p.name} non-uniform scale`);
     }
+  }
+});
+await t('moulding: unstated enrichment is the profile\'s own (ruling 21); stated none is plain', async () => {
+  const want = { ovolo: 'ovolo-egg', bead: 'bead', 'cyma-reversa': 'lesbian-leaf' }, motifs = ['ovolo-egg', 'bead', 'lesbian-leaf', 'leaf', 'dentil'];
+  for (const profile of S.profile.values) {
+    const names = (await generate({ element: 'moulding', profile })).parts.map((p) => p.name);
+    for (const m of motifs) assert.equal(names.includes(m), want[profile] === m, `${profile}: ${m}`);
+    const none = (await generate({ element: 'moulding', profile, enrichment: 'none' })).parts.map((p) => p.name);
+    assert.deepEqual(none, ['moulding'], `${profile} none`);
+  }
+});
+await t('window / door styles (ruling 22): heads, treatments, pediment only when asked for', async () => {
+  const has = async (spec, ...names) => { const ps = (await generate(spec)).parts.map((p) => p.name); for (const n of names) assert.ok(ps.includes(n), `${JSON.stringify(spec)} lacks ${n}`); return ps; };
+  const gothic = await has({ element: 'window', style: 'gothic' }, 'frame', 'hood-mould', 'label-stop', 'sill');
+  assert.ok(!gothic.includes('raking-cornice') && !gothic.includes('console'), 'gothic: no pediment, no consoles');
+  await has({ element: 'door', style: 'romanesque' }, 'archivolt', 'impost');
+  await has({ element: 'window', style: 'moorish' }, 'archivolt', 'alfiz', 'spandrel');
+  await has({ element: 'window', style: 'renaissance', keystone: true }, 'archivolt', 'keystone', 'console');
+  await has({ element: 'window', style: 'baroque' }, 'keystone', 'raking-cornice', 'pedestal', 'urn-body');
+  await has({ element: 'door', style: 'baroque' }, 'raking-cornice', 'urn-body', 'plinth');
+  await has({ element: 'window', archType: 'semicircular', pediment: 'segmental' }, 'archivolt', 'spandrel', 'frieze', 'raking-cornice');
+  const arched = (await generate({ element: 'door', archType: 'segmental' })).parts.map((p) => p.name);
+  assert.ok(!arched.includes('raking-cornice'), 'arched head: the default pediment is omitted');
+  const flat = (await generate({ element: 'window' })).parts.map((p) => p.name);
+  assert.ok(flat.includes('raking-cornice') && flat.includes('architrave'), 'classical window keeps its pediment');
+});
+await t('an arched head keeps the opening: clear height to the crown = height, width between the jambs', async () => {
+  for (const archType of S.archType.values) {
+    const r = await generate({ element: 'door', archType, width: 1.4, height: 3 });
+    const band = r.parts.find((p) => p.name === 'archivolt' || p.name === 'frame').manifold;
+    // the opening's crown: the lowest point of the band on the axis
+    const slice = band.trimByPlane([1, 0, 0], -0.0005).trimByPlane([-1, 0, 0], -0.0005).boundingBox();
+    assert.ok(Math.abs(slice.min[2] - 3) < 0.003, `${archType} crown ${slice.min[2]}`);
+    const jamb = band.trimByPlane([0, 0, -1], -0.5).trimByPlane([1, 0, 0], 0).boundingBox();   // right jamb below 0.5 m
+    assert.ok(Math.abs(jamb.min[0] - 0.7) < 1e-5 && jamb.min[2] < 0.5, `${archType} jamb ${jamb.min[0]} ${jamb.min[2]}`);
+  }
+});
+await t('broken pediments carry an urn on a pedestal in the gap', async () => {
+  for (const spec of [{ element: 'pediment', pediment: 'broken' }, { element: 'window', pediment: 'broken' }, { element: 'portico', pediment: 'broken' }]) {
+    const r = await generate(spec), names = r.parts.map((p) => p.name);
+    assert.ok(names.includes('pedestal') && names.includes('urn-body') && names.includes('urn-knob'), JSON.stringify(spec));
   }
 });
 await t('triangular pediment pitch is 22.5 deg (Serlio)', async () => {

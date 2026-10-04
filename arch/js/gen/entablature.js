@@ -19,15 +19,26 @@
 // - Mutules (Vitruvius IV.3): one over every triglyph and every metope, with 3 x 6 guttae.
 
 import { ORDERS, DEFAULT_D, entablatureDims } from '../orders.js';
-import { K, mat, instances, box, union, part, crossSection, extrudeProfileX, bezier, arc } from '../kernel.js';
+import { K, mat, instances, box, union, part, crossSection, extrudeProfileX, bezier, arc, placeParts } from '../kernel.js';
 import { Prof } from '../profiles.js';
 import { acanthusLeaf, rosette, spiral } from '../ornament.js';
+import { socle, urnParts } from './finial.js';
+import { archGeom } from './arch.js';
+import { DEFAULTS } from '../spec.js';
 
 export const ELEMENTS = ['entablature', 'cornice', 'moulding', 'pediment', 'window', 'door'];
 
 const EPS = 0.001;                                      // overlap so pieces meant to touch overlap (Manifold does not fuse touching faces)
+
+// Modules of the repeated members of a cornice, in lower diameters D (Vignola, after Ware, The American Vignola, 1903).
+// orders.js holds the orders' heights and axes; these are the cornice's own carving modules.
+const DENTIL = { w: 1 / 6, pitch: 1 / 4 };   // Ionic dentil 1/3 M wide, interval 1/6 M: 13 to the eustyle axis of 3.25 D
+const MODILLION = { pitch: 0.65, w: 0.22 };  // Corinthian modillion: 5 to the eustyle axis of 3.25 D (one on every axis)
+// Default enrichment of a moulding when none is stated (controller ruling 21): each profile's canonical carving.
+const MOULDING_ENRICH = { ovolo: 'egg-and-dart', bead: 'bead-and-reel', 'cyma-reversa': 'leaf-and-dart' };
 const RICH = new Set(['ionic', 'corinthian', 'composite', 'solomonic']);
 const EGG_TILT = (32 * Math.PI) / 180;                // eggs lean out of the ovolo, facing down-out as seen from below
+const sstep = (x) => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
 const curveN = (detail) => (detail === 'low' ? 6 : detail === 'medium' ? 10 : 14);
 const orderKey = (o) => (ORDERS[o] ? o : 'ionic');
 
@@ -279,7 +290,7 @@ export function runPlan(ctx) {
     }
   }
   if (tags.dentilBand && tags.dentilCap) {
-    const w = D / 6, pitch = D / 4, qb = tags.dentilBand.p1, cap = tags.dentilCap.p1, qf = cap - 0.08 * (cap - qb);
+    const w = DENTIL.w * D, pitch = DENTIL.pitch * D, qb = tags.dentilBand.p1, cap = tags.dentilCap.p1, qf = cap - 0.08 * (cap - qb);
     const front = frontRow(returns ? L / 2 + qf - w / 2 : L / 2 - w / 2, pitch, axes);
     const p = front.length > 1 ? front[1] - front[0] : pitch;
     const side = returns ? sideRow(-qf + w / 2 + p, p, w / 2, B) : [];
@@ -289,7 +300,7 @@ export function runPlan(ctx) {
   }
   if (tags.modBand && tags.corona) {
     const qm = tags.modBand.p1, co = tags.corona, l = co.p1 - 2.2 * co.drip - qm, h = co.h0 - tags.modBand.h0;
-    const w = Math.min(0.22 * D, 0.6 * l), pitch = 0.65 * D, dl = 0.06 * w;
+    const w = Math.min(MODILLION.w * D, 0.6 * l), pitch = MODILLION.pitch * D, dl = 0.06 * w;
     const front = frontRow(returns ? L / 2 + qm - w / 2 - dl : L / 2 - pitch / 2, pitch, axes);
     const p = front.length > 1 ? front[1] - front[0] : pitch;
     const side = returns ? sideRow(-qm + w / 2 + dl, p, w / 2, B) : [];
@@ -326,6 +337,15 @@ export function runPlan(ctx) {
       });
       pl.counts.bead = pl.dims.bead.reduce((s, b) => s + b.n + 2 * b.ns, 0);
       if (pl.counts.bead > MANY.bead || pl.dims.bead.some((b) => !b.n)) { delete pl.dims.bead; delete pl.counts.bead; }
+    }
+  }
+  if (enrich.has('leaf-and-dart') && (tags.leafHost || tags.bed) && detail !== 'low') {
+    // Lesbian cymatium (Erechtheion): heart-shaped leaves, point down, rimmed and ribbed, a dart between each pair
+    const hostL = tags.leafHost || tags.bed, hb = hostL.h1 - hostL.h0, q = hostL.p0, pitch = 0.9 * hb;
+    const len = returns ? L + 2 * q : L, f = motifRow(len, pitch), fs = returns ? motifRow(B + q, f.p, true) : { n: 0 };
+    if (f.n > 0 && f.n + 2 * fs.n <= MANY.leaf) {
+      pl.dims.lesbian = { q, z: hostL.h0, h: hb, surf: hostL.pts, len, p: f.p, n: f.n, ns: fs.n };
+      pl.counts['lesbian-leaf'] = f.n + 2 * fs.n;
     }
   }
   const host = tags.leafHost || tags.bed || (!enrich.has('egg-and-dart') && tags.ovolo);   // an ovolo takes leaves unless it has eggs
@@ -562,8 +582,51 @@ function runParts(pl, ctx) {
     const sy = Array.from({ length: lf.ns }, (_, k) => -lf.q + (k + 0.5) * lf.p);
     parts.push(part('leaf', 'stone', leaf, instances(all(fx, sy, lf.q - 0.15 * (lf.h / 10), lf.z))));
   }
+  if (pl.dims.lesbian) {
+    const lf = pl.dims.lesbian, { leaf, dart } = lesbianSolids(lf);
+    const fx = Array.from({ length: lf.n }, (_, k) => -lf.len / 2 + (k + 0.5) * lf.p);
+    const fd = Array.from({ length: lf.n - 1 }, (_, k) => -lf.len / 2 + (k + 1) * lf.p);
+    const sy = Array.from({ length: lf.ns }, (_, k) => -lf.q + (k + 0.5) * lf.p);
+    const sd = Array.from({ length: Math.max(0, lf.ns - 1) }, (_, k) => -lf.q + (k + 1) * lf.p);
+    parts.push(part('lesbian-leaf', 'stone', leaf, instances(all(fx, sy, lf.q, lf.z))));
+    const dx = all(fd, sd, lf.q, lf.z);
+    if (dx.length) parts.push(part('lesbian-dart', 'stone', dart, instances(dx)));
+  }
   void F; void S; void B;
   return { parts, cuts };
+}
+
+/**
+ * Lesbian leaf-and-dart for a cyma reversa (the Erechtheion's cymatium): a heart-shaped leaf, point down, 0.8 of the
+ * pitch wide and 0.96 of the moulding high, its two lobes rounded under the top; a raised rim and a tapering midrib;
+ * the dart a narrow lozenge between leaves. Drawn in elevation, given a shallow relief, refined and bent onto the
+ * profile (each point moves out by the moulding's projection at its height). Local: y = 0 on the host's base line.
+ */
+function lesbianSolids(lf) {
+  const { CrossSection } = K();
+  const W = 0.8 * lf.p, H = 0.92 * lf.h, N = 14;
+  const right = [];
+  for (let i = 0; i <= N; i++) { const v = i / N; right.push([(W / 2) * Math.sin((Math.PI / 2) * v) ** 0.85, v * 0.66 * H]); }
+  const cx = W / 4, cz = 0.66 * H, rx = W / 4, rz = 0.31 * H;
+  for (let i = 1; i <= N; i++) { const a = (0.86 * Math.PI * i) / N; right.push([cx + rx * Math.cos(a), cz + rz * Math.sin(a)]); }
+  const heart = [...right, [0, 0.8 * H], ...right.slice(1).reverse().map(([x, z]) => [-x, z])];
+  const cs = new CrossSection([heart], 'NonZero'), inner = cs.offset(-0.07 * W, 'Round', 2, 12);
+  const rib = [[-0.035 * W, 0.08 * H], [0.035 * W, 0.08 * H], [0.02 * W, 0.74 * H], [-0.02 * W, 0.74 * H]];
+  const d = lf.h;
+  const leafM = union([slab(inner, -0.05 * d, 0.06 * d), slab(cs.subtract(inner), -0.085 * d, 0.06 * d), slab(rib, -0.08 * d, 0.06 * d)]);
+  const dartM = slab([[0, 0.06 * H], [0.07 * W, 0.5 * H], [0.045 * W, 0.92 * H], [-0.045 * W, 0.92 * H], [-0.07 * W, 0.5 * H]], -0.07 * d, 0.06 * d);
+  const sp = lf.surf, qAt = (zz) => {
+    const z = lf.z + zz;
+    if (z <= sp[0][1]) return sp[0][0];
+    for (let i = 1; i < sp.length; i++) if (z <= sp[i][1]) { const t = (z - sp[i - 1][1]) / Math.max(1e-12, sp[i][1] - sp[i - 1][1]); return sp[i - 1][0] * (1 - t) + sp[i][0] * t; }
+    return sp[sp.length - 1][0];
+  };
+  // the relief flattens toward the top, where the cyma's convex lip reaches the crowning fillet's line
+  const bend = (m) => m.refineToLength(lf.h / 14).warp((v) => {
+    const z = Math.max(0, v[2]), k = 1 - 0.75 * sstep((z - 0.55 * lf.h) / (0.4 * lf.h));
+    v[1] = (v[1] < 0 ? v[1] * k : v[1]) - (qAt(z) - lf.q);
+  });
+  return { leaf: bend(leafM), dart: bend(dartM) };
 }
 
 // ------------------------------------------------------------------------------------------------ entablature / cornice
@@ -644,7 +707,8 @@ const MOULDINGS = {
   crown: [['cavetto', 0.22, 0.18, 'leafHost'], ['fillet', 0.05, 0.22], ['corona', 0.26, 0.62, 'corona'], ['fillet', 0.05, 0.65],
     ['cymaRecta', 0.32, 0.93], ['fillet', 0.1, 0.96]],
 };
-const HOSTS = { 'egg-and-dart': ['ovolo'], 'bead-and-reel': ['bead', 'torus'], acanthus: ['cavetto', 'cyma-recta', 'cyma-reversa', 'ovolo', 'crown'] };
+const HOSTS = { 'egg-and-dart': ['ovolo'], 'bead-and-reel': ['bead', 'torus'], acanthus: ['cavetto', 'cyma-recta', 'cyma-reversa', 'ovolo', 'crown'],
+  'leaf-and-dart': ['cyma-reversa'] };
 
 /**
  * A moulding run: the profile, and when the enrichment cannot be carved on the profile itself, an enriched course under
@@ -652,7 +716,10 @@ const HOSTS = { 'egg-and-dart': ['ovolo'], 'bead-and-reel': ['bead', 'torus'], a
  */
 export function mouldingPlan(spec) {
   const H = spec.height || 0.16, L = spec.length || 1.2, profile = MOULDINGS[spec.profile] ? spec.profile : 'ovolo';
-  const en = spec.enrichment && spec.enrichment !== 'none' ? spec.enrichment : null, n = curveN(spec.detail);
+  // stated enrichment ('none' = none), else the profile's canonical one: ovolo egg-and-dart, astragal bead-and-reel,
+  // cyma reversa leaf-and-dart (acanthus leaves); torus, scotia, cavetto, cyma recta and crown plain
+  const en = spec.enrichment === undefined || spec.enrichment === null ? (MOULDING_ENRICH[profile] || null)
+    : spec.enrichment !== 'none' ? spec.enrichment : null, n = curveN(spec.detail);
   const course = en && (en === 'dentils' || !HOSTS[en].includes(profile)) ? en : null;
   const fr = course === 'dentils' ? 0.42 : course === 'egg-and-dart' ? 0.36 : course === 'acanthus' ? 0.4 : course ? 0.2 : 0;
   const hc = fr * H, hm = H - hc, members = [];
@@ -714,13 +781,14 @@ function buildMoulding(spec) {
  */
 export function pedimentPlan(o) {
   const order = orderKey(o.order), O = ORDERS[order], D = o.D, n = curveN(o.detail), dq = o.dq || 0, z0 = o.z0 || 0;
-  const c = O.ent.cornice * D, kind = o.kind === 'segmental' || o.kind === 'broken' ? o.kind : 'triangular';
+  const c = O.ent.cornice * D, kind = ['segmental', 'broken', 'broken-segmental'].includes(o.kind) ? o.kind : 'triangular';
+  const seg = kind === 'segmental' || kind === 'broken-segmental', broken = kind.startsWith('broken');
   const hor = drawMembers(corniceMembers(o.ck, c, { noSima: true }), n, z0);
   const full = drawMembers(corniceMembers(o.ck, c), n, 0);
   const hh = hor.top, Ph = hor.P + dq, xo = o.W / 2 + Ph;
   const zc0 = full.tags.corona ? full.tags.corona.h0 : 0.5 * c;
   const th = ((o.pitch ?? defaultPitch(order)) * Math.PI) / 180, t = Math.tan(th), rise = xo * t;
-  const gap = kind === 'broken' ? 0.3 * o.W : 0;
+  const gap = broken ? 0.3 * o.W : 0;
   const B = o.B ?? PROJ[o.ck] * c;
   const tags = shiftTags(hor.tags, dq);
   const hpl = runPlan({ tags, L: o.W, B, returns: true, D, order, axes: o.axes, enrich: o.enrich, detail: o.detail, ck: o.ck, fk: null });
@@ -728,10 +796,21 @@ export function pedimentPlan(o) {
   // the raking corona dies into the horizontal cornice instead of showing as a notch at the eaves
   const hd = hh - (full.tags.corona ? full.tags.corona.drip : 0);
   const zOff = (x) => hd - zc0 + (xo - Math.abs(x)) * t;             // plumb rake: height of the profile's base at x
-  const Rd = (xo * xo + rise * rise) / (2 * rise), zC = hd + rise - Rd; // segmental: drip circle radius and centre
-  const top = hd - zc0 + (xo - gap / 2) * t + full.top;
-  return { ...o, order, kind, D, c, n, hor, full, hh, hd, Ph, xo, zc0, th, t, rise, gap, B, dq, z0, tags, hpl, zOff, Rd, zC,
-    Rb: Rd - zc0, size: { x: o.W + 2 * Ph, z: top - z0 } };
+  const Rd = (xo * xo + rise * rise) / (2 * rise), zC = hd + rise - Rd, Rb = Rd - zc0; // segmental: drip circle, bed radius
+  const crown = hd - zc0 + xo * t + full.top;                           // apex / crown of the sima (unbroken)
+  let top = seg ? (broken ? zC + Math.sqrt((Rb + full.top) ** 2 - (gap / 2) ** 2) : crown) : hd - zc0 + (xo - gap / 2) * t + full.top;
+  // broken: an urn (finial.js, flame knob) on a moulded pedestal stands on the level top of the tympanum in the gap,
+  // rising a tenth above where the unbroken apex would be; the pedestal's die face is in the tympanum plane
+  let urn = null;
+  if (broken) {
+    const zf = seg ? zC + Math.sqrt(Rb * Rb - (gap / 2) ** 2) : zOff(gap / 2);
+    // pedestal 0.28 and urn 0.72 of the group; the pedestal's die a little wider than the urn's own socle (0.135 H)
+    const T = Math.max(0.35 * gap, 1.1 * (crown - zf)), hP = 0.28 * T, Hu = T - hP, aP = Math.min(0.17 * Hu, 0.3 * gap);
+    urn = { zf, aP, hP, Hu, y: -dq + aP };
+    top = Math.max(top, zf + hP + Hu);
+  }
+  return { ...o, order, kind, seg, broken, D, c, n, hor, full, hh, hd, Ph, xo, zc0, th, t, rise, gap, B, dq, z0, tags, hpl, zOff, Rd, zC,
+    Rb, urn, size: { x: o.W + 2 * Ph, z: top - z0 } };
 }
 
 /** Pediment pitch when none is asked: Serlio's / Vignola's 22.5 deg; a Greek Doric front follows Vitruvius (III.5.12:
@@ -759,13 +838,14 @@ export function pedimentParts(pp) {
   const prof = closeBack(shiftPts(full.pts, dq), B);
   const fr = (x, z) => ({ o: [x, 0, z], A: [0, -1, 0], B: [0, 0, 1] });
   let rake;
-  if (kind === 'segmental') {
+  if (pp.seg) {
     const ad = Math.asin(Math.min(1, xo / pp.Rd)) * 1.12, N = detail === 'low' ? 24 : detail === 'medium' ? 36 : 56, frames = [];
     for (let i = 0; i <= N; i++) {
       const a = -ad + (2 * ad * i) / N, u = [Math.sin(a), 0, Math.cos(a)];
       frames.push({ o: [pp.Rb * u[0], 0, pp.zC + pp.Rb * u[2]], A: [0, -1, 0], B: u });
     }
     rake = sweep(prof, frames).trimByPlane([-1, 0, 0], -xo).trimByPlane([1, 0, 0], -xo);
+    if (pp.broken) rake = union([rake.trimByPlane([1, 0, 0], gap / 2), rake.trimByPlane([-1, 0, 0], gap / 2)]);
   } else if (kind === 'broken') {
     rake = union([sweep(prof, [fr(-xo, zOff(xo)), fr(-gap / 2, zOff(gap / 2))]), sweep(prof, [fr(gap / 2, zOff(gap / 2)), fr(xo, zOff(xo))])]);
   } else {
@@ -775,9 +855,14 @@ export function pedimentParts(pp) {
   parts.push(part('raking-cornice', 'stone', rake));
   // tympanum, recessed in the reference (frieze) plane
   let ty;
-  if (kind === 'segmental') {
+  if (pp.seg) {
     const xt = Math.sqrt(Math.max(0, pp.Rb * pp.Rb - (hh - pp.zC) ** 2)), N = 32, poly = [[-xt, hh - EPS], [xt, hh - EPS]];
-    for (let i = 1; i < N; i++) { const x = xt - (2 * xt * i) / N; poly.push([x, pp.zC + Math.sqrt(pp.Rb * pp.Rb - x * x) + EPS]); }
+    const arcZ = (x) => pp.zC + Math.sqrt(pp.Rb * pp.Rb - x * x);
+    if (pp.broken) {                                    // the arc down to the gap, then level across it
+      for (let i = 1; i <= N; i++) { const x = xt - ((xt - gap / 2) * i) / N; poly.push([x, arcZ(x) + EPS]); }
+      poly.push([gap / 2 - EPS, pp.urn.zf], [-gap / 2 + EPS, pp.urn.zf]);
+      for (let i = 0; i < N; i++) { const x = -gap / 2 - ((xt - gap / 2) * i) / N; poly.push([x, arcZ(x) + EPS]); }
+    } else for (let i = 1; i < N; i++) { const x = xt - (2 * xt * i) / N; poly.push([x, arcZ(x) + EPS]); }
     ty = poly;
   } else {
     const xt = xo - (pp.zc0 + hh - pp.hd) / t;
@@ -790,14 +875,14 @@ export function pedimentParts(pp) {
   // ornaments of the rake: plumb dentils (sheared), modillions square to the slope, eggs along the ovolo
   const ft = full.tags, hp = pp.hpl;
   const lim = (x, half, zLow) => x - half >= gap / 2 && x + half <= xo - 0.01 * D && zLow >= hh + EPS;
-  const radial = kind === 'segmental';
+  const radial = pp.seg;
   const at = (x, q, zp, local) => mat.mul(mat.T(x, -q, zOff(x) + zp), local);
   const atR = (a, q, zp, local) => mat.mul(mat.T(Math.sin(a) * (pp.Rb + zp), -q, pp.zC + Math.cos(a) * (pp.Rb + zp)), mat.Ry(a), local);
   const arcRow = (r, pitch, half, zp) => {          // symmetric angular positions on the radial rake, whole pieces only
     const out = [], da = pitch / r, kmax = Math.floor(Math.PI / 2 / da);
     for (let k = -kmax; k <= kmax; k++) {
       const a = k * da, x = Math.sin(a) * (pp.Rb + zp), zl = pp.zC + Math.cos(Math.abs(a) + half / r) * (pp.Rb + zp);
-      if (Math.abs(x) + half <= xo - 0.01 * D && zl >= hh + EPS) out.push(a);
+      if (Math.abs(x) + half <= xo - 0.01 * D && Math.abs(x) - half >= gap / 2 && zl >= hh + EPS) out.push(a);
     }
     return out;
   };
@@ -845,7 +930,7 @@ export function pedimentParts(pp) {
     let ex = [], dx = [];
     if (radial) {
       const r = pp.Rb + zp, as = arcRow(r, e.p, e.size.w / 2, zp);
-      ex = as.map((a) => atR(a + e.p / (2 * r), q, zp, tilt)).filter((_, i) => i < as.length - 1);
+      ex = as.slice(1).map((a, i) => [as[i], a]).filter(([a0, a1]) => a1 - a0 < 1.5 * e.p / r).map(([a0, a1]) => atR((a0 + a1) / 2, q, zp, tilt));
       dx = as.map((a) => atR(a, q - 0.1 * e.size.d, zp, tilt));
     } else {
       const xl = xo - (pp.zc0 - zp + hh - pp.hd) / t - e.size.h * 0.5, n = Math.max(1, Math.round((xl - gap / 2) / Math.cos(th) / e.p)), px = (xl - gap / 2) / n;
@@ -861,6 +946,12 @@ export function pedimentParts(pp) {
     addTo(parts, 'ovolo-egg', () => (cache ||= ed()).egg, ex);
     addTo(parts, 'ovolo-dart', () => (cache ||= ed()).dart, dx);
   }
+  if (pp.urn) {
+    const u = pp.urn;
+    parts.push(...placeParts([part('pedestal', 'stone', socle(u.aP, u.hP + 2 * EPS, Math.max(6, pp.n)))], mat.T(0, u.y, u.zf - EPS)));
+    const urn = urnParts(u.Hu, { knob: 'flame', detail }).map((q) => ({ ...q, name: `urn-${q.name}` }));
+    parts.push(...placeParts(urn, mat.T(0, u.y, u.zf + u.hP)));
+  }
   return parts;
 }
 
@@ -872,115 +963,336 @@ function pedSpecPlan(spec) {
   let pitch = spec.pitch ?? defaultPitch(order);
   const base = { order, D, W, B: spec.depth, kind: spec.pediment, pitch, ck, enrich: enrichSet(spec, order), detail: spec.detail || 'high' };
   if (spec.height) {
-    // the asked height (soffit of the horizontal cornice to the apex) is met by the pitch, the cornice keeping its module
-    const z0 = pedimentPlan({ ...base, pitch: 0.001 }).size.z, xo = pedimentPlan(base).xo, gap = spec.pediment === 'broken' ? 0.3 * W : 0;
-    pitch = (Math.atan(Math.max(0, spec.height - z0) / Math.max(1e-6, xo - gap / 2)) * 180) / Math.PI;
-    pitch = Math.min(60, Math.max(5, pitch));
+    // the asked height (soffit of the horizontal cornice to the apex or urn) is met by the pitch, the cornice keeping
+    // its module: the height grows monotonically with the pitch, so bisect within 5-60 deg
+    const zAt = (pt) => pedimentPlan({ ...base, pitch: pt }).size.z;
+    let lo = 5, hi = 60;
+    if (zAt(lo) >= spec.height) pitch = lo;
+    else if (zAt(hi) <= spec.height) pitch = hi;
+    else { for (let i = 0; i < 48; i++) { const mid = (lo + hi) / 2; if (zAt(mid) < spec.height) lo = mid; else hi = mid; } pitch = (lo + hi) / 2; }
   }
   return pedimentPlan({ ...base, pitch });
 }
 
 // ------------------------------------------------------------------------------------------------ window and door surrounds
 
-/**
- * Surround of an opening w x h (open: no wall panel). After Vignola's and Gibbs's door and window plates: architrave =
- * w/6 with three fasciae and a cyma crown, ears (crossettes) at the head projecting a/3 and dropping a/2 below the head;
- * frieze 0.9 a; cornice 1.1 a with returns (projection = height); pediment (Serlio's 22.5 deg, segmental or broken)
- * on the cornice; keystone through the head and frieze; window: sill on two scrolled consoles; door: plinth blocks.
- * The surround stands proud of the wall plane y = 0 and is t = 0.3 a deep behind it.
- */
-export function surroundPlan(spec) {
-  const door = spec.element === 'door', w = spec.width || (door ? 1.6 : 1.2), h = spec.height || (door ? 3 : 2.1);
-  const a = w / 6, t = 0.3 * a, e = 0.32 * a, ed = 0.5 * a, r1 = 0.285 * a;
-  const order = spec.order ? orderKey(spec.order) : 'ionic', O = ORDERS[order];
-  const fz = 0.9 * a, cz = 1.1 * a, D = cz / O.ent.cornice;
-  const d1 = 0.16 * a, df = 0.24 * a;
-  const cons = door ? 0 : 1.3 * a, hs = door ? 0 : 0.42 * a, plinth = door ? Math.min(0.17 * h, 1.5 * a) : 0;
-  const zb = door ? plinth : cons + hs;                 // foot of the jambs (sill top / plinth top)
-  const zo = door ? 0 : cons + hs, zt = zo + h;        // opening bottom / top
-  const Lf = w + 2 * a + 2 * e;                         // frieze and cornice length: over the ears
-  const zf = zt + a, zc = zf + fz;
-  const ck = spec.cornice ? corniceKindFor(spec, order) : 'plain', ped = spec.pediment || 'none';
-  const enrich = enrichSet(spec, order, false), detail = spec.detail || 'high';
-  let top, capX, pp = null, cp = null;
-  if (ped !== 'none') {
-    pp = pedimentPlan({ order, D, W: Lf, B: t, kind: ped, pitch: spec.pitch ?? defaultPitch(order), ck, enrich, detail, dq: df, z0: zc });
-    top = zc + pp.size.z; capX = pp.size.x;
-  } else {
-    cp = entablaturePlan({ order, D, L: Lf, B: t, returns: true, fk: 'plain', ck, enrich, detail, parts: 'cornice', z0: zc });
-    top = zc + cp.size.z; capX = Lf + 2 * (cp.P + df);
-  }
-  const sillL = w + 2 * a + 0.7 * a, qs = 0.5 * a;
-  const x = Math.max(capX, door ? 0 : sillL + 2 * qs);
-  return { door, w, h, a, t, e, ed, r1, order, D, fz, cz, d1, df, cons, hs, plinth, zb, zo, zt, Lf, zf, zc, ck, ped, pp, cp, enrich, detail,
-    sillL, qs, keystone: !!spec.keystone, frieze: spec.frieze === 'pulvinated' ? 'pulvinated' : 'plain', size: { x, z: top } };
+// Style -> head and treatment (controller ruling 22). archType, when given, sets the head's curve; the style sets the
+// treatment. Gothic: pointed head, chamfered reveals, hood mould with label stops. Romanesque / Byzantine: round head,
+// plain archivolt in two orders with a roll, impost blocks. Renaissance: round head, the architrave turned as an
+// archivolt. Moorish: horseshoe head, plain archivolt framed by an alfiz. Art Nouveau: basket head, soft frame.
+// Baroque: flat head with ears and keystone, pulvinated frieze, broken pediment (a broken segmental one over a door)
+// with an urn. Egyptian / Art Deco / Modern: flat head, plain frame, gorge / stepped / slab cornice, no pediment.
+const STYLE_SURROUND = {
+  gothic: { arch: 'pointed', tr: 'gothic' }, romanesque: { arch: 'semicircular', tr: 'romanesque' },
+  byzantine: { arch: 'semicircular', tr: 'romanesque' }, renaissance: { arch: 'semicircular', tr: 'classical' },
+  moorish: { arch: 'horseshoe', tr: 'moorish' }, 'art-nouveau': { arch: 'basket', tr: 'nouveau' },
+  baroque: { arch: null, tr: 'baroque' }, egyptian: { arch: null, tr: 'egyptian' }, 'art-deco': { arch: null, tr: 'deco' },
+  modern: { arch: null, tr: 'modern' },
+};
+const ARCH_TREATMENT = { pointed: 'gothic', tudor: 'gothic', horseshoe: 'moorish' };   // an arch without a style
+const D2R = Math.PI / 180;
+
+/** Head, treatment, pediment, keystone, ears... of a window or door spec. A pediment counts as asked for only when it
+ *  differs from the element's default in spec.js (normalize fills the default, so an equal value cannot be told apart). */
+function surroundKind(spec) {
+  const door = spec.element === 'door', st = STYLE_SURROUND[spec.style] || null;
+  const arch = spec.archType || (st && st.arch) || null;
+  let tr = st ? st.tr : arch ? ARCH_TREATMENT[arch] || 'classical' : 'classical';
+  if (arch && ['baroque', 'egyptian', 'deco', 'modern'].includes(tr)) tr = tr === 'baroque' ? 'classical' : 'plain';
+  const def = (DEFAULTS[spec.element] || {}).pediment, stated = spec.pediment !== undefined && spec.pediment !== def;
+  let ped;
+  if (arch || ['egyptian', 'deco', 'modern'].includes(tr)) ped = stated ? spec.pediment : 'none';
+  else if (tr === 'baroque') ped = stated ? spec.pediment : door ? 'broken-segmental' : 'broken';
+  else ped = spec.pediment ?? def ?? (door ? 'segmental' : 'triangular');   // classical: spec.js's default, or Vignola's
+  const flatOrder = { egyptian: 'egyptian', deco: 'art-deco', modern: 'modern' }[tr];
+  const order = flatOrder || (spec.order ? orderKey(spec.order) : 'ionic');
+  const classicalBottom = tr === 'classical' || tr === 'baroque';
+  const round = arch && arch !== 'pointed' && arch !== 'tudor';
+  return { door, arch, tr, ped, order, ears: !arch && classicalBottom, fasciae: classicalBottom,
+    keystone: tr === 'baroque' || (!!spec.keystone && (!arch || round) && tr !== 'gothic'),
+    frieze: spec.frieze === 'pulvinated' || (tr === 'baroque' && !spec.frieze) ? 'pulvinated' : 'plain',
+    ck: flatOrder || spec.cornice ? corniceKindFor(spec.cornice ? spec : { ...spec, cornice: undefined }, order) : 'plain',
+    consoles: !door && classicalBottom, plinths: door && classicalBottom };
 }
 
-function buildSurround(spec) {
-  const sp = surroundPlan(spec), { w, a, t, e, ed, r1, zb, zt, d1, df, detail } = sp, n = curveN(detail);
-  const { Manifold } = K();
-  const parts = [];
-  // eared path (offset r1 from the opening), travelled up the left jamb, over the head, down the right jamb
-  const X = w / 2 + r1;
-  const path = [[-X, zb], [-X, zt - ed], [-X - e, zt - ed], [-X - e, zt + r1], [X + e, zt + r1], [X + e, zt - ed], [X, zt - ed], [X, zb]];
+/** Frames along an elevation polyline (x, z) with the outward side on the left of travel, mitred at every vertex:
+ *  the profile's first coordinate goes to -Y (projection), the second along the mitre (outward in the wall plane). */
+function elevFrames(path) {
   const nrm = path.slice(1).map((p, i) => { const dx = p[0] - path[i][0], dz = p[1] - path[i][1], l = Math.hypot(dx, dz); return [-dz / l, dx / l]; });
-  const frames = path.map((p, k) => {
+  return path.map((p, k) => {
     let o;
     if (k === 0) o = nrm[0]; else if (k === path.length - 1) o = nrm[nrm.length - 1];
     else { const u = nrm[k - 1], v = nrm[k], s = 1 + u[0] * v[0] + u[1] * v[1]; o = [(u[0] + v[0]) / s, (u[1] + v[1]) / s]; }
     return { o: [p[0], 0, p[1]], A: [0, -1, 0], B: [o[0], 0, o[1]] };
   });
-  // architrave band beyond the inner fascia: bead, fascia, bead, fascia, cyma reversa crown, fillet (drawn outward)
-  const band = drawMembers([
-    { t: 'torus', h: 0.035 * a, p: d1, k: 1 }, { t: 'fillet', h: 0.26 * a, p: 0.2 * a }, { t: 'torus', h: 0.03 * a, p: 0.2 * a, k: 1 },
-    { t: 'fillet', h: 0.25 * a, p: 0.24 * a }, { t: 'cymaReversa', h: 0.09 * a, p: 0.32 * a }, { t: 'fillet', h: 0.05 * a, p: 0.34 * a }], n, 0, d1);
-  const bandPts = [[d1, -EPS], ...band.pts];
-  const arch = sweep([[-t, -EPS], ...bandPts, [-t, band.top]], frames);
-  // inner fascia: the flat between the opening and the eared path (it takes the ears' lobes)
-  const inner = [[-w / 2, zb], ...path.slice(0, 4), ...path.slice(4), [w / 2, zb], [w / 2, zt], [-w / 2, zt]];
-  const f1 = Manifold.extrude(crossSection(inner), t + d1).transform(Float64Array.from([1, 0, 0, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1])).translate([0, t, 0]);
-  parts.push(part('architrave', 'stone', union([arch, f1])));
-  // frieze over the head (plain or pulvinated), returned at the ends
-  const fm = sp.frieze === 'pulvinated' ? [{ t: 'fillet', h: EPS, p: df * 0.6 }, { t: 'pulvino', h: sp.fz - EPS, s: 0.4 * df }] : [{ t: 'fillet', h: sp.fz, p: df }];
-  const fr = drawMembers(fm, n, sp.zf - EPS);
-  parts.push(part('frieze', 'stone', runSolid([[0, sp.zf - EPS], ...fr.pts], sp.Lf, t, true)));
-  // cornice / pediment
-  if (sp.pp) parts.push(...pedimentParts(sp.pp));
-  else {
-    const cp = sp.cp, pts = [[0, sp.zc - EPS], ...shiftPts(cp.segs.cornice.pts, df)];
-    let cs = runSolid(pts, sp.Lf, t, true);
-    const ro = runParts(runPlan({ tags: shiftTags(cp.tags, df), L: sp.Lf, B: t, returns: true, D: sp.D, order: sp.order, axes: null,
-      enrich: sp.enrich, detail, ck: sp.ck, fk: null }), { tags: shiftTags(cp.tags, df), L: sp.Lf, B: t, returns: true, D: sp.D, detail });
-    if (ro.cuts.length) cs = cs.subtract(union(ro.cuts));
-    parts.push(part('cornice', 'stone', cs), ...ro.parts);
+}
+
+/** Drop vertices whose inward (left-turn) mitres would fold a band of width W offset outward from the path; the ends
+ *  and the points in `keep` (springings, label corners) are never dropped. */
+function cleanFolds(path, W, keep = []) {
+  const pts = path.slice(), kept = new Set(keep);
+  for (let iter = 0; iter < 400; iter++) {
+    const turn = (k) => {
+      if (k <= 0 || k >= pts.length - 1) return 0;
+      const a = [pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]], b = [pts[k + 1][0] - pts[k][0], pts[k + 1][1] - pts[k][1]];
+      return Math.atan2(a[0] * b[1] - a[1] * b[0], a[0] * b[0] + a[1] * b[1]);
+    };
+    const shrink = (k) => { const th = turn(k); return th > 0 ? W * Math.tan(th / 2) : 0; };
+    let drop = -1;
+    for (let i = 0; i < pts.length - 1 && drop < 0; i++) {
+      const len = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+      if (len < 1.05 * (shrink(i) + shrink(i + 1)) + 1e-9) {
+        const cand = [i, i + 1].filter((k) => k > 0 && k < pts.length - 1 && !kept.has(pts[k]));
+        if (cand.length) drop = cand.reduce((x, y) => (Math.abs(turn(x)) <= Math.abs(turn(y)) ? x : y));
+      }
+    }
+    if (drop < 0) break;
+    pts.splice(drop, 1);
   }
-  // keystone: through the head architrave and the frieze, tapering upward, proud of the crown
-  if (sp.keystone) {
-    const kb = 0.55 * a, kt = 0.75 * a, dk = 0.42 * a, z0 = zt - 0.04 * a, z1 = sp.zc;
-    const ks = Manifold.extrude(crossSection([[-kb / 2, z0], [kb / 2, z0], [kt / 2, z1], [-kt / 2, z1]]), t + dk)
-      .transform(Float64Array.from([1, 0, 0, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1])).translate([0, t, 0]);
-    const cap = box(-kt / 2 - 0.05 * a, -dk - 0.04 * a, z1 - 0.12 * a, kt / 2 + 0.05 * a, t, z1);
-    parts.push(part('keystone', 'stone', union([ks, cap])));
+  return pts;
+}
+
+/** In-plane extent (max |x|, max z) of a band swept along frames over the profile's outward range [r0, r1]. */
+function bandExtent(frames, r0, r1) {
+  let x = 0, z = -Infinity;
+  for (const f of frames) for (const r of [r0, r1]) { x = Math.max(x, Math.abs(f.o[0] + r * f.B[0])); z = Math.max(z, f.o[2] + r * f.B[2]); }
+  return { x, z };
+}
+
+/** Right half of an arch's intrados (u, v), springing (u = span/2, v = 0) to crown (u = 0), v scaled by kv. */
+function intradosHalf(g, step, kv) {
+  const arcs = g.springer ? [{ ...g.arcs[0], a0: g.springer.a0 }] : g.arcs, pts = [];
+  arcs.forEach((a, k) => {
+    const last = k === arcs.length - 1;
+    const a1 = last && g.apex === 'point' ? Math.acos(Math.max(-1, Math.min(1, -a.cu / a.r))) / D2R : a.a1;
+    const n = Math.max(2, Math.ceil((a1 - a.a0) / step));
+    for (let i = k ? 1 : 0; i <= n; i++) {
+      const d = (a.a0 + ((a1 - a.a0) * i) / n) * D2R;
+      pts.push([i === n && last ? Math.max(0, a.cu + a.r * Math.cos(d)) : a.cu + a.r * Math.cos(d), (a.cv + a.r * Math.sin(d)) * kv]);
+    }
+  });
+  pts[pts.length - 1][0] = 0;
+  return pts;
+}
+
+// Band profiles drawn outward from the opening edge (h = distance out in the wall plane, p = projection), in a = w/6
+const BANDS = {
+  classical: (a) => ({ p0: 0.16 * a, m: [['fillet', 0.335, 0.16], ['torus', 0.035, 0.16], ['fillet', 0.24, 0.2], ['torus', 0.03, 0.2],
+    ['fillet', 0.22, 0.24], ['cymaReversa', 0.09, 0.32], ['fillet', 0.05, 0.34]] }),
+  gothic: (a) => ({ p0: -0.18 * a, m: [['slope', 0.3, 0.12], ['fillet', 0.4, 0.12], ['torus', 0.06, 0.12], ['fillet', 0.04, 0.12]] }),
+  romanesque: (a) => ({ p0: 0.1 * a, m: [['fillet', 0.42, 0.1], ['torus', 0.08, 0.1], ['fillet', 0.5, 0.24]] }),
+  moorish: (a) => ({ p0: 0.06 * a, m: [['fillet', 0.08, 0.06], ['fillet', 0.62, 0.14], ['torus', 0.06, 0.14], ['fillet', 0.04, 0.14]] }),
+  nouveau: (a) => ({ p0: 0.04 * a, m: [['fillet', 0.25, 0.04], ['cavetto', 0.35, 0.2], ['torus', 0.14, 0.2], ['fillet', 0.06, 0.12]] }),
+  plain: (a) => ({ p0: 0.14 * a, m: [['fillet', 0.9, 0.14], ['fillet', 0.1, 0.2]] }),
+};
+function bandProfile(kind, a, n) {
+  const b = BANDS[kind](a);
+  return drawMembers(b.m.map(([t, h, p]) => ({ t, h: h * a, p: p * a, k: 1 })), n, 0, b.p0);
+}
+
+/**
+ * Surround of an opening w x h (open: no wall panel), after Vignola's and Gibbs's door and window plates: architrave
+ * a = w/6 (three fasciae, cyma crown); flat heads with ears (crossettes) projecting a/3 and dropping a/2, frieze 0.9 a,
+ * cornice 1.1 a with returns, pediment (Serlio's 22.5 deg, segmental, broken with an urn); arched heads (archType or
+ * style: see STYLE_SURROUND) whose band follows the arch (arch geometry from arch.js), the opening's height being its
+ * clear height to the crown (an arch too tall for it is flattened to 0.85 h); keystone; window sill on scrolled consoles
+ * (classical) or a plain projecting sill; door plinth blocks (classical). The surround stands proud of the wall plane
+ * y = 0 and is t = 0.3 a deep behind it. All extents come from the same frames the build sweeps (expected is exact).
+ */
+export function surroundPlan(spec) {
+  const K0 = surroundKind(spec), { door, arch, tr } = K0;
+  const w = spec.width || (door ? 1.6 : 1.2), h = spec.height || (door ? 3 : 2.1), s = w / 2;
+  const a = w / 6, t = 0.3 * a, e = K0.ears ? 0.32 * a : 0, ed = 0.5 * a, r1 = 0.285 * a;
+  const detail = spec.detail || 'high', n = curveN(detail), O = ORDERS[K0.order];
+  const fz = 0.9 * a, cz = 1.1 * a, D = cz / O.ent.cornice, d1 = 0.16 * a, df = 0.24 * a;
+  const cons = K0.consoles ? 1.3 * a : 0, hs = door ? 0 : K0.consoles ? 0.42 * a : 0.36 * a;
+  const plinth = K0.plinths ? Math.min(0.17 * h, 1.5 * a) : 0;
+  const zo = door ? 0 : cons + hs, zb = door ? plinth : zo, zt = zo + h;
+  const ext = [];                                       // [max |x|, max z] of every piece
+  const pl = { ...K0, w, h, s, a, t, e, ed, r1, D, fz, cz, d1, df, cons, hs, plinth, zo, zb, zt, detail, n, ext };
+  // the band and the opening outline
+  if (arch) {
+    const g = archGeom(arch, w), kv = Math.min(1, (0.85 * h) / g.rise), rise = g.rise * kv, zs = zt - rise;
+    const step = detail === 'low' ? 8 : detail === 'medium' ? 5 : 3;
+    const half = intradosHalf(g, step, kv);                                 // right half: springing -> crown
+    // left springing -> crown -> right springing
+    const archPts = [...half.map(([u, v]) => [-u, zs + v]), ...half.slice(0, -1).reverse().map(([u, v]) => [u, zs + v])];
+    const bandKind = tr === 'classical' ? 'classical' : tr;
+    let band = bandProfile(bandKind, a, n), W = band.top;
+    // a jamb too short for the band's inward mitre at the springing (a very low, wide opening): narrow the band
+    const d0 = [archPts[1][0] - archPts[0][0], archPts[1][1] - archPts[0][1]], th = Math.atan2(-d0[0], d0[1]);
+    const Lj = zs - zb, Wmax = th > 1e-6 ? (0.9 * Lj) / Math.tan(th / 2) : Infinity;
+    if (W > Wmax) { const k = Wmax / W; band = { ...band, pts: band.pts.map(([q, r]) => [q, r * k]), top: band.top * k }; W = band.top; }
+    const path = cleanFolds([[-s, zb], ...archPts, [s, zb]], W, [archPts[0], archPts[archPts.length - 1]]);
+    const frames = elevFrames(path);
+    const bx = bandExtent(frames, 0, W);
+    ext.push([bx.x, bx.z]);
+    Object.assign(pl, { g, kv, rise, zs, band, W, path, frames, crownZ: zt, bandTop: bx.z, bandX: bx.x,
+      bandName: tr === 'gothic' || tr === 'nouveau' ? 'frame' : 'archivolt' });
+    // arch-only frames (left springing .. right springing) for offset mouldings
+    const iL = path.findIndex((p) => Math.abs(p[1] - zs) < 1e-9 && p[0] < 0), iR = path.length - 2;
+    const archFrames = frames.slice(Math.max(1, iL), iR + 1);
+    if (tr === 'gothic') {
+      // hood mould: offset 0.1 a beyond the frame, returned level at the springing as labels with stops
+      const Oh = W + 0.1 * a, Lr = 0.45 * a, hood = drawMembers([{ t: 'cavetto', h: 0.07 * a, p: 0.11 * a }, { t: 'fillet', h: 0.02 * a, p: 0.11 * a },
+        { t: 'torus', h: 0.05 * a, p: 0.11 * a, k: 1 }, { t: 'slope', h: 0.1 * a, p: 0.02 * a }], n, 0, 0);
+      const q = archFrames.map((f) => [f.o[0] + Oh * f.B[0], f.o[2] + Oh * f.B[2]]);
+      q[0] = [-s - Oh, zs]; q[q.length - 1] = [s + Oh, zs];
+      const hp = cleanFolds([[-s - Oh - Lr, zs], ...q, [s + Oh + Lr, zs]], hood.top, [q[0], q[q.length - 1]]);
+      const hf = elevFrames(hp), hx = bandExtent(hf, 0, hood.top);
+      const stop = { w: 0.24 * a, h: 0.3 * a, d: 0.15 * a, x: s + Oh + Lr - 0.12 * a };
+      ext.push([hx.x, hx.z], [stop.x + stop.w / 2, zs]);
+      Object.assign(pl, { hood, hoodFrames: hf, stop });
+    }
+    if (tr === 'romanesque') {
+      const im = { x0: s - 0.06 * a, x1: s + W + 0.12 * a, h: 0.28 * a, d: 0.34 * a };
+      ext.push([im.x1, zs]);
+      pl.impost = im;
+    }
+    if (K0.keystone && arch !== 'pointed' && arch !== 'tudor') {
+      const ks = { kb: 0.45 * a, kt: 0.62 * a, dk: 0.42 * a, z0: zt - 0.03 * a, z1: zt + W + 0.3 * a };
+      ext.push([ks.kt / 2, ks.z1]);
+      pl.ks = ks;
+    }
+    // the spandrel field: inside an alfiz (Moorish) or under the frieze of an aedicule when a pediment is asked for
+    const outer = archFrames.slice(1, -1).map((f) => [f.o[0] + (W - EPS) * f.B[0], f.o[2] + (W - EPS) * f.B[2]]);
+    if (K0.ped !== 'none') {
+      const Xs = Math.max(s + W, bx.x) + 0.1 * a, zf = bx.z + 0.1 * a;
+      Object.assign(pl, { spandrel: { X: Xs, z0: zs, z1: zf + EPS, outer }, Lf: 2 * Xs, zf, zc: zf + fz });
+    } else if (tr === 'moorish') {
+      const Xa = bx.x + 0.12 * a, Za = bx.z + 0.12 * a, aw = 0.28 * a;
+      const af = elevFrames([[-Xa, zs], [-Xa, Za], [Xa, Za], [Xa, zs]]), ax = bandExtent(af, 0, aw);
+      ext.push([ax.x, ax.z]);
+      Object.assign(pl, { alfiz: { frames: af, w: aw }, spandrel: { X: Xa + EPS, z0: zs, z1: Za + EPS, outer } });
+    }
+  } else {
+    const X = s + r1;
+    pl.path = e ? [[-X, zb], [-X, zt - ed], [-X - e, zt - ed], [-X - e, zt + r1], [X + e, zt + r1], [X + e, zt - ed], [X, zt - ed], [X, zb]]
+      : [[-X, zb], [-X, zt + r1], [X, zt + r1], [X, zb]];
+    pl.Lf = w + 2 * a + 2 * e;
+    pl.zf = zt + a; pl.zc = pl.zf + fz;
+    if (!K0.fasciae) {                                 // a plain frame swept from the opening edge
+      pl.band = bandProfile('plain', a, n); pl.W = pl.band.top;
+      pl.path = [[-s, zb], [-s, zt], [s, zt], [s, zb]];
+      pl.zf = zt + pl.W;  pl.zc = pl.zf + fz;
+    }
+    pl.frames = elevFrames(pl.path);
+    ext.push([s + a + e, zt + a]);
+    if (K0.keystone) { pl.ks = { kb: 0.55 * a, kt: 0.75 * a, dk: 0.42 * a, z0: zt - 0.04 * a, z1: pl.zc, cap: true }; ext.push([0.75 * a / 2 + 0.05 * a, pl.zc]); }
+  }
+  // frieze, cornice / pediment (flat heads always; arched heads as an aedicule when a pediment is asked for)
+  if (pl.Lf) {
+    const enrich = enrichSet(spec, K0.order, false);
+    pl.enrich = enrich;
+    if (K0.ped !== 'none') {
+      pl.pp = pedimentPlan({ order: K0.order, D, W: pl.Lf, B: t, kind: K0.ped, pitch: spec.pitch ?? defaultPitch(K0.order), ck: K0.ck, enrich, detail, dq: df, z0: pl.zc });
+      ext.push([pl.pp.size.x / 2, pl.zc + pl.pp.size.z]);
+    } else {
+      pl.cp = entablaturePlan({ order: K0.order, D, L: pl.Lf, B: t, returns: true, fk: 'plain', ck: K0.ck, enrich, detail, parts: 'cornice', z0: pl.zc });
+      ext.push([pl.Lf / 2 + pl.cp.P + df, pl.zc + pl.cp.size.z]);
+    }
+    ext.push([pl.Lf / 2 + df, pl.zf]);
+  }
+  // sill / plinths
+  const W = pl.W || a;
+  if (!door) {
+    pl.sillL = w + 2 * W + 0.7 * a; pl.qs = K0.consoles ? 0.5 * a : 0.32 * a;
+    ext.push([pl.sillL / 2 + pl.qs, zo]);
+  }
+  if (K0.plinths) { pl.pw = a + 0.12 * a; pl.xc = s - 0.04 * a + pl.pw / 2; ext.push([pl.xc + pl.pw / 2 + 0.02 * a, plinth]); }
+  pl.size = { x: 2 * Math.max(...ext.map((q) => q[0])), z: Math.max(...ext.map((q) => q[1])) };
+  return pl;
+}
+
+const SECTION_XZ = Float64Array.from([1, 0, 0, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1]);
+/** An elevation polygon (x, z) extruded from y = y1 (back) to y = y0 (front, y0 < y1). */
+function slab(poly, y0, y1) { const { Manifold } = K(); return Manifold.extrude(crossSection(poly), y1 - y0).transform(SECTION_XZ).translate([0, y1, 0]); }
+
+function buildSurround(spec) {
+  const sp = surroundPlan(spec), { w, s, a, t, e, r1, zb, zt, d1, df, detail, n } = sp;
+  const parts = [];
+  if (sp.arch || !sp.fasciae) {
+    // the band follows the opening outline (jambs and arch, or a plain flat frame)
+    const bp = sp.band.pts;                             // starts exactly at the opening edge: the opening keeps its width
+    const band = sweep([[-t, 0], ...bp, [-t, sp.band.top]], sp.frames);
+    parts.push(part(sp.arch ? sp.bandName : 'architrave', 'stone', band));
+  } else {
+    // eared architrave: three fasciae beyond the inner fascia, the inner fascia a flat taking the ears' lobes
+    const bandM = drawMembers([
+      { t: 'torus', h: 0.035 * a, p: d1, k: 1 }, { t: 'fillet', h: 0.26 * a, p: 0.2 * a }, { t: 'torus', h: 0.03 * a, p: 0.2 * a, k: 1 },
+      { t: 'fillet', h: 0.25 * a, p: 0.24 * a }, { t: 'cymaReversa', h: 0.09 * a, p: 0.32 * a }, { t: 'fillet', h: 0.05 * a, p: 0.34 * a }], n, 0, d1);
+    const arch = sweep([[-t, -EPS], [d1, -EPS], ...bandM.pts, [-t, bandM.top]], sp.frames);
+    const p = sp.path, inner = [[-w / 2, zb], ...p, [w / 2, zb], [w / 2, zt], [-w / 2, zt]];
+    parts.push(part('architrave', 'stone', union([arch, slab(inner, -d1, t)])));
+  }
+  if (sp.hood) {
+    const hp = sp.hood.pts;
+    parts.push(part('hood-mould', 'stone', sweep([[-0.05 * a, 0], ...hp, [-0.05 * a, sp.hood.top]], sp.hoodFrames)));
+    const st = sp.stop, blk = slab([[-st.w / 2, sp.zs - st.h], [st.w / 2, sp.zs - st.h], [st.w / 2, sp.zs + EPS], [-st.w / 2, sp.zs + EPS]], -st.d, t)
+      .subtract(slab([[-st.w, sp.zs - st.h - 0.01], [st.w, sp.zs - st.h - 0.01], [st.w, sp.zs - st.h + 0.45 * st.h]], -st.d - 0.01, -st.d + 0.6 * st.d));
+    parts.push(part('label-stop', 'stone', blk, instances([mat.T(-st.x, 0, 0), mat.T(st.x, 0, 0)])));
+  }
+  if (sp.impost) {
+    const im = sp.impost, L = im.x1 - im.x0, zs = sp.zs;
+    const blk = extrudeProfileX([[t, zs - im.h], [-0.6 * im.d, zs - im.h], [-im.d, zs - 0.45 * im.h], [-im.d, zs + EPS], [t, zs + EPS]], L);
+    const xc = (im.x0 + im.x1) / 2;
+    parts.push(part('impost', 'stone', blk, instances([mat.T(-xc, 0, 0), mat.T(xc, 0, 0)])));
+  }
+  if (sp.alfiz) {
+    const al = drawMembers([{ t: 'fillet', h: sp.alfiz.w, p: 0.12 * a }], n, 0, 0.12 * a);
+    parts.push(part('alfiz', 'stone', sweep([[-t, -EPS], [0.12 * a, -EPS], ...al.pts, [-t, al.top]], sp.alfiz.frames)));
+  }
+  if (sp.spandrel) {
+    const sd = sp.spandrel, X = sd.X;
+    const poly = [[-X, sd.z0], [-X, sd.z1], [X, sd.z1], [X, sd.z0], [s + sp.W - EPS, sd.z0], ...sd.outer.slice().reverse(), [-s - sp.W + EPS, sd.z0]];
+    parts.push(part('spandrel', 'stone', slab(poly, -0.05 * a, t)));
+  }
+  if (sp.Lf) {
+    // frieze (plain or pulvinated), returned; then the cornice or the pediment
+    const fm = sp.frieze === 'pulvinated' ? [{ t: 'fillet', h: EPS, p: df * 0.6 }, { t: 'pulvino', h: sp.fz - EPS, s: 0.4 * df }] : [{ t: 'fillet', h: sp.fz, p: df }];
+    const fr = drawMembers(fm, n, sp.zf - EPS);
+    parts.push(part('frieze', 'stone', runSolid([[0, sp.zf - EPS], ...fr.pts], sp.Lf, t, true)));
+    if (sp.pp) parts.push(...pedimentParts(sp.pp));
+    else {
+      const cp = sp.cp, pts = [[0, sp.zc - EPS], ...shiftPts(cp.segs.cornice.pts, df)];
+      let cs = runSolid(pts, sp.Lf, t, true);
+      const tg = shiftTags(cp.tags, df);
+      const ro = runParts(runPlan({ tags: tg, L: sp.Lf, B: t, returns: true, D: sp.D, order: sp.order, axes: null, enrich: sp.enrich, detail, ck: sp.ck, fk: null }),
+        { tags: tg, L: sp.Lf, B: t, returns: true, D: sp.D, detail });
+      if (ro.cuts.length) cs = cs.subtract(union(ro.cuts));
+      parts.push(part('cornice', 'stone', cs), ...ro.parts);
+    }
+  }
+  if (sp.ks) {
+    // keystone: through the head (and the frieze of a flat head), tapering upward, proud of the band
+    const k = sp.ks, ksM = slab([[-k.kb / 2, k.z0], [k.kb / 2, k.z0], [k.kt / 2, k.z1], [-k.kt / 2, k.z1]], -k.dk, t);
+    const cap = k.cap ? box(-k.kt / 2 - 0.05 * a, -k.dk - 0.04 * a, k.z1 - 0.12 * a, k.kt / 2 + 0.05 * a, t, k.z1) : null;
+    parts.push(part('keystone', 'stone', cap ? union([ksM, cap]) : ksM));
   }
   if (!sp.door) {
-    // sill: a moulded slab returned at both ends, on two scrolled consoles under the jambs
+    // sill: a moulded slab returned at both ends; classical: on two scrolled consoles under the jambs
     const hs = sp.hs, z0 = sp.cons, qs = sp.qs;
-    const sm = drawMembers([{ t: 'corona', h: 0.45 * hs, p: qs - 0.07 * a, drip: 0.035 * a }, { t: 'cymaReversa', h: 0.3 * hs, p: qs },
-      { t: 'fillet', h: 0.25 * hs + EPS, p: qs }], n, z0);
+    const sm = sp.consoles
+      ? drawMembers([{ t: 'corona', h: 0.45 * hs, p: qs - 0.07 * a, drip: 0.035 * a }, { t: 'cymaReversa', h: 0.3 * hs, p: qs }, { t: 'fillet', h: 0.25 * hs + EPS, p: qs }], n, z0)
+      : drawMembers([{ t: 'corona', h: 0.6 * hs, p: qs, drip: 0.03 * a }, { t: 'slope', h: 0.4 * hs + EPS, p: qs - 0.08 * a }], n, z0);
     parts.push(part('sill', 'stone', runSolid(sm.pts, sp.sillL, t, true)));
-    const ch = qs - 0.09 * a, cl = sp.cons + EPS, cw = 0.5 * a;
-    const { solid, leaf } = modillionSolids({ w: cw, l: cl, h: ch, cap: 0, capP: 0 }, detail);
-    // the modillion stood on end: its back (u = 0) under the sill, its flat top against the wall, scrolls facing out
-    const M = mat.mul(mat.T(0, -ch, cl), mat.Rz(Math.PI), mat.Rx(Math.PI / 2));   // a rotation (no mirrored solids); foot at z = 0
-    const xs = [-(w / 2 + a / 2), w / 2 + a / 2].map((x) => mat.T(x, 0, 0));
-    parts.push(part('console', 'stone', solid.transform(M), instances(xs)));
-    if (leaf) parts.push(part('console-leaf', 'stone', leaf.transform(M), instances(xs)));
-  } else {
+    if (sp.consoles) {
+      const ch = qs - 0.09 * a, cl = sp.cons + EPS, cw = 0.5 * a;
+      const { solid, leaf } = modillionSolids({ w: cw, l: cl, h: ch, cap: 0, capP: 0 }, detail);
+      // the modillion stood on end: its back (u = 0) under the sill, its flat top against the wall, scrolls facing out
+      const M = mat.mul(mat.T(0, -ch, cl), mat.Rz(Math.PI), mat.Rx(Math.PI / 2));   // a rotation (no mirrored solids); foot at z = 0
+      const xs = [-(w / 2 + a / 2), w / 2 + a / 2].map((x) => mat.T(x, 0, 0));
+      parts.push(part('console', 'stone', solid.transform(M), instances(xs)));
+      if (leaf) parts.push(part('console-leaf', 'stone', leaf.transform(M), instances(xs)));
+    }
+  }
+  if (sp.plinths) {
     // plinth blocks under the jambs, a little wider and prouder than the architrave
-    const pw = a + 0.12 * a, pd = 0.4 * a, xc = w / 2 - 0.04 * a + pw / 2;
+    const pw = sp.pw, pd = 0.4 * a, xc = sp.xc;
     const pb = union([box(-pw / 2, -pd, 0, pw / 2, t, sp.plinth + EPS), box(-pw / 2 - 0.02 * a, -pd - 0.02 * a, 0, pw / 2 + 0.02 * a, t, 0.08 * sp.plinth)]);
     parts.push(part('plinth', 'stone', pb, instances([mat.T(-xc, 0, 0), mat.T(xc, 0, 0)])));
   }
+  void e; void r1;
   return parts;
 }
 
