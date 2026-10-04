@@ -117,7 +117,7 @@
     .nav-in { grid-template-columns: auto 1fr; gap: 10px; padding: 0 14px; }
     .links { display: none; }
     .seg { justify-self: end; }
-    .seg button { padding: 8px 12px; }
+    .seg button { padding: 8px 10px; font-size: 12.5px; }
     .brand span { display: none; }
     .hero { padding: 26px 16px 18px; }
     .stage-wrap, .below { padding: 0 10px; }
@@ -141,6 +141,7 @@
       <span class="knob" aria-hidden="true"></span>
       <button role="tab" id="tab-drawings" data-view="drawings" aria-controls="stage" aria-selected="false" tabindex="-1">Drawings</button>
       <button role="tab" id="tab-objects" data-view="objects" aria-controls="stage" aria-selected="false" tabindex="-1">3D Objects</button>
+      <button role="tab" id="tab-architecture" data-view="architecture" aria-controls="stage" aria-selected="false" tabindex="-1">Architecture</button>
     </div>
     <nav class="links" aria-label="Page"><a href="#how">How it works</a><a href="#credits">Credits</a></nav>
   </div>
@@ -153,6 +154,12 @@
       <h1>Every shape in between.</h1>
       <p class="sub">A neural 3D decoder morphs through <b data-n="m3d.objects">588</b> real objects — castles, statues, sports cars
         and more. Each in-between shape is invented live, on your GPU.</p>
+    </div>
+    <div class="copy" data-view="architecture" aria-hidden="true">
+      <p class="eyebrow">Architecture</p>
+      <h1>From words to stone.</h1>
+      <p class="sub">Describe a column, a cornice or a dome — in English, German, French or Italian. A CAD kernel builds it
+        <b>exactly</b>, to the rules of the classical orders and at real scale, ready to download as GLB, OBJ or STL.</p>
     </div>
     <div class="copy" data-view="drawings" aria-hidden="true">
       <p class="eyebrow">Drawings</p>
@@ -221,8 +228,10 @@
                ready: (w) => w.__m3d && (w.__m3d.ready || w.__m3d.errors.length) },
     drawings: { src: 'pixel-morph/', load: 'Loading the drawing network…', title: 'Drawings generated live by a neural network',
                 ready: (w) => w.__pm && (w.__pm.ready || w.__pm.errors.length) },
+    architecture: { src: 'arch/', load: 'Loading the CAD kernel…', title: 'Architectural elements built from text by a CAD kernel',
+                    ready: (w) => w.__arch && (w.__arch.ready || w.__arch.errors.length) },
   };
-  const ALIAS = { '2d': 'drawings', '3d': 'objects', drawings: 'drawings', objects: 'objects' };
+  const ALIAS = { '2d': 'drawings', '3d': 'objects', drawings: 'drawings', objects: 'objects', architecture: 'architecture', arch: 'architecture' };
   const $ = (s) => document.querySelector(s), stage = $('#stage'), tabs = [...document.querySelectorAll('[role=tab]')], knob = $('.knob');
   let cur = null, frame = null, poll = 0, token = 0;
 
@@ -285,10 +294,11 @@
   const BE = { webgpu: 'WebGPU', webgl: 'WebGL', cpu: 'CPU', wasm: 'WebAssembly' };
   setInterval(() => {
     if (!frame || stage.classList.contains('busy')) return;
-    let s = null;
-    try { const w = frame.contentWindow; s = w.__m3d || w.__pm || null; } catch (e) { s = null; }
+    let s = null, arch = false;
+    try { const w = frame.contentWindow; s = w.__m3d || w.__pm || w.__arch || null; arch = !!s && s === w.__arch; } catch (e) { s = null; }
     if (!s) return;
-    if (s.errors && s.errors.length) return live('err', 'Could not start on this device');
+    // Architecture lists every failed build in errors; once it has started, one bad request is not "could not start"
+    if (s.errors && s.errors.length && !(arch && s.ready)) return live('err', 'Could not start on this device');
     live('on', ['Live on your GPU', BE[s.backend] || s.backend, s.fps ? Math.round(s.fps) + ' fps' : ''].filter(Boolean).join(' · '));
   }, 1000);
   const hero = $('.hero');                            // the stage takes the rest of the first screen
@@ -302,7 +312,7 @@
     e.preventDefault();
     const t = tabs[(j + tabs.length) % tabs.length]; show(t.dataset.view); t.focus();
   });
-  document.querySelectorAll('a[href="#drawings"], a[href="#objects"]').forEach((a) => a.addEventListener('click', (e) => {
+  document.querySelectorAll('a[href="#drawings"], a[href="#objects"], a[href="#architecture"]').forEach((a) => a.addEventListener('click', (e) => {
     e.preventDefault(); show(a.getAttribute('href').slice(1)); window.scrollTo({ top: 0 });
   }));
   window.addEventListener('hashchange', () => { if (ALIAS[location.hash.slice(1)]) show(location.hash.slice(1)); });

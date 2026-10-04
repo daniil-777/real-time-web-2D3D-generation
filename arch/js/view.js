@@ -1,0 +1,817 @@
+// Arch Studio viewer (three.js): a studio for exact architectural elements.
+// - Geometry arrives Z-up in metres (the kernel's space); one Group turns it Y-up. Every part is an InstancedMesh.
+// - Look: AgX tone mapping, RoomEnvironment reflections, a warm key "sun" with soft PCF shadows fitted to the element,
+//   N8AO ambient occlusion (so flutes, dentils and leaves read), physically based stone and metal with procedural solid
+//   noise (colour, roughness and a fine bump, computed in world space so every copy differs and nothing has seams).
+// - The ground is not a lit surface: it writes "how much darker than the page" (shadow, contact AO, a faint 1 m grid)
+//   into an alpha-keyed buffer; the final pass tone-maps the element and multiplies the page colour for the ground, so
+//   the element sits on the page itself with no horizon and no colour mismatch.
+// - Modes: stone (materials), white (architect's clay model), line (white + black feature edges > 30° + silhouettes).
+// - Views: three-quarter (perspective, fov 30), front / side / top (orthographic elevations and plan).
+
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { PBR } from './export.js';
+
+const DEG = Math.PI / 180;
+// view directions in the kernel's Z-up frame (az: 0 = from the front (-Y), negative = from the left; el above horizon)
+export const VIEWS = {
+  'three-quarter': { az: -35, el: 18, ortho: false, label: '3/4' },
+  front: { az: 0, el: 0, ortho: true, label: 'front' },
+  side: { az: -90, el: 0, ortho: true, label: 'side' },
+  top: { az: 0, el: 90, ortho: true, label: 'top' },
+};
+export const MODES = ['stone', 'white', 'line'];
+// key light: front-right and fairly high, about 70° from the 3/4 camera, so cylinders model from lit to shade and the
+// shadow falls back-left where the 3/4 view sees it on the ground
+const SUN = { az: 35, el: 43 };
+// AgX needs a bright scene: sun : sky about 6 : 1 (strong form), exposure lifts lit white stone to ~95 % of the page
+const LIGHT = { sun: 12, env: 0.25, exposure: 1.7 };
+
+// ------------------------------------------------------------------------------------------------ materials
+
+const NOISE_GLSL = /* glsl */`
+varying vec3 vArchP;
+uniform vec3 uArchA;
+uniform vec3 uArchB;
+uniform vec4 uArchK;   // x: mottling amount, y: grain amount, z: roughness variation, w: bump height (m)
+float aH(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float aN(vec3 x) {
+  vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(aH(i), aH(i + vec3(1, 0, 0)), f.x), mix(aH(i + vec3(0, 1, 0)), aH(i + vec3(1, 1, 0)), f.x), f.y),
+             mix(mix(aH(i + vec3(0, 0, 1)), aH(i + vec3(1, 0, 1)), f.x), mix(aH(i + vec3(0, 1, 1)), aH(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}
+float aF(vec3 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { s += a * aN(p); p = p * 2.03 + vec3(1.7, 9.2, 3.1); a *= 0.5; } return s / 0.9375; }
+`;
+
+// colour + roughness + height per kind; P is the world position (Y up, metres); px = world size of one pixel. Every
+// high-frequency term fades out once a pixel is larger than its feature (no shimmer at a distance), and the height
+// (archH, a fine bump) is grit of a fraction of a millimetre, never a lump.
+const KIND_GLSL = {
+  STONE: /* glsl */`
+    float m = aF(P * 1.1), g = aN(P * 260.0);
+    float fine = 1.0 - smoothstep(0.0006, 0.003, px);
+    diffuseColor.rgb *= 1.0 + uArchK.x * (m - 0.5) * 2.0 + uArchK.y * (g - 0.5) * fine;
+    diffuseColor.rgb = mix(diffuseColor.rgb, uArchA, uArchK.x * smoothstep(0.55, 0.85, aF(P * 0.35 + 7.0)) * 0.8);
+    archR = m; archH = g * fine;`,
+  MARBLE: /* glsl */`
+    // Carrara: a white ground with soft grey clouds, long domain-warped veins and a finer secondary network
+    float m = aF(P * 1.6);
+    float cloud = smoothstep(0.45, 0.85, aF(P * 0.9 + 4.0));
+    float t1 = sin(dot(P, vec3(0.9, 1.4, 0.6)) * 3.0 + aF(P * 1.7 + 3.0) * 7.5);
+    float v1 = exp(-abs(t1) * 7.0) * smoothstep(0.3, 0.7, aF(P * 0.6 + 9.0));
+    float t2 = sin(dot(P, vec3(-1.7, 0.6, 1.3)) * 7.0 + aF(P * 3.1 + 5.0) * 6.0);
+    float v2 = exp(-abs(t2) * 14.0) * smoothstep(0.4, 0.75, aF(P * 1.1 - 4.0));
+    float fineV = 1.0 - smoothstep(0.002, 0.012, px);
+    diffuseColor.rgb *= 1.0 - 0.05 * cloud + uArchK.x * (m - 0.5);
+    diffuseColor.rgb = mix(diffuseColor.rgb, uArchA, clamp(v1 * 0.55 + v2 * 0.3 * fineV, 0.0, 1.0) * uArchK.y);
+    archR = m; archH = 0.0;`,
+  GRANITE: /* glsl */`
+    // fine crystals: dark mica and hornblende, light quartz, a few pink feldspars
+    float m = aF(P * 1.4), s = aN(P * 520.0), s2 = aN(P * 310.0 + 2.0);
+    float fine = 1.0 - smoothstep(0.0004, 0.0025, px);
+    float speck = s > 0.7 ? 0.55 : (s < 0.24 ? 1.22 : 1.0);
+    diffuseColor.rgb *= mix(0.97, speck, fine) * (1.0 + uArchK.x * (m - 0.5) * 2.0);
+    diffuseColor.rgb = mix(diffuseColor.rgb, uArchA, smoothstep(0.8, 0.88, s2) * 0.55 * fine + 0.08 * (1.0 - fine));
+    archR = s; archH = 0.0;`,
+  TRAV: /* glsl */`
+    // travertine: warm bands along the bedding and a few elongated voids
+    float m = aF(P * 1.2);
+    float band = aF(vec3(P.x * 0.7, P.y * 16.0, P.z * 0.7));
+    float fine = 1.0 - smoothstep(0.001, 0.005, px);
+    float pit = smoothstep(0.86, 0.93, aN(P * vec3(28.0, 120.0, 28.0))) * fine;
+    diffuseColor.rgb *= 1.0 + uArchK.x * (m - 0.5) * 2.0;
+    diffuseColor.rgb = mix(diffuseColor.rgb, uArchA, smoothstep(0.45, 0.8, band) * 0.35 + pit * 0.45);
+    archR = m; archH = -pit;`,
+  SAND: /* glsl */`
+    // sandstone: bedding strata and sandy grain
+    float m = aF(P * 1.2), g = aN(P * 300.0);
+    float layer = aF(vec3(P.x * 0.4, P.y * 9.0, P.z * 0.4));
+    float fine = 1.0 - smoothstep(0.0005, 0.0025, px);
+    diffuseColor.rgb = mix(diffuseColor.rgb, uArchA, smoothstep(0.42, 0.78, layer) * 0.5);
+    diffuseColor.rgb *= 1.0 + uArchK.x * (m - 0.5) * 1.6 + uArchK.y * (g - 0.5) * fine;
+    archR = m; archH = g * fine;`,
+  COPPER: /* glsl */`
+    float m = aF(P * 1.6);
+    float streak = aF(vec3(P.x * 7.0, P.y * 0.5, P.z * 7.0));
+    diffuseColor.rgb = mix(diffuseColor.rgb, uArchA, smoothstep(0.35, 0.7, m) * 0.55);
+    diffuseColor.rgb = mix(diffuseColor.rgb, uArchB, smoothstep(0.6, 0.85, streak) * 0.4);
+    diffuseColor.rgb *= 1.0 + uArchK.x * (aN(P * 22.0) - 0.5);
+    archR = m; archH = 0.0;`,
+  PATINA: /* glsl */`
+    float m = aF(P * 1.8);
+    diffuseColor.rgb = mix(diffuseColor.rgb, uArchB, smoothstep(0.4, 0.85, m) * uArchK.x);
+    archR = m; archH = 0.0;`,
+  WOOD: /* glsl */`
+    float r = length(P.xz) * 48.0 + aF(P * vec3(3.0, 0.25, 3.0)) * 5.0;
+    float g = sin(r) * 0.5 + 0.5;
+    float fine = 1.0 - smoothstep(0.002, 0.008, px);
+    diffuseColor.rgb = mix(diffuseColor.rgb, uArchA, (g * g * 0.6) * mix(0.4, 1.0, fine));
+    diffuseColor.rgb *= 1.0 + uArchK.x * (aF(P * 0.8) - 0.5) * 2.0;
+    archR = g; archH = g * fine;`,
+  PLAIN: /* glsl */`archR = 0.5; archH = 0.0;`,
+};
+
+// per material key: noise kind, tints, amounts (k: mottling, grain/vein strength, roughness variation, bump m), extras
+const LOOK = {
+  marble: { kind: 'MARBLE', a: '#9a9ca2', k: [0.02, 0.6, 0.06, 0], sheen: 0.3 },
+  limestone: { kind: 'STONE', a: '#c4b69c', k: [0.04, 0.035, 0.08, 0.00015] },
+  sandstone: { kind: 'SAND', a: '#9a6c37', k: [0.045, 0.05, 0.06, 0.0002] },
+  granite: { kind: 'GRANITE', a: '#a5806f', k: [0.03, 0, 0.12, 0] },
+  travertine: { kind: 'TRAV', a: '#b19d7b', k: [0.03, 0, 0.08, 0.0006] },
+  plaster: { kind: 'STONE', a: '#e6e2da', k: [0.012, 0.012, 0.03, 0.00008] },
+  concrete: { kind: 'STONE', a: '#8e8c88', k: [0.055, 0.06, 0.08, 0.00015] },
+  terracotta: { kind: 'STONE', a: '#4f1f0f', k: [0.08, 0.05, 0.06, 0.0001] },
+  brick: { kind: 'STONE', a: '#3f1a0f', k: [0.1, 0.07, 0.06, 0.00015] },
+  slate: { kind: 'STONE', a: '#3b424c', k: [0.05, 0.03, 0.1, 0.00005] },
+  copper: { kind: 'COPPER', a: '#244a41', b: '#4f3a2a', k: [0.06, 0, 0.1, 0] },
+  lead: { kind: 'PATINA', b: '#b8bbbc', k: [0.35, 0, 0.12, 0] },
+  zinc: { kind: 'PATINA', b: '#c4c8ca', k: [0.2, 0, 0.1, 0] },
+  bronze: { kind: 'PATINA', b: '#4c5a3f', k: [0.35, 0, 0.12, 0] },
+  gold: { kind: 'PATINA', b: '#c99a3a', k: [0.15, 0, 0.08, 0] },
+  wood: { kind: 'WOOD', a: '#45301a', k: [0.06, 0, 0.06, 0.0002] },
+  glass: { kind: 'PLAIN', k: [0, 0, 0, 0] },
+};
+
+function stoneMaterial(key) {
+  const p = PBR[key] || PBR.limestone, look = LOOK[key] || LOOK.limestone;
+  const mat = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(p.color), roughness: p.roughness, metalness: p.metalness });
+  if (look.sheen) { mat.sheen = look.sheen; mat.sheenRoughness = 0.55; mat.sheenColor = new THREE.Color('#fff4ea'); }
+  if (key === 'glass') { mat.ior = 1.52; mat.specularIntensity = 1; mat.envMapIntensity = 1.4; }
+  const uniforms = {
+    uArchA: { value: new THREE.Color(look.a || p.color) }, uArchB: { value: new THREE.Color(look.b || p.color) },
+    uArchK: { value: new THREE.Vector4(...look.k) },
+  };
+  mat.userData.arch = uniforms;
+  const bump = look.k[3] > 0;
+  mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, uniforms);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vArchP;')
+      .replace('#include <project_vertex>', `#include <project_vertex>
+        vec4 archP = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          archP = instanceMatrix * archP;
+        #endif
+        vArchP = (modelMatrix * archP).xyz;`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\n' + NOISE_GLSL)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        float archR = 0.5, archH = 0.0;
+        { vec3 P = vArchP; float px = length(fwidth(vArchP)); ${KIND_GLSL[look.kind]} }`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        roughnessFactor = clamp(roughnessFactor + uArchK.z * (archR - 0.5) * 2.0, 0.04, 1.0);`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        ${bump ? `{
+          float hh = archH * uArchK.w;
+          vec3 sx = dFdx(-vViewPosition), sy = dFdy(-vViewPosition);
+          vec3 r1 = cross(sy, normal), r2 = cross(normal, sx);
+          float det = dot(sx, r1) * faceDirection;
+          vec3 grad = sign(det) * (dFdx(hh) * r1 + dFdy(hh) * r2);
+          normal = normalize(abs(det) * normal - grad);
+        }` : ''}`);
+  };
+  mat.customProgramCacheKey = () => 'arch-' + look.kind + (bump ? '-b' : '') + (look.sheen ? '-s' : '');
+  return mat;
+}
+
+// ------------------------------------------------------------------------------------------------ passes
+
+/** Final pass: tone-map the element (alpha 1) and multiply the page colour by the ground factor (alpha 0). */
+class StudioOutputPass extends Pass {
+  constructor(bg) {
+    super();
+    this.quad = new FullScreenQuad(new THREE.RawShaderMaterial({
+      uniforms: { tDiffuse: { value: null }, uBg: { value: new THREE.Vector3(...bg) }, uTone: { value: 1 }, toneMappingExposure: { value: 1 } },
+      vertexShader: /* glsl */`
+        precision highp float;
+        uniform mat4 modelViewMatrix; uniform mat4 projectionMatrix;
+        attribute vec3 position; attribute vec2 uv; varying vec2 vUv;
+        void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: /* glsl */`
+        precision highp float;
+        uniform sampler2D tDiffuse; uniform vec3 uBg; uniform float uTone;
+        #include <tonemapping_pars_fragment>
+        #include <colorspace_pars_fragment>
+        varying vec2 vUv;
+        void main() {
+          vec4 t = texture2D(tDiffuse, vUv);
+          vec3 c = max(t.rgb, vec3(0.0));
+          vec3 obj = uTone > 0.5 ? AgXToneMapping(c) : clamp(c, 0.0, 1.0);
+          obj = sRGBTransferOETF(vec4(obj, 1.0)).rgb;
+          vec3 ground = uBg * clamp(c, 0.0, 1.0);
+          gl_FragColor = vec4(mix(ground, obj, clamp(t.a, 0.0, 1.0)), 1.0);
+        }`,
+      depthTest: false, depthWrite: false,
+    }));
+    this.uniforms = this.quad.material.uniforms;
+  }
+  render(renderer, writeBuffer, readBuffer) {
+    this.uniforms.tDiffuse.value = readBuffer.texture;
+    this.uniforms.toneMappingExposure.value = renderer.toneMappingExposure;
+    renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);
+    this.quad.render(renderer);
+  }
+  dispose() { this.quad.dispose(); }
+}
+
+/** Line drawing: renders the scene (white faces + black feature lines) and inks depth discontinuities (silhouettes,
+ *  occluding contours) from the Laplacian of inverse depth, which is zero on every plane. */
+class InkPass extends Pass {
+  constructor(scene, camera) {
+    super();
+    this.scene = scene; this.camera = camera;
+    this.rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
+    this.rt.depthTexture = new THREE.DepthTexture(1, 1, THREE.UnsignedIntType);
+    this.quad = new FullScreenQuad(new THREE.ShaderMaterial({
+      uniforms: { tColor: { value: null }, tDepth: { value: null }, uTexel: { value: new THREE.Vector2() }, uNear: { value: 0.1 },
+        uFar: { value: 100 }, uOrtho: { value: 0 }, uScale: { value: 1 } },
+      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: /* glsl */`
+        #include <packing>
+        uniform sampler2D tColor; uniform sampler2D tDepth; uniform vec2 uTexel; uniform float uNear, uFar, uOrtho, uScale;
+        varying vec2 vUv;
+        float q(vec2 uv) {
+          float d = texture2D(tDepth, uv).r;
+          if (uOrtho > 0.5) return -orthographicDepthToViewZ(d, uNear, uFar) / (uFar - uNear);
+          return 1.0 / -perspectiveDepthToViewZ(d, uNear, uFar);
+        }
+        void main() {
+          vec4 c = texture2D(tColor, vUv);
+          vec2 o = uTexel * uScale;
+          float qc = q(vUv);
+          float lx = q(vUv + vec2(o.x, 0.0)) + q(vUv - vec2(o.x, 0.0)) - 2.0 * qc;
+          float ly = q(vUv + vec2(0.0, o.y)) + q(vUv - vec2(0.0, o.y)) - 2.0 * qc;
+          float e = (abs(lx) + abs(ly)) / max(qc, 1e-6);
+          // only where the element is (alpha 1) or touches it: the ground and the horizon get no ink
+          float near = max(max(c.a, texture2D(tColor, vUv + vec2(o.x, 0.0)).a), max(texture2D(tColor, vUv - vec2(o.x, 0.0)).a,
+                       max(texture2D(tColor, vUv + vec2(0.0, o.y)).a, texture2D(tColor, vUv - vec2(0.0, o.y)).a)));
+          float ink = smoothstep(0.004, 0.02, e) * step(0.5, near);
+          gl_FragColor = vec4(c.rgb * (1.0 - 0.92 * ink), c.a);
+        }`,
+      depthTest: false, depthWrite: false,
+    }));
+  }
+  setSize(w, h) { this.rt.setSize(w, h); this.quad.material.uniforms.uTexel.value.set(1 / w, 1 / h); }
+  render(renderer, writeBuffer) {
+    renderer.setRenderTarget(this.rt);
+    renderer.clear();
+    renderer.render(this.scene, this.camera);
+    const u = this.quad.material.uniforms;
+    u.tColor.value = this.rt.texture; u.tDepth.value = this.rt.depthTexture;
+    u.uNear.value = this.camera.near; u.uFar.value = this.camera.far; u.uOrtho.value = this.camera.isOrthographicCamera ? 1 : 0;
+    u.uScale.value = Math.max(1, renderer.getPixelRatio() * 0.75);
+    renderer.setRenderTarget(this.renderToScreen ? null : writeBuffer);
+    this.quad.render(renderer);
+  }
+  dispose() { this.rt.dispose(); this.quad.dispose(); }
+}
+
+// ------------------------------------------------------------------------------------------------ ground
+
+function groundMaterial() {
+  const mat = new THREE.ShadowMaterial({ transparent: false, depthWrite: true });
+  mat.blending = THREE.NoBlending;
+  mat.toneMapped = false;
+  const u = { uShadow: { value: 0.42 }, uGrid: { value: 0.05 }, uGridC: { value: new THREE.Vector2() }, uGridR: { value: 20 } };
+  mat.userData.u = u;
+  mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vGW;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvGW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vGW; uniform float uShadow, uGrid, uGridR; uniform vec2 uGridC;')
+      .replace(/gl_FragColor = vec4\( color, opacity \* \( 1\.0 - getShadowMask\(\) \) \);/, `
+        float f = 1.0 - uShadow * (1.0 - getShadowMask());
+        vec2 w = fwidth(vGW.xz);
+        vec2 g = abs(fract(vGW.xz - 0.5) - 0.5) / max(w, vec2(1e-5));
+        float line = 1.0 - min(min(g.x, g.y), 1.0);
+        line *= 1.0 - smoothstep(0.06, 0.2, max(w.x, w.y));
+        line *= 1.0 - smoothstep(uGridR * 0.45, uGridR, length(vGW.xz - uGridC));
+        line *= smoothstep(0.06, 0.3, abs(normalize(cameraPosition - vGW).y));   // no moiré toward the horizon
+        f *= 1.0 - uGrid * line;
+        gl_FragColor = vec4(vec3(f), 0.0);`);
+  };
+  mat.customProgramCacheKey = () => 'arch-ground';
+  return mat;
+}
+
+// ------------------------------------------------------------------------------------------------ scale figure
+
+/** A 1.80 m standing figure (Z-up, feet at the origin, facing -Y): a smooth mannequin like the people of an
+ *  architect's model, the scale reference. */
+function makeFigure(mat) {
+  const g = new THREE.Group();
+  const put = (geo, x, y, z, rx = 0, ry = 0, sx = 1, sy = 1, sz = 1) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z); m.rotation.set(rx, ry, 0); m.scale.set(sx, sy, sz);
+    m.castShadow = true; m.receiveShadow = true;
+    g.add(m);
+    return m;
+  };
+  const up = Math.PI / 2; // three's lathes and cylinders run along Y; turn them to Z
+  // torso: a lathe from hips to sloping shoulders, flattened front to back
+  const torso = new THREE.LatheGeometry([[0, 0.88], [0.15, 0.9], [0.163, 0.98], [0.14, 1.1], [0.15, 1.24], [0.172, 1.35],
+    [0.185, 1.41], [0.165, 1.465], [0.12, 1.505], [0.06, 1.53], [0, 1.535]].map(([r, z]) => new THREE.Vector2(r, z)), 32);
+  put(torso, 0, 0, 0, up, 0, 1, 1, 0.62);
+  // legs: tapered from the hips, slightly apart, with feet
+  const leg = new THREE.CylinderGeometry(0.08, 0.045, 0.88, 18);
+  for (const sgn of [-1, 1]) {
+    put(leg, sgn * 0.082, 0, 0.5, up, 0, 1, 1, 1).rotation.y = sgn * -0.035;
+    put(new THREE.SphereGeometry(0.05, 14, 10), sgn * 0.09, -0.045, 0.035, 0, 0, 0.8, 1.9, 0.7);
+  }
+  // arms hang from rounded shoulders, a little away from the body, with hands
+  const arm = new THREE.CylinderGeometry(0.043, 0.031, 0.6, 14);
+  for (const sgn of [-1, 1]) {
+    put(new THREE.SphereGeometry(0.052, 16, 12), sgn * 0.19, 0, 1.425, 0, 0, 1, 0.9, 1);
+    put(arm, sgn * 0.21, 0, 1.13, up, sgn * -0.06);
+    put(new THREE.SphereGeometry(0.037, 12, 10), sgn * 0.228, 0, 0.8, 0, 0, 0.8, 0.6, 1.25);
+  }
+  put(new THREE.CylinderGeometry(0.045, 0.05, 0.1, 14), 0, 0, 1.56, up);
+  put(new THREE.SphereGeometry(0.094, 24, 18), 0, 0.005, 1.80 - 0.094 * 1.15, 0, 0, 0.88, 1, 1.15);
+  g.userData.width = 0.5;
+  return g;
+}
+
+// ------------------------------------------------------------------------------------------------ viewer
+
+export class Viewer {
+  /** canvas: the drawing surface; opts: { shot, background: [r,g,b] display 0..1, pixelRatio } */
+  constructor(canvas, opts = {}) {
+    this.canvas = canvas;
+    this.opts = opts;
+    this.mode = 'stone';
+    this.view = 'three-quarter';
+    this.figureWanted = null;          // null = automatic (on for elements > 1.5 m)
+    this.bg = opts.background || [0.957, 0.957, 0.949];
+    this.sunAngles = { ...SUN };
+    this.dirty = 0;
+    this.waiters = [];
+    this.meshes = [];
+    this.edges = null;
+    this.aoReady = false;
+    this.box = new THREE.Box3(new THREE.Vector3(-0.5, 0, -0.5), new THREE.Vector3(0.5, 1, 0.5));
+
+    // premultipliedAlpha off: the clear colour (1, 1, 1, alpha 0) marks "page" pixels and must not be premultiplied to black
+    const r = this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, premultipliedAlpha: false,
+      powerPreference: 'high-performance', preserveDrawingBuffer: !!opts.shot });
+    // flutes, dentils and leaves alias at one sample per pixel: desktops render at least 1.5x (frames are drawn only
+    // while something moves, so the cost is paid only then); phones keep their native ratio, capped at 2
+    const fine = !matchMedia('(pointer: coarse)').matches;
+    r.setPixelRatio(opts.pixelRatio || Math.min(Math.max(window.devicePixelRatio || 1, fine ? 1.5 : 1), 2));
+    r.setClearColor(0xffffff, 0);
+    r.shadowMap.enabled = true;
+    r.shadowMap.type = THREE.PCFShadowMap;
+    r.toneMapping = THREE.AgXToneMapping;   // applied by StudioOutputPass (composer targets are linear)
+    r.toneMappingExposure = LIGHT.exposure;
+    r.outputColorSpace = THREE.SRGBColorSpace;
+
+    const s = this.scene = new THREE.Scene();
+    const pmrem = new THREE.PMREMGenerator(r);
+    this.envMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
+    s.environment = this.envMap;
+    s.environmentIntensity = LIGHT.env;
+    s.environmentRotation.set(0, 0.6, 0);
+    // white fog beyond the element: the far ground fades into the page and N8AO fades its (false, grazing-angle)
+    // occlusion with it, so the ground has no visible edge; near and far follow the camera (updateClip)
+    s.fog = new THREE.Fog(0xffffff, 50, 100);
+
+    this.root = new THREE.Group();               // Z-up content -> Y-up world: (x, y, z) -> (x, z, -y)
+    this.root.rotation.x = -Math.PI / 2;
+    s.add(this.root);
+    this.model = new THREE.Group();
+    this.root.add(this.model);
+
+    const sun = this.sun = new THREE.DirectionalLight(0xfff1df, LIGHT.sun);
+    sun.castShadow = true;
+    const big = r.capabilities.maxTextureSize >= 8192 && !matchMedia('(pointer: coarse)').matches;
+    sun.shadow.mapSize.set(big ? 4096 : 2048, big ? 4096 : 2048);
+    sun.shadow.radius = 2.2;
+    s.add(sun, sun.target);
+
+    this.groundMat = groundMaterial();
+    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.groundMat);
+    this.ground.rotation.x = -Math.PI / 2;
+    this.ground.receiveShadow = true;
+    s.add(this.ground);
+
+    this.figMats = { stone: new THREE.MeshStandardMaterial({ color: 0x77797c, roughness: 0.85 }),
+      white: new THREE.MeshStandardMaterial({ color: 0x9c9c9a, roughness: 0.9 }), line: new THREE.MeshBasicMaterial({ color: 0xffffff }) };
+    this.figure = makeFigure(this.figMats.stone);
+    this.figure.visible = false;
+    this.root.add(this.figure);
+
+    this.mats = new Map();
+    this.whiteMat = new THREE.MeshStandardMaterial({ color: 0xf1efea, roughness: 0.88, metalness: 0 });
+    this.lineFaceMat = new THREE.MeshBasicMaterial({ color: 0xffffff, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+    this.lineMat = new THREE.LineBasicMaterial({ color: 0x1b1b1d });
+
+    this.persp = new THREE.PerspectiveCamera(30, 1, 0.05, 500);
+    this.ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.05, 500);
+    this.camera = this.persp;
+    this.controls = new OrbitControls(this.persp, canvas);
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.09;
+    this.controls.maxPolarAngle = Math.PI * 0.53;
+    this.controls.screenSpacePanning = true;
+    this.controls.addEventListener('change', () => { this.dirty = Math.max(this.dirty, 10); this.updateClip(); });
+
+    this.composer = new EffectComposer(r, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType }));
+    this.renderPass = new RenderPass(s, this.camera);
+    this.inkPass = new InkPass(s, this.camera);
+    this.outPass = new StudioOutputPass(this.bg);
+    this.smaa = r.getPixelRatio() < 1.75 ? new SMAAPass() : null;   // high-DPI screens are their own anti-aliasing
+    this.ao = null;
+    this.setPipeline();
+
+    this.resize();
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => this.resize()).observe(canvas.parentElement || canvas);
+    else window.addEventListener('resize', () => this.resize());
+    const loop = () => { requestAnimationFrame(loop); this.tick(); };
+    requestAnimationFrame(loop);
+  }
+
+  /** Load N8AO (fails soft: the viewer then renders without ambient occlusion). */
+  async init(timeoutMs = 9000) {
+    try {
+      const mod = await Promise.race([import('n8ao'), new Promise((_, rej) => setTimeout(() => rej(new Error('N8AO timed out')), timeoutMs))]);
+      const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+      const ao = new mod.N8AOPass(this.scene, this.camera, size.x, size.y);
+      ao.configuration.transparencyAware = false;
+      ao.configuration.gammaCorrection = false;   // stay linear: StudioOutputPass tone-maps and encodes once
+      ao.configuration.aoSamples = 16;
+      ao.configuration.denoiseSamples = 8;
+      ao.configuration.denoiseRadius = 10;
+      ao.configuration.intensity = 3.2;
+      ao.configuration.color = new THREE.Color(0x000000);
+      ao.configuration.accumulate = true;
+      // (no MSAA on N8AO's beauty target: its depth texture would not resolve; SMAA or 2x supersampling smooth the edges)
+      this.ao = ao;
+      this.aoReady = true;
+      this.setPipeline();
+      this.fitAO();
+    } catch (e) {
+      console.warn('[arch] ambient occlusion unavailable:', e && e.message ? e.message : e);
+      this.aoReady = false;
+    }
+    this.dirty = Math.max(this.dirty, 12);
+    return this.aoReady;
+  }
+
+  setPipeline() {
+    const c = this.composer;
+    while (c.passes.length) c.removePass(c.passes[0]);
+    if (this.mode === 'line') c.addPass(this.inkPass);
+    else if (this.ao) c.addPass(this.ao);
+    else c.addPass(this.renderPass);
+    c.addPass(this.outPass);
+    if (this.smaa) c.addPass(this.smaa);
+    this.outPass.uniforms.uTone.value = this.mode === 'line' ? 0 : 1;
+    this.syncCamera();
+    this.resize();
+  }
+
+  syncCamera() {
+    const cam = this.camera;
+    this.renderPass.camera = cam;
+    this.inkPass.camera = cam;
+    if (this.ao && this.ao.camera !== cam) {
+      this.ao.camera = cam;
+      const t = this.ao.configuration.depthBufferType, o = !!cam.isOrthographicCamera;
+      this.ao.configureAOPass(t, o); this.ao.configureDenoisePass(t, o); this.ao.configureEffectCompositer(t, o);
+      this.ao.firstFrame();
+    }
+    if (this.controls.object !== cam) { this.controls.object = cam; this.controls.update(); }
+  }
+
+  resize() {
+    const el = this.canvas, w = Math.max(1, el.clientWidth), h = Math.max(1, el.clientHeight);
+    if (this._w === w && this._h === h && this._mode === this.mode) return;
+    this._w = w; this._h = h; this._mode = this.mode;
+    this.renderer.setSize(w, h, false);
+    this.composer.setPixelRatio(this.renderer.getPixelRatio());
+    this.composer.setSize(w, h);
+    this.persp.aspect = w / h;
+    this.persp.updateProjectionMatrix();
+    this.orthoAspect();
+    this.dirty = Math.max(this.dirty, 10);
+  }
+
+  // ---------------------------------------------------------------------------------------------- model
+
+  material(key) {
+    const k = this.mode + ':' + key;
+    if (!this.mats.has(k)) this.mats.set(k, this.mode === 'stone' ? stoneMaterial(key) : this.mode === 'white' ? this.whiteMat : this.lineFaceMat);
+    return this.mats.get(k);
+  }
+
+  /** Show a built element. meshes: worker meshes (Z-up); stats: { bbox: {min, max} Z-up, size, spec }.
+   *  Resolves after the new geometry has been rendered (and the AO has settled). */
+  async setModel(meshes, stats = {}) {
+    for (const m of this.model.children) { m.geometry.dispose(); m.dispose(); }   // dispose() frees the instance buffers
+    this.model.clear();
+    this.clearEdges();
+    const tmp = new THREE.Matrix4();
+    for (const mesh of meshes) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(mesh.positions, 3));
+      geo.setAttribute('normal', new THREE.BufferAttribute(mesh.normals, 3));
+      const nv = mesh.positions.length / 3;
+      geo.setIndex(new THREE.BufferAttribute(nv < 65536 ? Uint16Array.from(mesh.indices) : mesh.indices, 1));
+      const n = mesh.transforms ? mesh.transforms.length / 16 : 1;
+      const im = new THREE.InstancedMesh(geo, this.material(mesh.material), n);
+      for (let i = 0; i < n; i++) im.setMatrixAt(i, mesh.transforms ? tmp.fromArray(mesh.transforms, 16 * i) : tmp.identity());
+      im.instanceMatrix.needsUpdate = true;
+      im.castShadow = true; im.receiveShadow = true;
+      im.frustumCulled = false;
+      im.name = mesh.name;
+      im.userData.key = mesh.material;
+      this.model.add(im);
+    }
+    this.meshes = meshes;
+    // bounds in Y-up world
+    const bb = stats.bbox || this.measure();
+    const prev = this.box.clone();
+    this.box.set(new THREE.Vector3(bb.min[0], bb.min[2], -bb.max[1]), new THREE.Vector3(bb.max[0], bb.max[2], -bb.min[1]));
+    this.size = [bb.max[0] - bb.min[0], bb.max[1] - bb.min[1], bb.max[2] - bb.min[2]];
+    const element = stats.spec && stats.spec.element;
+    this.placeFigure();
+    // keep the camera when only details changed; re-frame for a new element or a clearly different size
+    const s0 = prev.getSize(new THREE.Vector3()), s1 = this.box.getSize(new THREE.Vector3());
+    const changed = element !== this.element || !this.framed || Math.abs(s0.length() - s1.length()) / Math.max(s1.length(), 1e-3) > 0.12;
+    this.element = element;
+    this.fitLights();
+    this.fitAO();
+    if (changed) this.setView(this.view);
+    try { await this.renderer.compileAsync(this.scene, this.camera); } catch (e) { /* compiles on first render instead */ }
+    if (this.ao) this.ao.firstFrame();
+    // the first frame with the new geometry is drawn now (not left to requestAnimationFrame, which a hidden or
+    // throttled page may not run); a few more let the ambient occlusion settle, but never hold the caller long
+    this.controls.update();
+    this.composer.render();
+    const settle = this.frames(this.opts.shot ? 24 : 3);
+    return Promise.race([settle, new Promise((r) => setTimeout(r, this.opts.shot ? 2500 : 600))]);
+  }
+
+  measure() {
+    const b = new THREE.Box3().setFromObject(this.model, true);
+    // back to Z-up numbers
+    return { min: [b.min.x, -b.max.z, b.min.y], max: [b.max.x, -b.min.z, b.max.y] };
+  }
+
+  /** Feature edges per mesh (Float32Array of segment ends, local Z-up), expanded over the instances. */
+  setEdges(list) {
+    this.clearEdges();
+    if (!list || list.length !== this.meshes.length) return;
+    let total = 0;
+    list.forEach((e, i) => { const t = this.meshes[i].transforms; total += e.length * (t ? t.length / 16 : 1); });
+    const out = new Float32Array(total);
+    let o = 0;
+    list.forEach((e, i) => {
+      const t = this.meshes[i].transforms, n = t ? t.length / 16 : 1;
+      for (let k = 0; k < n; k++) {
+        if (!t) { out.set(e, o); o += e.length; continue; }
+        const m = t.subarray(16 * k, 16 * k + 16);
+        for (let j = 0; j < e.length; j += 3) {
+          const x = e[j], y = e[j + 1], z = e[j + 2];
+          out[o++] = m[0] * x + m[4] * y + m[8] * z + m[12];
+          out[o++] = m[1] * x + m[5] * y + m[9] * z + m[13];
+          out[o++] = m[2] * x + m[6] * y + m[10] * z + m[14];
+        }
+      }
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(out, 3));
+    this.edges = new THREE.LineSegments(geo, this.lineMat);
+    this.edges.frustumCulled = false;
+    this.edges.visible = this.mode === 'line';
+    this.root.add(this.edges);
+    this.dirty = Math.max(this.dirty, 10);
+  }
+  clearEdges() {
+    if (this.edges) { this.root.remove(this.edges); this.edges.geometry.dispose(); this.edges = null; }
+  }
+  needsEdges() { return this.mode === 'line' && !this.edges && this.meshes.length > 0; }
+
+  // ---------------------------------------------------------------------------------------------- modes, figure
+
+  setMode(mode) {
+    if (!MODES.includes(mode) || mode === this.mode) return;
+    this.mode = mode;
+    for (const m of this.model.children) m.material = this.material(m.userData.key);
+    for (const m of this.figure.children) m.material = this.figMats[mode];
+    if (this.edges) this.edges.visible = mode === 'line';
+    const lit = mode !== 'line';
+    this.sun.castShadow = lit;
+    this.groundMat.userData.u.uShadow.value = lit ? 0.42 : 0;
+    this.setPipeline();
+    if (this.ao) this.ao.firstFrame();
+    this.dirty = Math.max(this.dirty, 12);
+  }
+
+  /** on: true / false, or null for automatic (shown for elements larger than 1.5 m). */
+  setFigure(on) {
+    this.figureWanted = on;
+    this.placeFigure();
+    this.fitLights();
+    this.dirty = Math.max(this.dirty, 10);
+  }
+  figureShown() { return this.figure.visible; }
+
+  placeFigure() {
+    const s = this.size || [1, 1, 1];
+    const auto = Math.max(...s) > 1.5;
+    this.figure.visible = this.figureWanted === null ? auto : !!this.figureWanted;
+    // beside the element on its right, half a metre clear, at its middle depth (Z-up numbers)
+    const gap = 0.45 + this.figure.userData.width / 2;
+    this.figure.position.set(this.box.max.x + gap, -(this.box.min.z + this.box.max.z) / 2, 0);
+  }
+
+  bounds() {
+    const b = this.box.clone();
+    if (this.figure.visible) {
+      const p = this.figure.position; // Z-up -> Y-up
+      b.expandByPoint(new THREE.Vector3(p.x - 0.3, 0, -p.y - 0.2));
+      b.expandByPoint(new THREE.Vector3(p.x + 0.3, 1.8, -p.y + 0.2));
+    }
+    return b;
+  }
+
+  // ---------------------------------------------------------------------------------------------- lights, AO
+
+  fitLights() {
+    const b = this.bounds(), c = b.getCenter(new THREE.Vector3()), size = b.getSize(new THREE.Vector3());
+    const R = Math.max(size.length() / 2, 0.05);
+    // sun direction in Y-up world from SUN (Z-up az/el)
+    const az = this.sunAngles.az * DEG, el = this.sunAngles.el * DEG;
+    const dz = new THREE.Vector3(Math.sin(az) * Math.cos(el), -Math.cos(az) * Math.cos(el), Math.sin(el)); // Z-up, toward the sun
+    const L = new THREE.Vector3(dz.x, dz.z, -dz.y).normalize();
+    const sun = this.sun;
+    sun.target.position.copy(c);
+    sun.position.copy(c).addScaledVector(L, R * 4);
+    sun.updateMatrixWorld(); sun.target.updateMatrixWorld();
+    // the shadow camera covers the element and the shadow it throws on the ground
+    const pts = [];
+    for (let i = 0; i < 8; i++) {
+      const p = new THREE.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z);
+      pts.push(p);
+      if (p.y > 0) pts.push(p.clone().addScaledVector(L, -p.y / L.y));
+    }
+    const cam = sun.shadow.camera;
+    cam.position.copy(sun.position); cam.lookAt(c); cam.updateMatrixWorld();
+    const inv = cam.matrixWorldInverse;
+    const mn = new THREE.Vector3(Infinity, Infinity, Infinity), mx = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+    for (const p of pts) { const q = p.clone().applyMatrix4(inv); mn.min(q); mx.max(q); }
+    const pad = R * 0.04;
+    cam.left = mn.x - pad; cam.right = mx.x + pad; cam.bottom = mn.y - pad; cam.top = mx.y + pad;
+    cam.near = Math.max(0.01, -mx.z - R); cam.far = -mn.z + R;
+    cam.updateProjectionMatrix();
+    const texel = Math.max(cam.right - cam.left, cam.top - cam.bottom) / sun.shadow.mapSize.x;
+    sun.shadow.normalBias = texel * 1.6;
+    sun.shadow.bias = -0.00015;
+    sun.shadow.needsUpdate = true;
+    // ground under everything; grid centred on the element
+    const span = Math.max(R * 60, 60);
+    this.ground.scale.set(span, span, 1);
+    this.ground.position.set(c.x, 0, c.z);
+    const u = this.groundMat.userData.u;
+    u.uGridC.value.set(c.x, c.z);
+    u.uGridR.value = THREE.MathUtils.clamp(R * 2.5, 4, 30);
+  }
+
+  fitAO() {
+    if (!this.ao) return;
+    const s = this.box.getSize(new THREE.Vector3());
+    // ornament-scale occlusion: a fraction of the element's smaller extents, clamped to a sensible range
+    const ref = Math.min(Math.max(s.x, s.z), s.y);
+    const r = THREE.MathUtils.clamp(ref * 0.28, 0.03, 1.2);
+    this.ao.configuration.aoRadius = r;
+    this.ao.configuration.distanceFalloff = 1.0;
+    this.ao.configuration.intensity = this.mode === 'white' ? 3.5 : 3.0;
+  }
+
+  // ---------------------------------------------------------------------------------------------- camera
+
+  setView(name) {
+    const v = VIEWS[name] || VIEWS['three-quarter'];
+    this.view = VIEWS[name] ? name : 'three-quarter';
+    const b = this.bounds(), c = b.getCenter(new THREE.Vector3());
+    const az = v.az * DEG, el = Math.min(v.el, 89.9) * DEG;
+    const dz = [Math.sin(az) * Math.cos(el), -Math.cos(az) * Math.cos(el), Math.sin(el)];
+    const dir = new THREE.Vector3(dz[0], dz[2], -dz[1]).normalize();      // Y-up, from target toward the camera
+    this.camera = v.ortho ? this.ortho : this.persp;
+    // elevations and plan use the draughtsman's convention (light over the viewer's left shoulder, shadows at 45°);
+    // the perspective keeps a side light that models round forms
+    this.sunAngles = name === 'top' ? { az: -135, el: 50 } : v.ortho ? { az: v.az - 45, el: 35.26 } : { ...SUN };
+    this.fitLights();
+    this.controls.target.copy(c);
+    if (v.ortho) {
+      const R = b.getSize(new THREE.Vector3()).length();
+      this.ortho.position.copy(c).addScaledVector(dir, R * 2 + 1);
+      this.ortho.up.set(0, 1, 0);
+      this.ortho.lookAt(c);
+      this.ortho.zoom = 1;
+      this.fitOrtho();
+    } else {
+      const d = this.fitDistance(b, c, dir);
+      this.persp.position.copy(c).addScaledVector(dir, d);
+      this.persp.lookAt(c);
+    }
+    this.framed = true;
+    this.updateClip();          // distance limits for the new size first, or OrbitControls clamps to the old ones
+    this.syncCamera();
+    this.controls.update();
+    this.updateClip();
+    this.dirty = Math.max(this.dirty, 12);
+  }
+
+  /** Distance at which every corner of box b fits the perspective frustum (looking along -dir at c), with a margin. */
+  fitDistance(b, c, dir, margin = 0.82) {
+    const cam = this.persp, up0 = new THREE.Vector3(0, 1, 0);
+    const right = new THREE.Vector3().crossVectors(up0, dir);
+    if (right.lengthSq() < 1e-8) right.set(1, 0, 0);
+    right.normalize();
+    const up = new THREE.Vector3().crossVectors(dir, right).normalize();
+    const tv = Math.tan((cam.fov * DEG) / 2) * margin, th = tv * cam.aspect;
+    let d = 0;
+    for (let i = 0; i < 8; i++) {
+      const p = new THREE.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).sub(c);
+      const x = Math.abs(p.dot(right)), y = Math.abs(p.dot(up)), z = p.dot(dir);
+      d = Math.max(d, z + x / th, z + y / tv);
+    }
+    return Math.max(d, 0.1);
+  }
+
+  fitOrtho(margin = 1.12) {
+    const cam = this.ortho, b = this.bounds();
+    cam.updateMatrixWorld();
+    const inv = cam.matrixWorldInverse;
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (let i = 0; i < 8; i++) {
+      const p = new THREE.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).applyMatrix4(inv);
+      x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+    }
+    const aspect = this._w / this._h || 1;
+    const hh = Math.max(Math.max((y1 - y0) / 2, (x1 - x0) / 2 / aspect) * margin, 0.05);
+    // move camera and target sideways so the box is centred, then a symmetric frustum
+    const off = new THREE.Vector3((x0 + x1) / 2, (y0 + y1) / 2, 0).applyMatrix3(new THREE.Matrix3().setFromMatrix4(cam.matrixWorld));
+    cam.position.add(off);
+    this.controls.target.add(off);
+    this.orthoAspect(hh);
+  }
+
+  orthoAspect(hh = (this.ortho.top - this.ortho.bottom) / 2) {
+    const cam = this.ortho, aspect = this._w / this._h || 1;
+    cam.left = -hh * aspect; cam.right = hh * aspect; cam.top = hh; cam.bottom = -hh;
+    cam.updateProjectionMatrix();
+    this.updateClip();
+  }
+
+  updateClip() {
+    const b = this.bounds(), R = Math.max(b.getSize(new THREE.Vector3()).length() / 2, 0.05);
+    const cam = this.camera, d = cam.position.distanceTo(this.controls.target);
+    if (cam.isPerspectiveCamera) {
+      cam.near = Math.max(0.005, (d - R * 1.5) * 0.5, d * 0.01);
+      cam.far = d + R * 40;
+    } else {
+      cam.near = 0.01;
+      cam.far = d + R * 40;
+    }
+    cam.updateProjectionMatrix();
+    this.scene.fog.near = d + R * 2.5;
+    this.scene.fog.far = d + R * 16;
+    this.controls.minDistance = R * 0.04;
+    this.controls.maxDistance = R * 30;
+  }
+
+  // ---------------------------------------------------------------------------------------------- frames
+
+  /** Resolves after n more frames have been rendered. */
+  frames(n) {
+    this.dirty = Math.max(this.dirty, n);
+    return new Promise((resolve) => this.waiters.push({ n, resolve }));
+  }
+
+  tick() {
+    this.resize();
+    const moved = this.controls.update();
+    if (!moved && this.dirty <= 0) return;
+    if (moved) this.updateClip();
+    this.composer.render();
+    this.dirty = moved ? Math.max(this.dirty, 8) : this.dirty - 1;
+    if (this.waiters.length) {
+      for (const w of this.waiters) w.n--;
+      const done = this.waiters.filter((w) => w.n <= 0);
+      this.waiters = this.waiters.filter((w) => w.n > 0);
+      done.forEach((w) => w.resolve());
+    }
+  }
+
+}

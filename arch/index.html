@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<script>
+  // modes before first paint: ?embed=1 (inside the site), ?shot=1 (canvas only, for screenshots)
+  (function () { var q = location.search; var c = document.documentElement.classList;
+    if (/[?&]embed=1(&|$)/.test(q)) c.add('embed'); if (/[?&]shot=1(&|$)/.test(q)) c.add('shot'); })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>arch studio · text to architecture</title>
+<meta name="description" content="Type what an architect would type — an Ionic column, a cornice with dentils, an onion dome — and get the exact element at real scale, built by a CAD kernel in your browser. Download GLB, OBJ or STL.">
+<meta property="og:title" content="arch studio">
+<meta property="og:description" content="Text to exact, detailed architectural elements — columns, cornices, balustrades, arches, roofs, domes — in your browser.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 14h12M3 12.5h10M4 12V5M7 12V5M9 12V5M12 12V5M2.5 4.5h11L8 1.5z' fill='none' stroke='black' stroke-width='1.3'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.min.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/",
+    "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/",
+    "n8ao": "https://cdn.jsdelivr.net/npm/n8ao@2.0.1/dist/N8AO.js",
+    "postprocessing": "data:text/javascript,export%20class%20Pass%7B%7D"
+  }
+}
+</script>
+<!-- N8AO also ships a pass for the pmndrs "postprocessing" library that this page does not use; that import is
+     satisfied by the one-line stub above instead of a 300 KB download. -->
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.min.js" crossorigin>
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.core.js" crossorigin>
+<style>
+  :root {
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Inter, system-ui, sans-serif;
+    --text: #1d1d1f; --text-2: #6e6e73; --text-3: #86868b;
+    --fill: rgba(118, 118, 128, 0.12); --fill-2: rgba(118, 118, 128, 0.2); --hair: rgba(0, 0, 0, 0.08);
+    --accent: #0071e3; --glass: rgba(255, 255, 255, 0.74); --warn: #b25000;
+    --studio: #efefec;   /* the stage colour; the viewer reads it, so ground and page match exactly */
+    --panel-w: 372px;
+    --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #fff; color: var(--text); font: 14px/1.42 var(--font); -webkit-font-smoothing: antialiased; }
+  button, input, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid rgba(0, 113, 227, 0.5); outline-offset: 2px; border-radius: 8px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  #app { display: grid; grid-template-rows: auto 1fr; height: 100svh; }
+  #top { display: flex; align-items: center; gap: 14px; height: 44px; padding: 0 16px; border-bottom: 1px solid var(--hair);
+         color: var(--text-3); font-size: 12px; }
+  #top b { color: var(--text); font-weight: 600; font-size: 14px; letter-spacing: -0.01em; }
+  #top a { color: var(--text-2); text-decoration: none; }
+  #top a:hover { color: var(--text); }
+  #top .sp { flex: 1; }
+  html.embed #top { display: none; }
+  html.embed #app { grid-template-rows: 1fr; }
+
+  #main { display: grid; grid-template-columns: minmax(0, 1fr) var(--panel-w); min-height: 0; }
+  #stage { position: relative; min-height: 0; background: var(--studio); overflow: hidden; }
+  #c { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; outline: none; }
+  #c:active { cursor: grabbing; }
+  #c:focus-visible { outline: 3px solid rgba(0, 113, 227, 0.45); outline-offset: -3px; }
+
+  /* overlays on the stage: small glass pills */
+  .ov { position: absolute; z-index: 2; display: flex; gap: 6px; align-items: center; }
+  .glass { background: var(--glass); -webkit-backdrop-filter: saturate(180%) blur(18px); backdrop-filter: saturate(180%) blur(18px);
+           box-shadow: 0 0 0 0.5px var(--hair), 0 4px 16px rgba(0, 0, 0, 0.06); border-radius: 980px; }
+  #dims { top: 12px; left: 12px; padding: 6px 12px; font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -0.005em; }
+  #dims:empty { display: none; }
+  #dims span { color: var(--text-3); font-weight: 500; margin-right: 3px; }
+  #dims i { font-style: normal; color: var(--text-3); margin: 0 6px; }
+  .seg { display: inline-flex; padding: 2px; border-radius: 10px; background: var(--fill); }
+  .seg.glass { background: var(--glass); border-radius: 11px; }
+  .seg button { border: 0; background: none; padding: 6px 11px; border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--text-2);
+                cursor: pointer; transition: color .2s var(--ease), background .2s var(--ease); white-space: nowrap; }
+  .seg button:hover { color: var(--text); }
+  .seg button[aria-pressed=true] { color: var(--text); background: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1), 0 1px 1px rgba(0, 0, 0, 0.04); }
+  #modes { top: 12px; right: 12px; }
+  #views { bottom: 12px; left: 12px; }
+  #extra { bottom: 12px; right: 12px; }
+  .pill { border: 0; border-radius: 980px; padding: 6px 12px; min-height: 30px; background: var(--fill); color: var(--text); font-size: 12px;
+          font-weight: 500; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; transition: background .2s var(--ease); }
+  .pill:hover { background: var(--fill-2); }
+  .pill[aria-pressed=true] { background: var(--text); color: #fff; }
+  .glass.pill { background: var(--glass); }
+  .glass.pill[aria-pressed=true] { background: rgba(29, 29, 31, 0.86); color: #fff; }
+  .pill svg { width: 12px; height: 12px; }
+  #msg { position: absolute; z-index: 1; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: min(80%, 420px); text-align: center;
+         color: var(--text-2); font-size: 14px; pointer-events: none; }
+  #msg:empty { display: none; }
+  #msg .spin { display: block; margin: 0 auto 10px; width: 22px; height: 22px; border-radius: 50%; border: 2.5px solid rgba(118, 118, 128, 0.22);
+               border-top-color: var(--text); animation: spin .8s linear infinite; }
+  #busy { position: absolute; z-index: 2; top: 50px; right: 18px; width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(118, 118, 128, 0.25);
+          border-top-color: var(--text); animation: spin .8s linear infinite; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #stage.busy #busy { opacity: 1; transition-delay: .15s; }
+  @keyframes spin { to { transform: rotate(1turn); } }
+  #hint { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); color: var(--text-3); font-size: 11px; pointer-events: none;
+          transition: opacity 1.2s; white-space: nowrap; }
+
+  /* the panel */
+  #panel { border-left: 1px solid var(--hair); overflow-y: auto; min-height: 0; padding: 16px 16px 22px; display: flex; flex-direction: column; gap: 14px;
+           background: #fff; }
+  #panel > * { flex-shrink: 0; }
+  #ask { display: flex; gap: 6px; }
+  #prompt { flex: 1; min-width: 0; height: 40px; border: 0; border-radius: 12px; padding: 0 14px; background: var(--fill); font-size: 15px;
+            letter-spacing: -0.01em; outline: none; transition: background .2s var(--ease), box-shadow .2s var(--ease); }
+  #prompt:focus { background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.14), 0 0 0 4px rgba(0, 113, 227, 0.22); }
+  #prompt::placeholder { color: var(--text-3); }
+  #go { height: 40px; border: 0; border-radius: 12px; padding: 0 16px; background: var(--text); color: #fff; font-weight: 600; cursor: pointer;
+        transition: transform .12s var(--ease), opacity .2s; }
+  #go:active { transform: scale(0.97); }
+  #read { margin: -4px 2px 0; min-height: 1.4em; }
+  #interp { font-size: 15px; font-weight: 600; letter-spacing: -0.012em; line-height: 1.35; }
+  #interp.preview { color: var(--text-2); font-weight: 500; }
+  #notes { margin-top: 4px; color: var(--text-3); font-size: 12.5px; }
+  #notes:empty, #interp:empty { display: none; }
+  #notes .w { color: var(--warn); }
+  #oos { padding: 12px 14px; border-radius: 14px; background: #fff7ec; color: #6b3d00; font-size: 13px; }
+  #oos[hidden] { display: none; }
+  #oos p { margin: 0 0 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip { border: 0; border-radius: 980px; padding: 5px 10px; background: var(--fill); color: var(--text); font-size: 12px; cursor: pointer;
+          text-align: left; transition: background .2s var(--ease); }
+  .chip:hover { background: var(--fill-2); }
+  #oos .chip { background: rgba(255, 255, 255, 0.8); }
+  h2 { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+  section > h2 { display: flex; justify-content: space-between; align-items: baseline; }
+  section > h2 small { font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; }
+
+  #card { border-radius: 16px; background: #fafafa; box-shadow: 0 0 0 1px var(--hair); padding: 12px 14px 10px; }
+  .fields { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; align-items: center; }
+  .fields label { color: var(--text-2); font-size: 13px; white-space: nowrap; }
+  .fields .ctl { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .fields select, .fields input[type=number] { -webkit-appearance: none; appearance: none; width: 100%; min-width: 0; height: 30px; border: 0;
+    border-radius: 8px; padding: 0 10px; background-color: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1); font-size: 13px; font-weight: 500;
+    font-variant-numeric: tabular-nums; }
+  .fields select { padding-right: 26px; cursor: pointer; background-repeat: no-repeat; background-position: right 10px center; background-size: 9px 6px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='%236e6e73' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+  .fields input[type=number]::placeholder { color: var(--text-3); font-weight: 400; }
+  .fields input:focus, .fields select:focus { outline: none; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2), 0 0 0 3px rgba(0, 113, 227, 0.25); }
+  .fields .unit { color: var(--text-3); font-size: 12px; min-width: 1.4em; }
+  .fields input[type=checkbox] { -webkit-appearance: none; appearance: none; position: relative; width: 36px; height: 22px; margin: 0; flex: none;
+    border-radius: 11px; background: rgba(120, 120, 128, 0.32); cursor: pointer; transition: background .25s var(--ease); }
+  .fields input[type=checkbox]::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 1px rgba(0, 0, 0, 0.16); transition: transform .25s var(--ease); }
+  .fields input[type=checkbox]:checked { background: #34c759; }
+  .fields input[type=checkbox]:checked::after { transform: translateX(14px); }
+  .fields .sep { grid-column: 1 / -1; height: 1px; background: var(--hair); margin: 4px 0; }
+  details.more { margin-top: 8px; }
+  details.more summary { cursor: pointer; color: var(--text-3); font-size: 12px; list-style: none; }
+  details.more summary::-webkit-details-marker { display: none; }
+  details.more summary::before { content: '+ '; }
+  details.more[open] summary::before { content: '– '; }
+  details.more .fields { margin-top: 8px; }
+
+  #out .row { display: flex; gap: 6px; flex-wrap: wrap; }
+  #out .pill { font-size: 12.5px; padding: 7px 13px; }
+  #stats { margin-top: 8px; color: var(--text-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+  #about { color: var(--text-3); font-size: 11.5px; line-height: 1.5; margin-top: auto; }
+  #about a { color: var(--text-2); }
+
+  /* phone and narrow iframes: the stage on top, the panel under it */
+  @media (max-width: 860px) {
+    #app { height: auto; min-height: 100svh; }
+    #main { grid-template-columns: 1fr; grid-template-rows: auto auto; }
+    #stage { height: min(62svh, 120vw); min-height: 320px; }
+    #panel { border-left: 0; border-top: 1px solid var(--hair); overflow: visible; }
+    .seg button { padding: 7px 10px; }
+    .pill { min-height: 34px; }
+  }
+  @media (max-width: 600px) {
+    #top span:not(.sp) { display: none; }
+    #dims { top: 54px; }
+    #hint { display: none; }
+  }
+  @media (max-width: 420px) { #dims { font-size: 12px; padding: 5px 10px; } #extra .lbl { display: none; } }
+  html.embed #stage { min-height: 300px; }
+
+  /* screenshots: the canvas, nothing else */
+  html.shot #top, html.shot #panel, html.shot .ov, html.shot #hint, html.shot #busy { display: none !important; }
+  html.shot #app, html.shot #main { display: block; height: 100vh; }
+  html.shot #stage { position: fixed; inset: 0; height: auto; }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation-duration: 0s !important; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="top">
+    <b>arch studio</b><span>text to exact architectural elements, built in your browser</span><span class="sp"></span>
+    <a href="../#architecture">pixel morph</a>
+  </header>
+  <div id="main">
+    <section id="stage" aria-label="3D view">
+      <canvas id="c" tabindex="0" role="img" aria-label="the architectural element"></canvas>
+      <div id="dims" class="ov glass" aria-live="polite"></div>
+      <div id="modes" class="ov seg glass" role="group" aria-label="rendering">
+        <button type="button" data-mode="stone" aria-pressed="true" title="materials (stone, metal, slate…)">stone</button>
+        <button type="button" data-mode="white" aria-pressed="false" title="white model, like an architect's study model">white</button>
+        <button type="button" data-mode="line" aria-pressed="false" title="line drawing: feature edges and silhouettes">line</button>
+      </div>
+      <div id="views" class="ov seg glass" role="group" aria-label="view">
+        <button type="button" data-view="three-quarter" aria-pressed="true" title="three-quarter view (perspective)">3/4</button>
+        <button type="button" data-view="front" aria-pressed="false" title="front elevation (orthographic)">front</button>
+        <button type="button" data-view="side" aria-pressed="false" title="side elevation (orthographic)">side</button>
+        <button type="button" data-view="top" aria-pressed="false" title="plan from above (orthographic)">top</button>
+      </div>
+      <div id="extra" class="ov">
+        <button type="button" id="figure" class="pill glass" aria-pressed="false" title="a 1.80 m figure for scale">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="2" r="1.4" fill="currentColor"/><path d="M6 4.2v4M3.6 5.2L6 4.6l2.4.6M6 8.2l-1.5 3.3M6 8.2l1.5 3.3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          <span class="lbl">1.80 m</span></button>
+        <div class="seg glass" role="group" aria-label="units">
+          <button type="button" data-units="m" aria-pressed="true">m</button>
+          <button type="button" data-units="ft" aria-pressed="false">ft</button>
+        </div>
+      </div>
+      <div id="busy" aria-hidden="true"></div>
+      <div id="msg" role="status"><span class="spin" aria-hidden="true"></span>loading the CAD kernel…</div>
+      <div id="hint" aria-hidden="true">drag to orbit · scroll to zoom · right-drag to pan</div>
+    </section>
+
+    <aside id="panel" aria-label="request and specification">
+      <form id="ask" autocomplete="off">
+        <label for="prompt" class="sr-only">Describe an architectural element</label>
+        <input id="prompt" type="text" enterkeyhint="go" spellcheck="false" maxlength="300"
+               placeholder="e.g. Ionic column 3.6 m on a pedestal">
+        <button id="go" type="submit">build</button>
+      </form>
+      <div id="read" aria-live="polite">
+        <div id="interp"></div>
+        <div id="notes"></div>
+      </div>
+      <div id="oos" role="alert" hidden><p id="oosMsg"></p><div class="chips" id="oosChips"></div></div>
+      <section aria-labelledby="exTitle">
+        <h2 id="exTitle">try</h2>
+        <div class="chips" id="chips"></div>
+      </section>
+      <section id="card" aria-labelledby="specTitle">
+        <h2 id="specTitle">specification <small id="specNote"></small></h2>
+        <div class="fields" id="fields"></div>
+        <details class="more"><summary>more</summary><div class="fields" id="fieldsMore"></div></details>
+      </section>
+      <section id="out" aria-labelledby="outTitle">
+        <h2 id="outTitle">download</h2>
+        <div class="row">
+          <button type="button" class="pill" data-export="glb" title="glTF binary · Y up · metres · one node per piece">GLB</button>
+          <button type="button" class="pill" data-export="obj" title="Wavefront OBJ · Y up · metres · one object per part">OBJ</button>
+          <button type="button" class="pill" data-export="stl" title="binary STL · Z up · millimetres (for 3D printing)">STL</button>
+          <button type="button" class="pill" data-export="json" title="the specification as JSON">spec.json</button>
+        </div>
+        <div id="stats"></div>
+      </section>
+      <p id="about">Every element is built by rules — the orders after Vignola, real mouldings and counts — as closed solids with the
+        <a href="https://github.com/elalish/manifold" target="_blank" rel="noopener">Manifold</a> CAD kernel (WebAssembly), drawn with
+        <a href="https://threejs.org" target="_blank" rel="noopener">three.js</a>. Nothing leaves your device.</p>
+    </aside>
+  </div>
+</div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
