@@ -9,13 +9,18 @@
 //   LONGER side: when width > length the roof is built with the ridge on Y (the whole roof turned 90°).
 // - `overhang` o = horizontal distance from the wall line to the outermost point of the roof (the gutter's rolled bead
 //   at the eaves, the barge board's face at the verges); the same on all four sides, so the bbox is
-//   (length + 2o) × (width + 2o). Target 0.55 m at an 8 m span; less where a steep eave would drop below the wall head.
+//   (length + 2o) × (width + 2o). Unset: 0.55 m at an 8 m span, less where a steep eave would drop below the wall head.
+//   spec.overhang (0–3 m) is honoured down to the smallest eave that clears the cornice (≈ 0.31 m at 8 m: cornice
+//   projection + fascia + gutter). A long overhang on a low pitch does not hang the eave below the wall head: the eave
+//   is held up and the wall rises above the cornice as a knee wall (Kniestock), as on a chalet.
 // - Height: z = top of the ridge tiles (or of the finial on a pyramid / mansard, or of the capping of a shed). With
 //   spec.height given, the pitch (the upper pitch on a mansard / gambrel) is solved so that the roof is that tall.
-// - Pitches: gable / hip / pyramid / shed use `pitch` (default 35°). Mansard lower 70° / upper 30°, gambrel lower 60° /
-//   upper 25° (French and Dutch practice). A pitch given in the text (anything but the 35° default) replaces the lower
-//   pitch when ≥ 45° and the upper pitch when < 45°. A pyramid on a rectangle keeps `pitch` on the long sides; its end
-//   slopes come out flatter so all four meet in one apex.
+// - Pitches (TYPE_PITCH, used when spec.pitch is unset): gable / hip / pyramid 35°, shed 15° (a lean-to is low),
+//   mansard lower 70° / upper 30°, gambrel lower 60° / upper 25° (French and Dutch practice). A given pitch is used
+//   as-is on single-pitch roofs; on a mansard / gambrel it replaces the lower pitch when ≥ 45° and the upper pitch when
+//   < 45°. A pyramid on a rectangle keeps the pitch on the long sides; its end slopes come out flatter so all four meet
+//   in one apex.
+// - Dormers (spec.dormers): true → on gable, hip and mansard roofs; false → none; unset → mansards at detail high.
 // - Covering (real sizes): tiles = Swiss "Biberschwanz" beaver-tail plain tiles 18 × 38 cm, round tail, double lap
 //   ("Doppeldeckung", gauge 15 cm); slate = rectangular double-lap slates 40 × 25 cm (gauge 16 cm); shingles = split
 //   larch shingles 7–13 cm wide, 36 cm, triple lap (gauge 12 cm); pantiles = S pantiles, 21 cm cover width, gauge 32 cm,
@@ -86,18 +91,20 @@ function materials(spec, cover) {
 
 // ------------------------------------------------------------------------------------------------ dimensions
 
-/** Pitches (degrees): { lo: eave pitch, up: upper pitch } — see the header for the rules. */
+/** Each roof type's own pitches (degrees) when the text gives none: [eave / lower, upper]. A lean-to (Pultdach) is a
+ *  low roof; mansard and gambrel follow French and Dutch practice. */
+export const TYPE_PITCH = { gable: [35, 35], hip: [35, 35], pyramid: [35, 35], shed: [15, 15], mansard: [70, 30], gambrel: [60, 25] };
+
+/** Pitches { lo: eave (lower) pitch, up: upper pitch }. spec.pitch undefined = not given → the type's own pitches. A
+ *  given pitch is used as-is on single-pitch roofs; on a mansard / gambrel it replaces the lower slope when ≥ 45° (only
+ *  a steep figure can describe the brisis) and the upper slope when < 45°. */
 function pitches(spec, type) {
-  const user = spec.pitch !== DEFAULTS.roof.pitch;
-  const p = spec.pitch ?? DEFAULTS.roof.pitch;
-  if (type === 'mansard' || type === 'gambrel') {
-    let lo = type === 'mansard' ? 70 : 60, up = type === 'mansard' ? 30 : 25;
-    if (user) { if (p >= 45) lo = p; else up = Math.min(p, lo - 5); }
-    return { lo, up };
-  }
-  // a lean-to (Pultdach) is a low roof: 15° unless a pitch was given
-  if (type === 'shed' && !user) return { lo: 15, up: 15 };
-  return { lo: p, up: p };
+  let [lo, up] = TYPE_PITCH[type] || TYPE_PITCH.hip;
+  const p = spec.pitch;
+  if (p === undefined || p === null) return { lo, up };
+  if (type === 'mansard' || type === 'gambrel') { if (p >= 45) lo = p; else up = Math.min(p, lo - 5); }
+  else lo = up = p;
+  return { lo, up };
 }
 
 /** Everything the build and the tests need, from the normalised spec. Pure arithmetic (no kernel calls). */
@@ -108,7 +115,7 @@ export function dims(spec) {
   const k = short >= 2 ? Math.min(1.5, Math.sqrt(short / 8)) : short / 4;   // scale of the eaves members
   const D = {
     type, swap: W > Lx, W, Lx, long, short, a: long / 2, b: short / 2, k,
-    cover: effectiveCovering(spec), detail: spec.detail || 'high',
+    cover: effectiveCovering(spec), detail: spec.detail || 'high', overhang: spec.overhang,
     // eaves members (k = 1 at an 8 m span): cornice / wall plate, rafter deck, fascia, barge, gutter
     hc: 0.30 * k, pc: 0.10 * k, tn: 0.18 * k, tf: 0.035 * k, tb: 0.04 * k, db: 0.04 * k,
     rg: 0.07 * k, gt: 0.004 * k, rb: 0.011 * k, tcap: 0.004 * k,
@@ -125,17 +132,23 @@ function levels(D, lo, up) {
   const pe = lo * DEG, tl = Math.tan(pe), tu = Math.tan(up * DEG);
   D.lo = lo; D.up = up; D.pe = pe;
   D.tv = Math.min(D.tn / Math.cos(pe), 2 * D.tn);     // deck thickness measured vertically
-  // slab overhang beyond the wall line: target 0.55 m to the gutter front; the eave may not drop below the wall head
-  let oS = 0.55 * k - D.tf - D.gw;
-  oS = Math.min(oS, D.pc + (D.hc - 0.05 * k) / tl);
-  oS = Math.max(oS, D.pc + 0.02 * k);
+  // slab overhang beyond the wall line. Default: 0.55 m to the gutter front, shortened on steep eaves so that the
+  // soffit, resting on the cornice's outer edge, never drops below the wall head. Given (spec.overhang, wall line to
+  // the outermost point): honoured down to the smallest eave that clears the cornice (fascia + gutter in front of it)
+  const oMin = D.pc + 0.02 * k + D.tf + D.gw;
+  let oS;
+  if (D.overhang !== undefined && D.overhang !== null) oS = Math.max(D.overhang, oMin) - D.tf - D.gw;
+  else oS = clamp(0.55 * k - D.tf - D.gw, D.pc + 0.02 * k, Math.max(D.pc + 0.02 * k, D.pc + (D.hc - 0.05 * k) / tl));
   D.oS = oS; D.o = oS + D.tf + D.gw;
   D.hipped = type === 'hip' || type === 'pyramid' || type === 'mansard';
   D.Ax = D.hipped ? a + oS : a + D.o - D.tb;         // deck half-length along the ridge
   D.B = b + oS;                                       // deck half-span at the eaves
   D.B1 = type === 'shed' ? b + D.o - D.tf - D.tcap : D.B;
-  // the deck's soffit rests on the cornice's outer top edge (y = b + pc, z = hc)
-  D.zE = D.hc + D.tv - (oS - D.pc) * tl;
+  // the deck's soffit rests on the cornice's outer top edge (y = b + pc, z = hc). A long overhang would bring the eave
+  // below the wall head: the eave is held up instead and the wall rises above the cornice as a knee wall (Kniestock)
+  const zE0 = D.hc + D.tv - (oS - D.pc) * tl, zEmin = D.tv + 0.05 * k;
+  D.knee = zE0 < zEmin - 1e-9;
+  D.zE = Math.max(zE0, zEmin);
   D.R = 0;
   if (type === 'gable') { D.zR = D.zE + D.B * tl; D.R = D.Ax; }
   else if (type === 'hip') { D.zR = D.zE + D.B * tl; D.R = Math.max(0, D.Ax - D.B); }
@@ -487,7 +500,7 @@ function earClip(ids, xy, out) {
  *  clipped in JS, all cut pieces become one mesh and one Manifold (no boolean union; ~30× faster than trimming each
  *  copy with Manifold). Falls back to Manifold's trimByPlane if the mesh does not validate. */
 class CutSink {
-  constructor() { this.items = []; this.meshes = new Map(); }
+  constructor() { this.items = []; this.meshes = new Map(); this.fallbacks = 0; }
   add(base, M, planes) { this.items.push([base, M, planes]); }
   manifold() {
     if (!this.items.length) return null;
@@ -513,6 +526,7 @@ class CutSink {
     const items = this.items;
     this.items = [];
     if (!tri.length) return null;
+    let why = '';
     try {
       const m = Manifold.ofMesh(new Mesh({ numProp: 3, vertProperties: Float32Array.from(pos), triVerts: Uint32Array.from(tri) }));
       if (m.status() === 'NoError' && !m.isEmpty()) {
@@ -524,8 +538,13 @@ class CutSink {
         sm.delete();
         return m;
       }
+      why = `ofMesh status ${m.status()}`;
       m.delete();
-    } catch (e) { /* fall through */ }
+    } catch (e) { why = String(e && e.message || e); }
+    // fallback: trim every piece with Manifold (≈ 30× slower) — counted on the part, warned with ARCH_DEBUG set
+    this.fallbacks = items.length;
+    const env = globalThis.process?.env || {};
+    if (env.ARCH_DEBUG || globalThis.ARCH_DEBUG) console.warn(`roof: JS clip mesh rejected (${why}); trimming ${items.length} pieces with Manifold`);
     const list = [];
     for (const [base, M, planes] of items) {
       let m = base.transform(M);
@@ -593,9 +612,9 @@ function coverPiece(D) {
   }
 }
 
-/** A piece starting at v whose width ua..ub lies inside a dormer's footprint (hidden in the dormer) is left out. */
+/** A piece starting at v whose width ua..ub lies inside a dormer's footprint (hidden in its body) is left out. */
 function inHole(f, ua, ub, v) {
-  for (const h of f.holes || []) if (ua >= h.u0 && ub <= h.u1 && v >= h.v0) return true;
+  for (const h of f.holes || []) if (ua >= h.u0 && ub <= h.u1 && v >= h.v0 && v <= h.v1) return true;
   return false;
 }
 
@@ -817,7 +836,9 @@ function deckAndWalls(D, G, mats) {
   inner.delete();
   // the wall head under the deck: gable walls at the verges, the high wall of a shed; hidden under hipped roofs
   const ov = Math.min(0.001, 0.01 * D.k);
-  const xi = D.hipped ? D.a + D.pc : D.a, yLo = D.b + D.pc, yHi = D.type === 'shed' ? D.b : D.b + D.pc;
+  // (fills the wedge over the cornice up to the soffit; a knee wall stands on the wall line, the cornice a ledge)
+  const e = D.knee ? 0 : D.pc;
+  const xi = D.hipped ? D.a + e : D.a, yLo = D.b + e, yHi = D.type === 'shed' ? D.b : D.b + e;
   const lifted = outer.translate([0, 0, -D.tv + ov]);
   const walls = lifted.intersect(box(-xi, -yLo, D.hc - ov, xi, yHi, D.zR + D.k));
   lifted.delete(); outer.delete();
@@ -998,31 +1019,53 @@ function extraParts(D, G, mats) {
 }
 
 
-// ------------------------------------------------------------------------------------------------ dormers (mansard)
+// ------------------------------------------------------------------------------------------------ dormers
 
-/** Lucarnes on the brisis of a mansard (detail high): a stone front with a moulded window surround, sill, cornice and
- *  triangular pediment, a small gable roof running back into the roof, a French casement (glazing bars). One bay every
- *  ≈ 2.8 m, kept 0.35 m clear of the hips, on all four sides. The covering under them is left out. */
-function dormerLayout(D, G) {
-  if (D.type !== 'mansard' || D.detail !== 'high') return null;
-  const kd = clamp(D.hL / 2.7, 0.35, 1.3), tL = Math.tan(D.pe), tU = Math.tan(D.up * DEG);
-  const wd = 1.15 * kd, cp = 0.06 * kd, yf = 0.3 * kd;
-  const zBase = D.zE + yf * tL, hAv = D.zB - zBase;
-  const zc = zBase + 0.9 * hAv, zo0 = zBase + 0.12 * kd, zo1 = zc - 0.22 * kd;
-  if (zo1 - zo0 < 0.45 * kd) return null;
-  const hp = 0.36 * kd, zr = zc + hp;
-  const slopeY = (z) => (z <= D.zB ? (z - D.zE) / tL : D.rL + (z - D.zB) / tU);
+/** Dormers: a stone front with a moulded window surround, sill, cornice and triangular pediment, a small gable roof
+ *  running back into the roof, a French casement (glazing bars). spec.dormers true → on gable, hip and mansard roofs;
+ *  false → none; unset → mansards at detail high (their defining feature). One bay every ≈ 2.8 m, kept 0.35 m clear
+ *  of hips and gable walls. Mansard: lucarnes on all four brisis faces, the front just behind the gutter. Gable / hip
+ *  (pitch ≥ 20°): on the long slopes, the front just behind the wall line so the eave runs on below; the window is made
+ *  shorter (down to 0.6 m) or the dormers left out when the roof is too low for them. The covering under a dormer is
+ *  left out. */
+function dormerLayout(D, G, spec) {
+  const want = spec.dormers === undefined || spec.dormers === null ? D.type === 'mansard' && D.detail === 'high' : !!spec.dormers;
+  if (!want || !['mansard', 'gable', 'hip'].includes(D.type)) return null;
+  const tL = Math.tan(D.pe), mansard = D.type === 'mansard';
+  let kd, yf, zBase, zc, zo0, zo1, slopeY;
+  if (mansard) {
+    kd = clamp(D.hL / 2.7, 0.35, 1.3); yf = 0.3 * kd;
+    zBase = D.zE + yf * tL;
+    zc = zBase + 0.9 * (D.zB - zBase); zo0 = zBase + 0.12 * kd; zo1 = zc - 0.22 * kd;
+    if (zo1 - zo0 < 0.45 * kd) return null;
+    const tU = Math.tan(D.up * DEG);
+    slopeY = (z) => (z <= D.zB ? (z - D.zE) / tL : D.rL + (z - D.zB) / tU);
+  } else {
+    if (D.lo < 20) return null;
+    kd = clamp(D.short / 8, 0.35, 1.2); yf = D.oS + 0.4 * kd;
+    zBase = D.zE + yf * tL;
+    const zMax = D.zE + (D.B - 0.35 * kd) * tL;          // the dormer roof must meet the slope below the ridge
+    const win = Math.min(1.3 * kd, zMax - zBase - 0.79 * kd);
+    if (win < 0.6 * kd) return null;
+    zo0 = zBase + 0.12 * kd; zo1 = zo0 + win; zc = zo1 + 0.22 * kd;
+    slopeY = (z) => (z - D.zE) / tL;
+  }
+  const wd = 1.15 * kd, cp = 0.06 * kd, hp = 0.36 * kd, zr = zc + hp;
   const yMeet = slopeY(zr + 0.05 * kd), yBk = yMeet + 0.25 * kd;
   const L = { kd, wd, cp, yf, zBase, zc, zo0, zo1, hp, zr, yBk, ww: 0.66 * kd };
-  // bays along each lower face: front/back along x (half-width at the break A2), ends along y (B2)
   const bays = (half) => {
     const U = 2 * (half - 0.35 * kd - wd / 2 - cp);
     if (U < 0) return [];
     const n = Math.floor(U / (2.8 * kd)) + 1, sp = n > 1 ? Math.min(3.4 * kd, U / (n - 1)) : 0;
     return Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * sp);
   };
-  // place: the dormer is built with its eave line on local y = 0 (front -Y); per face a rotation and the eave distance
-  const sides = [[0, mat.I(), D.B, D.A2], [1, mat.Rz(Math.PI / 2), D.Ax, D.B2], [2, mat.Rz(Math.PI), D.B, D.A2], [3, mat.Rz(-Math.PI / 2), D.Ax, D.B2]];
+  // each dormer is built with its eave line on local y = 0, front -Y; per face a rotation, the eave's distance from the
+  // centre and the half-width available (mansard: at the break; hip: where the dormer roof meets the slope)
+  const sides = mansard
+    ? [[0, mat.I(), D.B, D.A2], [1, mat.Rz(Math.PI / 2), D.Ax, D.B2], [2, mat.Rz(Math.PI), D.B, D.A2], [3, mat.Rz(-Math.PI / 2), D.Ax, D.B2]]
+    : D.type === 'gable' ? [[0, mat.I(), D.B, D.a], [1, mat.Rz(Math.PI), D.B, D.a]]
+      : [[0, mat.I(), D.B, D.Ax - yBk], [2, mat.Rz(Math.PI), D.B, D.Ax - yBk]];
+  const v1 = mansard ? Infinity : slopeY(zc) / Math.cos(D.pe);
   const xf = [], cuts = [];
   for (const [fi, rot, dist, half] of sides) {
     const f = G.faces[fi];
@@ -1032,12 +1075,12 @@ function dormerLayout(D, G) {
       xf.push(M);
       const c = mat.apply(M, [0, yf, D.zE]);
       const uc = V.dot(V.sub(c, f.O), f.e);
-      f.holes.push({ u0: uc - wd / 2 - cp, u1: uc + wd / 2 + cp, v0: yf / Math.cos(D.pe) });
-      cuts.push(box(-wd / 2 - cp, yf - 0.1 * kd, zBase, wd / 2 + cp, yBk, zr + 0.2 * kd).transform(M));
+      f.holes.push({ u0: uc - wd / 2 - cp, u1: uc + wd / 2 + cp, v0: yf / Math.cos(D.pe), v1 });
+      if (mansard) cuts.push(box(-wd / 2 - cp, yf - 0.1 * kd, zBase, wd / 2 + cp, yBk, zr + 0.2 * kd).transform(M));
     }
   }
   if (!xf.length) return null;
-  G.dormerCut = union(cuts);
+  if (cuts.length) G.dormerCut = union(cuts);
   return { L, xf };
 }
 
@@ -1110,7 +1153,7 @@ export function build(spec) {
   const D = dims(spec);
   const G = geometry(D);
   const mats = materials(spec, D.cover);
-  const dormers = dormerLayout(D, G);
+  const dormers = dormerLayout(D, G, spec);
   const parts = [cornice(D, mats), ...deckAndWalls(D, G, mats), ...eaveParts(D, G, mats)];
   const rnd = rng(spec.seed ?? 7);
   const name = COVER_NAME[D.cover], C = D.C;
@@ -1130,7 +1173,7 @@ export function build(spec) {
     for (const f of half) seamFace(D, f, out);
     parts.push(part('pan', 'roof', pan, instances(both(out.whole)), { material: mats.covering }));
     const cut = out.cut.manifold();
-    if (cut) parts.push(part('pan-cut', 'roof', cut, cutXf, { material: mats.covering }));
+    if (cut) parts.push(part('pan-cut', 'roof', cut, cutXf, { material: mats.covering, clipFallbacks: out.cut.fallbacks }));
     parts.push(part('seam', 'roof', seam, instances(both(out.seams)), { material: mats.covering }));
   } else {
     const base = coverPiece(D);
@@ -1139,7 +1182,7 @@ export function build(spec) {
     const role = D.cover === 'shingles' ? 'wood' : 'roof';
     parts.push(part(D.detail === 'low' ? `${name}-course` : name, role, base, instances(both(out.whole)), { material: mats.covering }));
     const cut = out.cut.manifold();
-    if (cut) parts.push(part(`${name}-cut`, role, cut, cutXf, { material: mats.covering }));
+    if (cut) parts.push(part(`${name}-cut`, role, cut, cutXf, { material: mats.covering, clipFallbacks: out.cut.fallbacks }));
   }
   parts.push(...ridgeParts(D, G, mats), ...extraParts(D, G, mats), ...dormerParts(D, dormers, mats), ...snowGuards(D, G, mats));
   const kept = parts.filter((p) => !p.transforms || p.transforms.length);
