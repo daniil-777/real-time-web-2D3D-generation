@@ -4,7 +4,7 @@
 import { ORDERS, columnDims } from '../orders.js';
 import { K, TAU, mat, revolve, loft, box, union, part, radial, instances, tube, extrudeXY } from '../kernel.js';
 import { Prof } from '../profiles.js';
-import { acanthusLeaf, voluteScroll, eggAndDart, rosette, extrudeElevation, spiral } from '../ornament.js';
+import { acanthusLeaf, voluteScroll, eggAndDart, rosette, extrudeElevation } from '../ornament.js';
 
 export const ELEMENTS = ['column', 'pilaster', 'capital', 'base', 'pedestal'];
 
@@ -120,12 +120,8 @@ function flutedShaft(d, n, kind, entasis) {
       const k = Math.floor(th / P), c = k * P + P / 2, psi = th - c;
       const w = hw * (kind === 'fillet' ? Math.max(g, 1e-3) : 1);
       const u = Math.abs(psi) / w;
-      let rr = r;
-      if (u < 1) {
-        const bowl = Math.sqrt(1 - u * u);
-        if (kind === 'reed') rr = r - depthK * rf * (1 - bowl) * g - 0.002 * D;
-        else rr = r - depthK * rf * g * bowl;
-      }
+      const bowl = u < 1 ? Math.sqrt(1 - u * u) : 0;
+      const rr = kind === 'reed' ? r - depthK * rf * (1 - bowl) * g - 0.002 * D : r - depthK * rf * g * bowl;
       return [rr * Math.cos(th), rr * Math.sin(th)];
     });
   });
@@ -441,28 +437,22 @@ function pedestalParts(d, half) {
 
 // ------------------------------------------------------------------------------------------------ pilaster
 
-function pilasterParts(spec, d, segs) {
-  const { D, shaft: Hs } = d, o = d.o, w = D / 2, dep = 0.16 * D;
-  const n = spec.flutes ? Math.min(spec.flutes, 9) : 0, pts = [];
-  const rings = [], zs = zSamples(Hs, D, 16);
-  const fw = n ? (2 * w * 0.86) / n : 0, fr = fw * 0.38;
-  for (const z of zs) {
-    const ring = [[-w, dep], [-w, -dep]];
-    if (n) {
-      const g = Math.max(0, Math.min(1, Math.min(z - 0.09 * D, Hs - 0.065 * D - z) / fr));
-      const gg = g > 0 ? Math.sqrt(1 - (1 - g) ** 2) : 0;
-      for (let k = 0; k < n; k++) {
-        const cx = -w * 0.86 + fw * (k + 0.5);
-        for (let j = 0; j <= 8; j++) { const t = -1 + j / 4, x = cx + t * fr; ring.push([x, -dep + fr * gg * Math.sqrt(Math.max(0, 1 - t * t))]); }
-      }
+function pilasterParts(spec, d) {
+  const { D, shaft: Hs } = d, w = D / 2, dep = 0.16 * D;
+  const n = spec.flutes ? Math.min(spec.flutes, 9) : 0;
+  let shaft = box(-w, -dep, 0, w, dep, Hs);
+  if (n) {
+    // flutes cut into the face as capsules: semicircular section, rounded (spoon) ends
+    const { Manifold } = K();
+    const fw = (2 * w * 0.86) / n, fr = fw * 0.38, z0 = 0.09 * D + fr, z1 = Hs - 0.065 * D - fr;
+    const caps = [];
+    for (let k = 0; k < n; k++) {
+      const cx = -w * 0.86 + fw * (k + 0.5);
+      caps.push(Manifold.cylinder(z1 - z0, fr, fr, 24).translate([cx, -dep, z0]),
+        Manifold.sphere(fr, 24).translate([cx, -dep, z0]), Manifold.sphere(fr, 24).translate([cx, -dep, z1]));
     }
-    ring.push([w, -dep], [w, dep]);
-    rings.push(ring);
+    shaft = shaft.subtract(union(caps));
   }
-  // rings are not star-shaped around the origin for deep flutes; loft still closes them correctly as long as the
-  // polygon stays simple, which a shallow front-face fluting guarantees
-  const shaft = loft(rings.map((r) => r.slice().reverse()), zs);
-  void pts; void segs; void o;
   return [part('shaft', 'stone', shaft, null, { flutes: n })];
 }
 
@@ -491,10 +481,10 @@ export function build(spec) {
   parts.push(...lift(b.parts, z));
   z += baseH;
   if (spec.element === 'pilaster') {
-    parts.push(...lift(pilasterParts(spec, dd, segs), z - 0.001));
+    parts.splice(parts.length - b.parts.length, b.parts.length, ...lift(pilasterBase(baseKind, { ...d, base: baseH }), z - baseH));
+    parts.push(...lift(pilasterParts(spec, dd), z - 0.001));
     z += dd.shaft;
-    const capD = { ...dd, top: dd.D };
-    parts.push(...lift(pilasterCapital(spec, capD, segs), z));
+    parts.push(...lift(pilasterCapital(spec, dd), z - 0.001));
     return parts;
   }
   parts.push(...lift(shaftParts(spec, dd, segs), z - 0.001));
@@ -504,24 +494,49 @@ export function build(spec) {
   return parts;
 }
 
-function pilasterCapital(spec, d, segs) {
+function pilasterCapital(spec, d) {
   const { D, cap: c } = d;
   if (!c) return [];
-  const w = D / 2 + 0.02 * D, dep = 0.16 * D + 0.02 * D;
-  const p = new Prof(0).fillet(c * 0.55).ovolo(0.08 * D, c * 0.3, 6).fillet(c * 0.15, 0.02 * D);
+  const w = D / 2, dep = 0.16 * D, o = spec.order;
+  const rect = (prof, z0, ax = w, ay = dep) => { const { rings, zs } = prof.toRings(ax, ay, z0); return loft(rings, zs); };
+  if (o === 'corinthian' || o === 'composite') {
+    const abH = c / 7, zab = c - abH;
+    const bellP = new Prof(0);
+    for (let i = 1; i <= 12; i++) bellP.to(0.06 * D * (i / 12) ** 2.2, (zab * i) / 12);
+    const out = [part('capital', 'stone', union([rect(bellP, 0), rect(new Prof(0.07 * D).cavetto(0.02 * D, abH * 0.3, 4).fillet(abH * 0.15)
+      .ovolo(0.03 * D, abH * 0.4, 5).fillet(abH * 0.15), zab - 0.001)]))];
+    const lower = acanthusLeaf({ h: 0.36 * c, w: 0.34 * D, lean: 0.12 });
+    const upper = acanthusLeaf({ h: 0.62 * c, w: 0.3 * D, lean: 0.08, lobes: 5 });
+    out.push(part('leaf-lower', 'stone', lower, instances([-0.34, 0, 0.34].map((x) => mat.T(x * D, -dep + 0.005 * D, 0)))));
+    out.push(part('leaf-upper', 'stone', upper, instances([-0.17, 0.17].map((x) => mat.T(x * D, -dep + 0.012 * D, 0.03 * c)))));
+    const vr = 0.08 * D, vol = voluteScroll({ r0: vr, depth: 0.05 * D, side: 1, pinch: 0, eye: 0.16, turns: 2.2 });
+    out.push(part('volute', 'stone', union([vol.translate([w - 0.02 * D, -dep - 0.03 * D, zab - vr]),
+      vol.mirror([1, 0, 0]).translate([-(w - 0.02 * D), -dep - 0.03 * D, zab - vr])])));
+    out.push(part('fleuron', 'stone', rosette(0.07 * D, 8), instances([mat.T(0, -dep - 0.07 * D - 0.02 * D, zab + abH * 0.45)])));
+    return out;
+  }
+  if (o === 'ionic') {
+    const abH = 0.065 * D, zab = c - abH, r0 = 0.18 * D;
+    const body = union([rect(new Prof(0).fillet(zab - 0.12 * D).ovolo(0.05 * D, 0.12 * D, 6), 0),
+      rect(new Prof(0.07 * D).fillet(abH * 0.45).ovolo(0.02 * D, abH * 0.55, 5), zab - 0.001)]);
+    const vR = voluteScroll({ r0, depth: 0.12 * D, side: 1, pinch: 0 }).translate([w - 0.05 * D, -dep - 0.02 * D, zab - 0.98 * r0]);
+    const vL = voluteScroll({ r0, depth: 0.12 * D, side: -1, pinch: 0 }).translate([-(w - 0.05 * D), -dep - 0.02 * D, zab - 0.98 * r0]);
+    return [part('capital', 'stone', union([body, vR, vL]))];
+  }
+  // Tuscan / Doric / other: necking, echinus (ovolo), abacus as a rectangular lathe
+  const p = new Prof(0).fillet(c * 0.36).fillet(0.02 * D, 0.012 * D).ovolo(0.07 * D, c * 0.28).fillet(c * 0.34 - 0.02 * D, 0.012 * D);
+  return [part('capital', 'stone', rect(p, 0))];
+}
+
+/** Rectangular version of a base (for pilasters): the order's base profile on rectangular rings. */
+function pilasterBase(kind, d) {
+  const { D, base: H } = d, w = D / 2, dep = 0.16 * D;
+  if (!H || kind === 'none') return [];
+  const p = new Prof(0.17 * D).fillet(H / 3).torus(0.125 * D * 0.8, 1).out(-0.035 * D).fillet(0.015 * D).scotia(0.07 * D, 0.035 * D, 0.01 * D)
+    .torus(0.07 * D, 1).out(-0.03 * D).fillet(0.015 * D);
+  scaleH(p, H);
   const { rings, zs } = p.toRings(w, dep);
-  const out = [part('capital', 'stone', loft(rings, zs))];
-  if (spec.order === 'corinthian' || spec.order === 'composite') {
-    const leaf = acanthusLeaf({ h: 0.4 * c, w: 0.32 * D, lean: 0.1 });
-    out.push(part('leaf', 'stone', leaf, instances([-0.32, 0, 0.32].map((x) => mat.T(x * D, -dep + 0.01 * D, 0)))));
-  }
-  if (spec.order === 'ionic') {
-    const v = voluteScroll({ r0: 0.16 * D, depth: 0.1 * D, side: 1, pinch: 0 });
-    const v2 = voluteScroll({ r0: 0.16 * D, depth: 0.1 * D, side: -1, pinch: 0 });
-    out.push(part('volute', 'stone', union([v.translate([w - 0.1 * D, -dep, c - 0.2 * D]), v2.translate([-w + 0.1 * D, -dep, c - 0.2 * D])])));
-  }
-  void segs;
-  return out;
+  return [part('base', 'stone', loft(rings, zs))];
 }
 
 function grounded(parts) {
