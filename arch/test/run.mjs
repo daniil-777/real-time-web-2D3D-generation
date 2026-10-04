@@ -24,6 +24,7 @@ try { ({ parse } = await import('../js/parse.js')); } catch (e) { console.log('p
 const near = (a, b) => typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) <= 0.01 * Math.max(1e-9, Math.abs(b)) : a === b;
 const rows = [];
 const fam = {};
+let built = 0;
 for (const p of prompts) {
   const row = { id: p.id, cat: p.cat, lang: p.lang, text: p.text, fields: {}, errors: [] };
   const exp = p.expect || {};
@@ -77,6 +78,10 @@ for (const p of prompts) {
             }
           }
         }
+        // free what was checked and start a fresh kernel now and then (like the browser worker), so a long run does
+        // not grow the WASM heap past what Manifold handles (~2 GB)
+        for (const q of g.parts) { try { q.manifold.delete(); } catch (e) { /* already freed */ } }
+        if (++built % 60 === 0) await initKernel();
         const budget = ASSEMBLY.has(g.spec.element) ? GATES.p95Assembly : GATES.p95;
         if (g.ms > budget * 2) row.errors.push(`slow ${Math.round(g.ms)} ms`);
         if (g.tris > 2.5e6) row.errors.push(`heavy ${g.tris} tris`);
