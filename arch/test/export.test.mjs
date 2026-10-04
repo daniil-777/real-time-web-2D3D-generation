@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { initKernel, ARCHKIT } from './node-kernel.mjs';
 import { part, revolve, box, mat, instances, partsBBox, instanceCount } from '../js/kernel.js';
-import { partMesh, toGLB, toOBJ, toSTL, featureEdges, materialFor } from '../js/export.js';
+import { partMesh, toGLB, toOBJ, toOBJParts, toSTL, featureEdges, materialFor } from '../js/export.js';
 
 let fails = 0, checks = 0;
 const ok = (cond, msg) => { checks++; if (!cond) { fails++; console.log('  FAIL', msg); } };
@@ -129,6 +129,9 @@ function check(label, { parts, spec }) {
   const t2 = performance.now();
   const obj = toOBJ(meshes, { name: label });
   const tOBJ = performance.now() - t2;
+  const chunks = toOBJParts(meshes, { name: label });
+  ok(chunks.length > meshes.length && chunks.join('') === obj, `OBJ in ${chunks.length} chunks, joined = toOBJ`);
+  ok(Math.max(...chunks.map((c) => c.length)) < Math.max(4e6, obj.length / 2) || chunks.length > 2, 'no single giant OBJ string');
   let f = 0, v = 0, vn = 0, o = 0;
   const omin = [Infinity, Infinity, Infinity], omax = [-Infinity, -Infinity, -Infinity];
   for (const line of obj.split('\n')) {

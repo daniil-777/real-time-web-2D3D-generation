@@ -2,15 +2,17 @@
 // render arrays (positions, normals with crisp arrises > 30°, indices, instance transforms) and posts them as
 // transferable buffers. Exports run here too, from the arrays of the last build, so the page never blocks.
 //
-// in : { type: 'build', id, spec, edges }  { type: 'edges', id }  { type: 'export', id, format: 'glb'|'obj'|'stl', name }
+// in : { type: 'build', id, spec, edges }  { type: 'edges', id: buildId }
+//      { type: 'export', id, forId: buildId, format: 'glb'|'obj'|'stl', name }
 // out: { type: 'ready', heapMB }  { type: 'fatal', message }
 //      { type: 'built', id, meshes: [{ name, role, material, positions, normals, indices, transforms }], stats }
-//      { type: 'edges', id, edges: [Float32Array per mesh] }  { type: 'exported', id, format, buffer, mime }
-//      { type: 'error', id, message }
+//      { type: 'edges', id: buildId, edges: [Float32Array per mesh] }   (always for the model this worker holds)
+//      { type: 'exported', id, format, buffers: [ArrayBuffer…], mime }
+//      { type: 'error', id, message, code: 'stale' | 'kernel' | undefined, heapMB, builds }
 
 import { setKernel } from './kernel.js';
 import { generate } from './generate.js';
-import { partMesh, featureEdges, toGLB, toOBJ, toSTL } from './export.js';
+import { partMesh, featureEdges, toGLB, toOBJParts, toSTL } from './export.js';
 
 const MANIFOLD = 'https://cdn.jsdelivr.net/npm/manifold-3d@3.5.4/manifold.js';
 
@@ -37,10 +39,13 @@ const kernel = (async () => {
 })();
 kernel.then(() => post({ type: 'ready', heapMB: heapMB() }), (e) => post({ type: 'fatal', message: 'the CAD kernel could not load: ' + msg(e) }));
 
-let last = null; // { meshes, spec } of the last build, for edges and exports (plain arrays, no kernel objects)
+let last = null; // { id, meshes, spec } of the last build, for edges and exports (plain arrays, no kernel objects)
 let builds = 0;
 let queue = Promise.resolve();
 self.onmessage = (e) => { queue = queue.then(() => handle(e.data)); };
+
+// errors that mean the WASM instance itself is unwell (the page then recycles the worker), not a bad request
+const KERNEL_ERR = /abort|RuntimeError|unreachable|out of bounds|memory|deleted object|BindingError|table index|null function|stack/i;
 
 async function handle(m) {
   try {
@@ -49,7 +54,9 @@ async function handle(m) {
     else if (m.type === 'edges') edges(m.id);
     else if (m.type === 'export') exportAs(m);
   } catch (e) {
-    post({ type: 'error', id: m.id, message: msg(e), stack: e && e.stack ? String(e.stack).split('\n').slice(0, 6).join('\n') : '' });
+    if (m.type === 'build') builds++;   // a failed build has left its temporaries too
+    post({ type: 'error', id: m.id, message: msg(e), code: e.code || (KERNEL_ERR.test(msg(e)) ? 'kernel' : undefined),
+      heapMB: heapMB(), builds, stack: e && e.stack ? String(e.stack).split('\n').slice(0, 6).join('\n') : '' });
   }
 }
 
@@ -62,7 +69,7 @@ async function build(m) {
   freeParts(r.parts);   // the arrays are copies: give the kernel objects back to the WASM heap
   builds++;
   const t2 = performance.now();
-  last = { meshes, spec: r.spec };
+  last = { id: m.id, meshes, spec: r.spec };
   const transfer = [];
   const copy = (a) => { if (!a) return null; const c = a.slice(); transfer.push(c.buffer); return c; };
   const out = meshes.map((x) => ({ name: x.name, role: x.role, material: x.material, positions: copy(x.positions), normals: copy(x.normals),
@@ -88,21 +95,30 @@ function freeParts(parts) {
   }
 }
 
+/** Feature edges of the model this worker holds, answered with its build id (the page applies them only to that
+ *  build); a request for another build is ignored: that build is either gone or will ask again once it is shown. */
 function edges(id) {
-  if (!last) throw new Error('nothing built yet');
+  if (!last || (id !== undefined && id !== last.id)) return;
   const list = last.meshes.map((x) => featureEdges(x, 30));
-  post({ type: 'edges', id, edges: list }, list.map((a) => a.buffer));
+  post({ type: 'edges', id: last.id, edges: list }, list.map((a) => a.buffer));
 }
 
+const stale = () => Object.assign(new Error('the model on screen is not the one this worker holds'), { code: 'stale' });
+
+/** Export the model on screen: forId must be the build the page shows, or the answer is a 'stale' error. */
 function exportAs(m) {
-  if (!last) throw new Error('nothing built yet');
+  if (!last || (m.forId !== undefined && m.forId !== last.id)) throw stale();
   const name = m.name || last.spec.element;
-  let buffer, mime;
-  if (m.format === 'glb') { buffer = toGLB(last.meshes, { name, extras: { spec: last.spec, generator: 'Arch Studio' } }); mime = 'model/gltf-binary'; }
-  else if (m.format === 'obj') { buffer = new TextEncoder().encode(toOBJ(last.meshes, { name })).buffer; mime = 'text/plain'; }
-  else if (m.format === 'stl') { buffer = toSTL(last.meshes, { name }); mime = 'model/stl'; }
+  let buffers, mime;
+  if (m.format === 'glb') { buffers = [toGLB(last.meshes, { name, extras: { spec: last.spec, generator: 'Arch Studio' } })]; mime = 'model/gltf-binary'; }
+  else if (m.format === 'obj') {
+    // chunk by chunk: a large model never becomes one giant string
+    const enc = new TextEncoder();
+    buffers = toOBJParts(last.meshes, { name }).map((t) => enc.encode(t).buffer);
+    mime = 'text/plain';
+  } else if (m.format === 'stl') { buffers = [toSTL(last.meshes, { name })]; mime = 'model/stl'; }
   else throw new Error('unknown export format ' + m.format);
-  post({ type: 'exported', id: m.id, format: m.format, buffer, mime }, [buffer]);
+  post({ type: 'exported', id: m.id, format: m.format, buffers, mime }, buffers);
 }
 
 function post(m, transfer = []) { self.postMessage(m, transfer); }

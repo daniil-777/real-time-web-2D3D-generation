@@ -324,33 +324,38 @@ export function toGLB(meshes, opts = {}) {
 const num = (x) => { const r = Math.round(x * 1e6) / 1e6; return r === 0 ? '0' : String(r); };
 const nrm = (x) => { const r = Math.round(x * 1e4) / 1e4; return r === 0 ? '0' : String(r); };
 
-/** Wavefront OBJ (Y-up, metres): one object + group per part, every instance expanded, vertex normals, usemtl per
- *  material key (Blender and Rhino create materials by name). */
-export function toOBJ(meshes, opts = {}) {
-  const out = [`# Arch Studio${opts.name ? ' - ' + opts.name : ''}`, '# units: metres, Y up', ''];
+/** Wavefront OBJ (Y-up, metres) as a list of text chunks (one per block of one instance), so a large model is never
+ *  one giant string: the worker encodes the chunks one by one and the page makes a Blob of them. One object + group
+ *  per part, every instance expanded, vertex normals, usemtl per material key (Blender and Rhino create materials by
+ *  name). */
+export function toOBJParts(meshes, opts = {}) {
+  const out = [`# Arch Studio${opts.name ? ' - ' + opts.name : ''}\n# units: metres, Y up\n\n`];
   let base = 1;
   for (const src of meshes) {
     // every vertex gets a normal, so v and vn indices stay equal across parts
     const mesh = src.normals ? src : { ...src, normals: vertexNormals(src.positions, src.indices) };
-    out.push(`o ${safe(mesh.name)}`, `g ${safe(mesh.name)}`, `usemtl ${safe(mesh.material || 'stone')}`);
+    out.push(`o ${safe(mesh.name)}\ng ${safe(mesh.name)}\nusemtl ${safe(mesh.material || 'stone')}\n`);
     for (const m of instanceList(mesh)) {
       const y = transformed(mesh, mul(C, m)), n = y.p.length / 3, v = new Array(n), vn = new Array(n);
       for (let i = 0; i < n; i++) {
-        v[i] = `v ${num(y.p[i * 3])} ${num(y.p[i * 3 + 1])} ${num(y.p[i * 3 + 2])}`;
-        vn[i] = `vn ${nrm(y.q[i * 3])} ${nrm(y.q[i * 3 + 1])} ${nrm(y.q[i * 3 + 2])}`;
+        v[i] = `v ${num(y.p[i * 3])} ${num(y.p[i * 3 + 1])} ${num(y.p[i * 3 + 2])}\n`;
+        vn[i] = `vn ${nrm(y.q[i * 3])} ${nrm(y.q[i * 3 + 1])} ${nrm(y.q[i * 3 + 2])}\n`;
       }
-      out.push(v.join('\n'), vn.join('\n'));
+      out.push(v.join(''), vn.join(''));
       const T = mesh.indices, f = new Array(T.length / 3);
       for (let t = 0; t < T.length; t += 3) {
         const a = T[t] + base, b = T[t + (y.flip ? 2 : 1)] + base, c = T[t + (y.flip ? 1 : 2)] + base;
-        f[t / 3] = `f ${a}//${a} ${b}//${b} ${c}//${c}`;
+        f[t / 3] = `f ${a}//${a} ${b}//${b} ${c}//${c}\n`;
       }
-      out.push(f.join('\n'));
+      out.push(f.join(''));
       base += n;
     }
   }
-  return out.join('\n') + '\n';
+  return out;
 }
+
+/** The same OBJ as one string (small models, tests). */
+export function toOBJ(meshes, opts = {}) { return toOBJParts(meshes, opts).join(''); }
 const safe = (s) => String(s).replace(/\s+/g, '_');
 
 // ------------------------------------------------------------------------------------------------ STL

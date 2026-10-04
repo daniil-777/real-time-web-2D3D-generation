@@ -299,6 +299,8 @@
     if (!s) return;
     // Architecture lists every failed build in errors; once it has started, one bad request is not "could not start"
     if (s.errors && s.errors.length && !(arch && s.ready)) return live('err', 'Could not start on this device');
+    // Architecture is built by a CAD kernel (WebAssembly, on the CPU) and drawn with WebGL: no neural net on the GPU
+    if (arch) return live('on', 'Built in your browser · WebAssembly + WebGL');
     live('on', ['Live on your GPU', BE[s.backend] || s.backend, s.fps ? Math.round(s.fps) + ' fps' : ''].filter(Boolean).join(' · '));
   }, 1000);
   const hero = $('.hero');                            // the stage takes the rest of the first screen

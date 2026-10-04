@@ -27,11 +27,22 @@ export const VIEWS = {
   top: { az: 0, el: 90, ortho: true, label: 'top' },
 };
 export const MODES = ['stone', 'white', 'line'];
+// elements that are runs: their three-quarter view frames the near end when they are much longer than their section
+const LONG_RUNS = new Set(['moulding', 'cornice', 'entablature', 'balustrade']);
 // key light: front-right and fairly high, about 70° from the 3/4 camera, so cylinders model from lit to shade and the
 // shadow falls back-left where the 3/4 view sees it on the ground
 const SUN = { az: 35, el: 43 };
 // AgX needs a bright scene: sun : sky about 6 : 1 (strong form), exposure lifts lit white stone to ~95 % of the page
 const LIGHT = { sun: 12, env: 0.25, exposure: 1.7 };
+// per look: light stones get less exposure and a stronger key (form, veining and texture read instead of a white
+// silhouette); the white model is the brighter, softer architect's model with deeper occlusion
+const LOOKS = {
+  stone: { sun: 12, env: 0.22, exposure: 1.6, ao: 3.0 },
+  lightStone: { sun: 13, env: 0.15, exposure: 1.32, ao: 3.2 },
+  white: { sun: 10, env: 0.42, exposure: 1.75, ao: 4.2 },
+  line: { sun: 12, env: 0.25, exposure: 1.7, ao: 0 },
+};
+const LIGHT_STONES = new Set(['marble', 'limestone', 'plaster', 'travertine', 'concrete']);
 
 // ------------------------------------------------------------------------------------------------ materials
 
@@ -60,16 +71,21 @@ const KIND_GLSL = {
     diffuseColor.rgb = mix(diffuseColor.rgb, uArchA, uArchK.x * smoothstep(0.55, 0.85, aF(P * 0.35 + 7.0)) * 0.8);
     archR = m; archH = g * fine;`,
   MARBLE: /* glsl */`
-    // Carrara: a white ground with soft grey clouds, long domain-warped veins and a finer secondary network
+    // Carrara: a white ground with soft grey clouds and wispy veins where a warped noise field crosses a level (iso-
+    // contours read as natural veining), a finer secondary network close up
     float m = aF(P * 1.6);
     float cloud = smoothstep(0.45, 0.85, aF(P * 0.9 + 4.0));
-    float t1 = sin(dot(P, vec3(0.9, 1.4, 0.6)) * 3.0 + aF(P * 1.7 + 3.0) * 7.5);
-    float v1 = exp(-abs(t1) * 7.0) * smoothstep(0.3, 0.7, aF(P * 0.6 + 9.0));
-    float t2 = sin(dot(P, vec3(-1.7, 0.6, 1.3)) * 7.0 + aF(P * 3.1 + 5.0) * 6.0);
-    float v2 = exp(-abs(t2) * 14.0) * smoothstep(0.4, 0.75, aF(P * 1.1 - 4.0));
-    float fineV = 1.0 - smoothstep(0.002, 0.012, px);
-    diffuseColor.rgb *= 1.0 - 0.05 * cloud + uArchK.x * (m - 0.5);
-    diffuseColor.rgb = mix(diffuseColor.rgb, uArchA, clamp(v1 * 0.55 + v2 * 0.3 * fineV, 0.0, 1.0) * uArchK.y);
+    vec3 W = P + vec3(aF(P * 0.7 + 1.3), aF(P * 0.7 + 7.1), aF(P * 0.7 + 3.9)) * 0.9;
+    float f1 = aF(W * vec3(0.9, 0.55, 0.9));
+    float w1 = max(fwidth(f1), 1e-4);
+    float v1 = 1.0 - smoothstep(0.0, 0.012 + w1, abs(f1 - 0.5));
+    v1 *= smoothstep(0.3, 0.6, aF(P * 0.5 + 9.0));
+    float f2 = aF(W * 2.7 + 5.0);
+    float w2 = max(fwidth(f2), 1e-4);
+    float v2 = (1.0 - smoothstep(0.0, 0.008 + w2, abs(f2 - 0.47))) * smoothstep(0.45, 0.7, aF(P * 1.1 - 4.0));
+    float fineV = 1.0 - smoothstep(0.003, 0.015, px);
+    diffuseColor.rgb *= 1.0 - 0.06 * cloud + uArchK.x * (m - 0.5);
+    diffuseColor.rgb = mix(diffuseColor.rgb, uArchA, clamp(v1 * 0.75 + v2 * 0.5 * fineV, 0.0, 1.0) * uArchK.y);
     archR = m; archH = 0.0;`,
   GRANITE: /* glsl */`
     // fine crystals: dark mica and hornblende, light quartz, a few pink feldspars
@@ -119,7 +135,7 @@ const KIND_GLSL = {
 
 // per material key: noise kind, tints, amounts (k: mottling, grain/vein strength, roughness variation, bump m), extras
 const LOOK = {
-  marble: { kind: 'MARBLE', a: '#9a9ca2', k: [0.02, 0.6, 0.06, 0], sheen: 0.3 },
+  marble: { kind: 'MARBLE', a: '#8a8d94', k: [0.02, 0.7, 0.06, 0], sheen: 0.3 },
   limestone: { kind: 'STONE', a: '#c4b69c', k: [0.04, 0.035, 0.08, 0.00015] },
   sandstone: { kind: 'SAND', a: '#9a6c37', k: [0.045, 0.05, 0.06, 0.0002] },
   granite: { kind: 'GRANITE', a: '#a5806f', k: [0.03, 0, 0.12, 0] },
@@ -178,6 +194,26 @@ function stoneMaterial(key) {
   };
   mat.customProgramCacheKey = () => 'arch-' + look.kind + (bump ? '-b' : '') + (look.sheen ? '-s' : '');
   return mat;
+}
+
+/** The material key covering the largest surface (triangle areas × instances). */
+function dominantMaterial(meshes) {
+  const area = new Map();
+  for (const m of meshes) {
+    const P = m.positions, T = m.indices;
+    let a = 0;
+    for (let t = 0; t < T.length; t += 3) {
+      const i = T[t] * 3, j = T[t + 1] * 3, k = T[t + 2] * 3;
+      const ux = P[j] - P[i], uy = P[j + 1] - P[i + 1], uz = P[j + 2] - P[i + 2];
+      const vx = P[k] - P[i], vy = P[k + 1] - P[i + 1], vz = P[k + 2] - P[i + 2];
+      a += Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx);
+    }
+    const n = m.transforms ? m.transforms.length / 16 : 1;
+    area.set(m.material, (area.get(m.material) || 0) + a * n);
+  }
+  let best = null, bestA = -1;
+  for (const [k, a] of area) if (a > bestA) { best = k; bestA = a; }
+  return best;
 }
 
 // ------------------------------------------------------------------------------------------------ passes
@@ -409,7 +445,7 @@ export class Viewer {
     this.root.add(this.figure);
 
     this.mats = new Map();
-    this.whiteMat = new THREE.MeshStandardMaterial({ color: 0xf1efea, roughness: 0.88, metalness: 0 });
+    this.whiteMat = new THREE.MeshStandardMaterial({ color: 0xf6f6f4, roughness: 0.95, metalness: 0 });
     this.lineFaceMat = new THREE.MeshBasicMaterial({ color: 0xffffff, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
     this.lineMat = new THREE.LineBasicMaterial({ color: 0x1b1b1d });
 
@@ -536,6 +572,8 @@ export class Viewer {
       this.model.add(im);
     }
     this.meshes = meshes;
+    this.dominant = dominantMaterial(meshes);
+    this.applyLook();
     // bounds in Y-up world
     const bb = stats.bbox || this.measure();
     const prev = this.box.clone();
@@ -612,8 +650,20 @@ export class Viewer {
     this.sun.castShadow = lit;
     this.groundMat.userData.u.uShadow.value = lit ? 0.42 : 0;
     this.setPipeline();
+    this.applyLook();
     if (this.ao) this.ao.firstFrame();
     this.dirty = Math.max(this.dirty, 12);
+  }
+
+  /** Exposure, sun, sky and occlusion for the current mode and the element's main material. */
+  applyLook() {
+    const L = LOOKS[this.mode === 'stone' && LIGHT_STONES.has(this.dominant) ? 'lightStone' : this.mode] || LOOKS.stone;
+    this.look = L;
+    this.renderer.toneMappingExposure = L.exposure;
+    this.scene.environmentIntensity = L.env;
+    this.sun.intensity = L.sun;
+    if (this.ao) this.ao.configuration.intensity = L.ao || 3;
+    this.dirty = Math.max(this.dirty, 10);
   }
 
   /** on: true / false, or null for automatic (shown for elements larger than 1.5 m). */
@@ -629,9 +679,10 @@ export class Viewer {
     const s = this.size || [1, 1, 1];
     const auto = Math.max(...s) > 1.5;
     this.figure.visible = this.figureWanted === null ? auto : !!this.figureWanted;
-    // beside the element on its right, half a metre clear, at its middle depth (Z-up numbers)
-    const gap = 0.45 + this.figure.userData.width / 2;
-    this.figure.position.set(this.box.max.x + gap, -(this.box.min.z + this.box.max.z) / 2, 0);
+    // at the front-right of the element, half a metre clear and near its front face (Z-up numbers): the three-quarter
+    // camera (front-left) sees it in front of anything round or deep, never hidden behind it
+    const gap = 0.45 + this.figure.userData.width / 2, front = -this.box.max.z, depth = this.box.max.z - this.box.min.z;
+    this.figure.position.set(this.box.max.x + gap, front + Math.min(0.3, depth / 2), 0);
   }
 
   bounds() {
@@ -694,16 +745,23 @@ export class Viewer {
     const r = THREE.MathUtils.clamp(ref * 0.28, 0.03, 1.2);
     this.ao.configuration.aoRadius = r;
     this.ao.configuration.distanceFalloff = 1.0;
-    this.ao.configuration.intensity = this.mode === 'white' ? 3.5 : 3.0;
+    this.ao.configuration.intensity = (this.look && this.look.ao) || 3;
   }
 
   // ---------------------------------------------------------------------------------------------- camera
 
-  setView(name) {
+  /** Frame a named view. The three-quarter view of a long run (moulding, cornice, entablature, balustrade much longer
+   *  than its section) frames the near end so the profile reads; all = true frames the whole element instead. */
+  setView(name, all = false) {
     const v = VIEWS[name] || VIEWS['three-quarter'];
     this.view = VIEWS[name] ? name : 'three-quarter';
-    const b = this.bounds(), c = b.getCenter(new THREE.Vector3());
-    const az = v.az * DEG, el = Math.min(v.el, 89.9) * DEG;
+    const full = this.bounds();
+    const run = !v.ortho && !all ? this.nearEnd() : null;
+    const b = run || full, c = b.getCenter(new THREE.Vector3());
+    // a low, wide element (a roof) is seen from higher up, so its planes fill the frame instead of a thin band
+    const sz = full.getSize(new THREE.Vector3()), low = sz.y / Math.max(sz.x, sz.z, 1e-6);
+    const elDeg = v.ortho ? v.el : v.el + 14 * THREE.MathUtils.clamp((0.6 - low) / 0.45, 0, 1);
+    const az = v.az * DEG, el = Math.min(elDeg, 89.9) * DEG;
     const dz = [Math.sin(az) * Math.cos(el), -Math.cos(az) * Math.cos(el), Math.sin(el)];
     const dir = new THREE.Vector3(dz[0], dz[2], -dz[1]).normalize();      // Y-up, from target toward the camera
     this.camera = v.ortho ? this.ortho : this.persp;
@@ -719,17 +777,82 @@ export class Viewer {
       this.ortho.lookAt(c);
       this.ortho.zoom = 1;
       this.fitOrtho();
-    } else {
-      const d = this.fitDistance(b, c, dir);
-      this.persp.position.copy(c).addScaledVector(dir, d);
-      this.persp.lookAt(c);
-    }
+    } else this.fitPersp(b, dir, run ? 0.8 : 0.84);
     this.framed = true;
     this.updateClip();          // distance limits for the new size first, or OrbitControls clamps to the old ones
     this.syncCamera();
     this.controls.update();
     this.updateClip();
     this.dirty = Math.max(this.dirty, 12);
+  }
+
+  /** The whole element (and the figure) in the current view. */
+  frameAll() { this.setView(this.view, true); }
+
+  /** For a long run seen in three-quarter: the near (left) end with its return, long enough that the section fills
+   *  about a third of the frame's height; null when the element is not a long run. */
+  nearEnd() {
+    if (!LONG_RUNS.has(this.element)) return null;
+    const b = this.box, sz = b.getSize(new THREE.Vector3());
+    const sec = Math.max(sz.y, sz.z);                     // the section: height (Y) or projection (Z)
+    if (sz.x < 4 * sec) return null;
+    const aspect = this._w / this._h || 1;
+    // width of run whose projection makes the section ~36 % of the frame height (cos 35° ≈ 0.82, sin 35° ≈ 0.57)
+    const w = THREE.MathUtils.clamp((2.3 * sz.y * aspect - 0.57 * sz.z) / 0.82, 2 * sec, sz.x);
+    return new THREE.Box3(b.min.clone(), new THREE.Vector3(b.min.x + w, b.max.y, b.max.z));
+  }
+
+  /** Perspective framing of box b seen along -dir: the projected outline (not the 3D centre) is centred and its larger
+   *  extent fills `margin` of the frame. A few fixed-point steps; the first guess bounds the corners conservatively. */
+  fitPersp(b, dir, margin = 0.84) {
+    const cam = this.persp, target = b.getCenter(new THREE.Vector3());
+    let d = this.fitDistance(b, target, dir, margin);
+    const corners = [];
+    for (let i = 0; i < 8; i++) corners.push(new THREE.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z));
+    const tv = Math.tan((cam.fov * DEG) / 2), th = tv * cam.aspect, q = new THREE.Vector3();
+    const right = new THREE.Vector3(), up = new THREE.Vector3();
+    for (let it = 0; it < 5; it++) {
+      cam.position.copy(target).addScaledVector(dir, d);
+      cam.lookAt(target);
+      cam.near = d * 0.001; cam.far = d * 10;
+      cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const p of corners) {
+        q.copy(p).project(cam);
+        x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y);
+      }
+      const ext = Math.max((x1 - x0) / 2, (y1 - y0) / 2);
+      right.setFromMatrixColumn(cam.matrixWorld, 0); up.setFromMatrixColumn(cam.matrixWorld, 1);
+      target.addScaledVector(right, ((x0 + x1) / 2) * th * d).addScaledVector(up, ((y0 + y1) / 2) * tv * d);
+      d *= THREE.MathUtils.clamp(ext / margin, 0.5, 2);
+    }
+    cam.position.copy(target).addScaledVector(dir, d);
+    cam.lookAt(target);
+    this.controls.target.copy(target);
+  }
+
+  /** Orbit by degrees (keyboard): azimuth around the vertical, elevation within the controls' limits. */
+  orbit(dAzDeg, dElDeg) {
+    const cam = this.camera, t = this.controls.target;
+    const off = cam.position.clone().sub(t), sph = new THREE.Spherical().setFromVector3(off);
+    sph.theta += dAzDeg * DEG;
+    sph.phi = THREE.MathUtils.clamp(sph.phi - dElDeg * DEG, 0.02, this.controls.maxPolarAngle);
+    cam.position.copy(t).add(new THREE.Vector3().setFromSpherical(sph));
+    cam.lookAt(t);
+    this.updateClip();
+    this.dirty = Math.max(this.dirty, 10);
+  }
+
+  /** Zoom by a factor (< 1 closer). */
+  zoom(f) {
+    if (this.camera.isOrthographicCamera) { this.ortho.zoom /= f; this.ortho.updateProjectionMatrix(); }
+    else {
+      const t = this.controls.target, off = this.persp.position.clone().sub(t);
+      const len = THREE.MathUtils.clamp(off.length() * f, this.controls.minDistance, this.controls.maxDistance);
+      this.persp.position.copy(t).addScaledVector(off.normalize(), len);
+    }
+    this.updateClip();
+    this.dirty = Math.max(this.dirty, 10);
   }
 
   /** Distance at which every corner of box b fits the perspective frustum (looking along -dir at c), with a margin. */
@@ -787,7 +910,8 @@ export class Viewer {
     cam.updateProjectionMatrix();
     this.scene.fog.near = d + R * 2.5;
     this.scene.fog.far = d + R * 16;
-    this.controls.minDistance = R * 0.04;
+    const sz = this.box.getSize(new THREE.Vector3());
+    this.controls.minDistance = Math.min(R * 0.04, Math.max(Math.min(sz.x, sz.y, sz.z), 0.05) * 0.6);
     this.controls.maxDistance = R * 30;
   }
 

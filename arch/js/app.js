@@ -17,14 +17,16 @@ const SHOT = Q.get('shot') === '1';
 // ------------------------------------------------------------------------------------------------ build worker
 
 // The worker is recycled (terminated, a fresh one with a fresh Manifold instance spawned) before the next build once
-// its WASM heap passes HEAP_LIMIT_MB or it has served MAX_BUILDS builds: WASM memory never shrinks and generators
-// leave temporaries behind, so long slider sessions would otherwise grow without bound.
-const HEAP_LIMIT_MB = 512, MAX_BUILDS = 25;
+// its WASM heap passes HEAP_LIMIT_MB or it has served MAX_BUILDS builds (WASM memory never shrinks and generators leave
+// temporaries behind), after an error of the kernel itself (abort, out of bounds, unreachable…: the build is retried
+// once on the fresh worker), and by a watchdog when a build or an export does not answer within its time limit.
+const HEAP_LIMIT_MB = 512, MAX_BUILDS = 25, BUILD_TIMEOUT_MS = 45000, EXPORT_TIMEOUT_MS = 90000;
 
 class Builder {
   constructor(onFatal, onEdges) {
     this.onFatal = onFatal; this.onEdges = onEdges;
-    this.seq = 0; this.pending = new Map(); this.heap = 0; this.builds = 0; this.recycled = 0;
+    this.seq = 0; this.pending = new Map(); this.heap = 0; this.builds = 0; this.recycled = 0; this.sick = false;
+    this.buildTimeout = BUILD_TIMEOUT_MS; this.exportTimeout = EXPORT_TIMEOUT_MS;
     this.spawn();
   }
   spawn() {
@@ -40,37 +42,46 @@ class Builder {
     if (m.type === 'ready') { this.heap = m.heapMB; mark('kernel'); this.ok(); return; }
     if (m.type === 'fatal') { this.fatal(m.message); return; }
     if (m.type === 'edges') { this.onEdges(m.id, m.edges); return; }
+    if (m.type === 'error' && m.heapMB !== undefined) { this.heap = m.heapMB; this.builds = m.builds; }
     const p = this.pending.get(m.id);
     if (!p) { if (m.type === 'error') console.warn('[arch]', m.message); return; }
     this.pending.delete(m.id);
-    if (m.type === 'error') { const e = new Error(m.message); e.detail = m.stack; p.reject(e); } else p.resolve(m);
+    if (m.type === 'error') { const e = new Error(m.message); e.code = m.code; e.detail = m.stack; p.reject(e); } else p.resolve(m);
   }
-  call(msg) {
+  /** Post a request; with a time limit the worker is recycled (and the request rejected with 'timeout') if it hangs. */
+  call(msg, timeoutMs = 0) {
     const id = ++this.seq;
-    return new Promise((resolve, reject) => { this.pending.set(id, { resolve, reject }); this.w.postMessage({ ...msg, id }); });
+    return new Promise((resolve, reject) => {
+      const t = timeoutMs ? setTimeout(() => { if (this.pending.has(id)) this.recycle('timeout'); }, timeoutMs) : 0;
+      this.pending.set(id, { resolve: (v) => { clearTimeout(t); resolve(v); }, reject: (e) => { clearTimeout(t); reject(e); } });
+      this.w.postMessage({ ...msg, id });
+    });
   }
-  recycle() {
+  recycle(reason = 'restarted') {
     this.w.terminate();
-    this.rejectAll('restarted');
-    this.heap = 0; this.builds = 0; this.recycled++;
+    this.rejectAll(reason);
+    this.heap = 0; this.builds = 0; this.sick = false; this.recycled++;
     this.spawn();
   }
   async build(spec, edges, retry = true) {
-    if ((this.heap > HEAP_LIMIT_MB || this.builds >= MAX_BUILDS) && this.pending.size === 0) this.recycle();
+    if ((this.sick || this.heap > HEAP_LIMIT_MB || this.builds >= MAX_BUILDS) && this.pending.size === 0) this.recycle();
     await this.ready;
     try {
-      const m = await this.call({ type: 'build', spec, edges });
+      const m = await this.call({ type: 'build', spec, edges }, this.buildTimeout);
       this.heap = m.stats.heapMB || 0;
-      this.builds++;
+      this.builds = m.stats.builds || this.builds + 1;
       return m;
     } catch (e) {
-      // a generator that kept a kernel object between builds finds it deleted: start clean and try once more
-      if (retry && /deleted|BindingError/i.test(e.message)) { this.recycle(); return this.build(spec, edges, false); }
+      if (e.message === 'timeout') throw new Error(`building this took longer than ${Math.round(this.buildTimeout / 1000)} s; the CAD kernel was restarted`);
+      if (e.code === 'kernel') {
+        this.sick = true;
+        if (retry) { this.recycle(); return this.build(spec, edges, false); }
+      }
       throw e;
     }
   }
   edges(id) { this.w.postMessage({ type: 'edges', id }); }
-  async exportAs(format, name) { await this.ready; return this.call({ type: 'export', format, name }); }
+  async exportAs(format, name, forId) { await this.ready; return this.call({ type: 'export', format, name, forId }, this.exportTimeout); }
 }
 
 // ------------------------------------------------------------------------------------------------ parser (+ fallback)
@@ -190,20 +201,38 @@ const DEFAULT_PROMPT = EXAMPLES[0];
 
 const S = {
   prompt: '', spec: {}, parsed: null, edited: false, units: 'm',
-  stats: null, buildId: 0, interpretation: '',
+  stats: null, interpretation: '',
+  shown: { id: 0, input: null },   // the build on screen: its worker id and the spec it was built from
 };
+let edgeStash = null;             // feature edges that arrived before their build was on screen
 
 const stage = $('#stage'), msgEl = $('#msg');
 const showMsg = (text, spin = false) => { msgEl.innerHTML = ''; if (spin) msgEl.insertAdjacentHTML('afterbegin', '<span class="spin" aria-hidden="true"></span>'); msgEl.append(text || ''); };
 
+/** A failure: in the middle of the stage while nothing is shown; a passing note over a model that is still valid. */
 function fail(text) {
   A.errors.push(text);
-  showMsg(text);
+  if (S.stats) toast(text); else showMsg(text);
   console.error('[arch]', text);
 }
+let toastT = 0;
+function toast(text) {
+  const t = $('#toast');
+  t.textContent = text; t.hidden = false;
+  clearTimeout(toastT);
+  toastT = setTimeout(() => { t.hidden = true; }, 5000);
+}
+/** Announce to screen readers (only finished builds and answers, never every typing pause). */
+const announce = (text) => { $('#sr').textContent = text; };
 
 const builder = new Builder((m) => { fail(m); A.busy = false; stage.classList.remove('busy'); },
-  (id, list) => { if (id === S.buildId && viewer) viewer.setEdges(list); });
+  (id, list) => {
+    if (viewer && id === S.shown.id) viewer.setEdges(list);
+    else edgeStash = { id, list };
+  });
+
+Object.defineProperty(A, 'builder', { value: builder, enumerable: false }); // tests
+Object.defineProperty(A, 'state', { value: S, enumerable: false });
 
 let viewer = null;
 const viewerReady = (async () => {
@@ -225,11 +254,12 @@ viewerReady.catch((e) => fail('3D view unavailable: ' + (e && e.message ? e.mess
 
 // ------------------------------------------------------------------------------------------------ build
 
-let inflight = false, queued = false;
+let inflight = false, queued = false, lastShown = 0, idleWaiters = [];
 function requestBuild() {
   if (inflight) { queued = true; return; }
   build();
 }
+const waitIdle = () => (inflight ? new Promise((r) => idleWaiters.push(r)) : Promise.resolve());
 
 const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== ''));
 
@@ -240,9 +270,15 @@ async function build() {
   try {
     await viewerReady;
     const r = await builder.build(spec, viewer.mode === 'line');
-    S.buildId = r.id;
+    // a newer request is waiting: do not spend a frame on this one (unless nothing has been shown for a while)
+    if (queued && performance.now() - lastShown < 800) return;
     await viewer.setModel(r.meshes, r.stats);
+    lastShown = performance.now();
+    S.shown = { id: r.id, input: spec };
     S.stats = r.stats;
+    if (edgeStash && edgeStash.id === r.id) viewer.setEdges(edgeStash.list);
+    else if (viewer.needsEdges()) builder.edges(r.id);
+    edgeStash = null;
     const interp = !edited && parsed && parsed.interpretation ? parsed.interpretation : describeSpec(r.stats.spec);
     S.interpretation = interp;
     showMsg('');
@@ -251,7 +287,8 @@ async function build() {
     renderStats(r.stats);
     renderDims();
     syncButtons();
-    $('#c').setAttribute('aria-label', '3D view: ' + interp);
+    $('#c').setAttribute('aria-label', `3D view of the ${interp}. Arrow keys orbit, + and − zoom, F frames the whole element.`);
+    announce(`Built: ${interp}.`);
     A.last = { prompt, spec: r.stats.spec, interpretation: interp, ms: r.stats.totalMs, buildMs: r.stats.ms, tris: r.stats.tris,
       size: r.stats.size, warnings: r.stats.warnings, parts: r.stats.parts, instances: r.stats.instances, mode: viewer.mode, view: viewer.view,
       heapMB: r.stats.heapMB, workerBuilds: r.stats.builds, recycled: builder.recycled };
@@ -263,7 +300,8 @@ async function build() {
   } finally {
     inflight = false;
     A.busy = false;
-    if (queued) build(); else stage.classList.remove('busy');
+    if (queued) build();
+    else { stage.classList.remove('busy'); idleWaiters.splice(0).forEach((r) => r()); }
   }
 }
 
@@ -288,6 +326,7 @@ async function submit(text) {
     S.prompt = text;
     syncURL();
     A.last = { prompt: text, outOfScope: true, message: p.message || '', interpretation: '', spec: null };
+    announce($('#oosMsg').textContent);
     A.ready = true;              // answered (the site wrapper may drop its loader)
     if (!S.stats) showMsg('');
     return;
@@ -374,11 +413,12 @@ const APPLY = {
   base: ['column', 'pilaster', 'base', 'portico'], flutes: ['column', 'pilaster', 'portico'],
   frieze: ['entablature', 'portico'], cornice: ['entablature', 'cornice', 'portico'],
 };
-const ALWAYS = { roof: ['dormers'] };   // fields without a default that still belong on the card
+// fields without a default that still belong on the card (the generator decides when they are left on auto)
+const ALWAYS = { roof: ['covering', 'material', 'overhang', 'pitch', 'dormers'], moulding: ['enrichment'], dome: ['ribs'], cupola: ['ribs'] };
 let cardElement = null;
 
 function relevant(el, spec) {
-  const keys = new Set([...Object.keys(DEFAULTS[el] || {}), ...(NUMS[el] || []), ...(ALWAYS[el] || [])].filter((k) => SCHEMA[k]));
+  const keys = new Set([...Object.keys(DEFAULTS[el] || {}), ...(NUMS[el] || []), ...(ALWAYS[el] || []), 'material'].filter((k) => SCHEMA[k]));
   for (const [k, els] of Object.entries(APPLY)) if (els.includes(el) && spec[k] !== undefined) keys.add(k);
   if (spec.supports === 'columns' && ['arch', 'arcade'].includes(el)) { keys.add('base'); keys.add('flutes'); }
   keys.delete('element');
@@ -391,10 +431,14 @@ function renderCard(spec) {
   const box = $('#fields'), more = $('#fieldsMore');
   if (cardElement !== el) {
     cardElement = el;
+    const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.field : null;
     box.innerHTML = ''; more.innerHTML = '';
     addField(box, 'element', spec);
     for (const k of relevant(el, spec)) addField(box, k, spec);
     for (const k of ['style', 'detail', 'seed']) addField(more, k, spec);
+    // the rebuilt card keeps the keyboard where it was (e.g. on the element select)
+    const again = focused && document.querySelector(`#card [data-field="${focused}"]`);
+    if (again) again.focus();
   }
   // refresh values of the fields that are not being edited
   for (const ctl of document.querySelectorAll('#card [data-field]')) {
@@ -419,7 +463,9 @@ function addField(box, k, spec) {
   let ctl;
   if (s.type === 'enum') {
     ctl = document.createElement('select');
-    if (k === 'style') ctl.append(new Option('—', ''));
+    // a field the element has no default for may stay unset: the generator decides (e.g. a roof's covering)
+    const optional = k === 'style' || (k !== 'element' && !(k in (DEFAULTS[spec.element] || {})) && !['base', 'frieze', 'cornice'].includes(k));
+    if (optional) ctl.append(new Option(k === 'style' ? '—' : 'auto', ''));
     for (const v of s.values) ctl.append(new Option(optLabel(k, v), v));
     ctl.addEventListener('change', () => {
       if (k === 'element') {
@@ -457,7 +503,7 @@ const unitText = (k) => SCHEMA[k].unit === 'm' ? (S.units === 'ft' ? 'ft' : 'm')
 function setControl(ctl, v) {
   const k = ctl.dataset.field;
   if (ctl.type === 'checkbox') ctl.checked = !!v;
-  else if (ctl.tagName === 'SELECT') ctl.value = v === undefined ? (k === 'style' ? '' : ctl.value) : v;
+  else if (ctl.tagName === 'SELECT') ctl.value = v === undefined ? ([...ctl.options].some((o) => o.value === '') ? '' : ctl.value) : v;
   else {
     ctl.value = v === undefined || v === null ? '' : isLen(k) ? String(round(toUnit(v), S.units === 'ft' ? 2 : 3)) : String(v);
     if (ctl.value === '' && S.stats) ctl.placeholder = autoValue(k);
@@ -467,6 +513,8 @@ function autoValue(k) {
   const st = S.stats;
   // a column's height is the column proper (orders.js): with a pedestal the overall size is not it
   if (k === 'height' && st.spec.pedestal && ['column', 'pilaster'].includes(st.spec.element)) return 'auto';
+  // a portico's or an arch's "height" is not its overall height (columns, opening): no number to suggest
+  if (k === 'height' && ['portico', 'arch', 'arcade', 'capital', 'base'].includes(st.spec.element)) return 'auto';
   const dim = { height: st.size[2], width: st.size[0], length: st.size[0], depth: st.size[1] }[k];
   if (dim !== undefined && Number.isFinite(dim)) return 'auto · ' + round(toUnit(dim), 2);
   const exp = st.expected && st.expected.counts ? st.expected.counts : {};
@@ -487,7 +535,7 @@ function syncButtons() {
 for (const b of document.querySelectorAll('[data-mode]')) b.addEventListener('click', () => {
   if (!viewer) return;
   viewer.setMode(b.dataset.mode);
-  if (viewer.needsEdges()) builder.edges(S.buildId);
+  if (viewer.needsEdges()) builder.edges(S.shown.id);
   syncButtons(); syncURL();
   if (A.last) A.last.mode = viewer.mode;
 });
@@ -503,6 +551,27 @@ for (const b of document.querySelectorAll('[data-units]')) b.addEventListener('c
   if (S.stats) { cardElement = null; renderCard(S.stats.spec); }   // rebuild: values, units and limits in the new unit
 });
 $('#figure').addEventListener('click', () => { if (!viewer) return; viewer.setFigure(!viewer.figureShown()); syncButtons(); });
+// "fit" frames the whole element (the 3/4 view of a long run shows its near end and profile)
+const fitAll = () => { if (viewer) viewer.frameAll(); };
+$('#fit').addEventListener('click', fitAll);
+$('#c').addEventListener('dblclick', fitAll);
+// the 3D view is keyboard operable: arrows orbit, + / − zoom, F fits, 1–4 pick the views
+const KEY_VIEWS = { 1: 'three-quarter', 2: 'front', 3: 'side', 4: 'top' };
+$('#c').addEventListener('keydown', (e) => {
+  if (!viewer || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key, step = e.shiftKey ? 2 : 1;
+  if (k === 'ArrowLeft') viewer.orbit(-12 * step, 0);
+  else if (k === 'ArrowRight') viewer.orbit(12 * step, 0);
+  else if (k === 'ArrowUp') viewer.orbit(0, 6 * step);
+  else if (k === 'ArrowDown') viewer.orbit(0, -6 * step);
+  else if (k === '+' || k === '=') viewer.zoom(1 / 1.15);
+  else if (k === '-' || k === '_') viewer.zoom(1.15);
+  else if (k === 'f' || k === 'F' || k === '0') fitAll();
+  else if (KEY_VIEWS[k]) { viewer.setView(KEY_VIEWS[k]); syncButtons(); syncURL(); }
+  else return;
+  e.preventDefault();
+  hideHint();
+});
 
 for (const b of document.querySelectorAll('[data-export]')) b.addEventListener('click', async () => {
   if (!S.stats) return;
@@ -516,10 +585,21 @@ for (const b of document.querySelectorAll('[data-export]')) b.addEventListener('
   const old = b.textContent;
   b.disabled = true; b.textContent = '…';
   try {
-    const r = await builder.exportAs(f, name);
-    download(new Blob([r.buffer], { type: r.mime }), `${name}.${f}`);
-  } catch (e) { fail(`export failed: ${e.message}`); }
-  finally { b.disabled = false; b.textContent = old; }
+    await waitIdle();                     // export what is on screen once the running build has landed
+    let r;
+    try { r = await builder.exportAs(f, name, S.shown.id); }
+    catch (e) {
+      if (e.code !== 'stale' && e.message !== 'restarted' && e.message !== 'timeout') throw e;
+      // the worker no longer holds the model on screen (it was recycled): rebuild the same spec quietly, once
+      const rb = await builder.build(S.shown.input, false);
+      S.shown = { ...S.shown, id: rb.id };  // the same geometry: edges and exports now refer to this build
+      r = await builder.exportAs(f, name, rb.id);
+    }
+    download(new Blob(r.buffers, { type: r.mime }), `${name}.${f}`);
+  } catch (e) {
+    toast(`The ${f.toUpperCase()} export failed: ${e.message}`);
+    console.error('[arch] export failed', e);
+  } finally { b.disabled = false; b.textContent = old; b.focus(); }
 });
 function slug() {
   const s = S.stats.spec;

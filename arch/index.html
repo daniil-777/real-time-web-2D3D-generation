@@ -32,7 +32,7 @@
 <style>
   :root {
     --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Inter, system-ui, sans-serif;
-    --text: #1d1d1f; --text-2: #6e6e73; --text-3: #86868b;
+    --text: #1d1d1f; --text-2: #515154; --text-3: #6e6e73;   /* text-3 on white 5.1:1, on the stage 4.6:1 */
     --fill: rgba(118, 118, 128, 0.12); --fill-2: rgba(118, 118, 128, 0.2); --hair: rgba(0, 0, 0, 0.08);
     --accent: #0071e3; --glass: rgba(255, 255, 255, 0.74); --warn: #b25000;
     --studio: #efefec;   /* the stage colour; the viewer reads it, so ground and page match exactly */
@@ -91,11 +91,14 @@
   #msg:empty { display: none; }
   #msg .spin { display: block; margin: 0 auto 10px; width: 22px; height: 22px; border-radius: 50%; border: 2.5px solid rgba(118, 118, 128, 0.22);
                border-top-color: var(--text); animation: spin .8s linear infinite; }
+  #toast { position: absolute; z-index: 3; left: 50%; top: 56px; transform: translateX(-50%); max-width: min(86%, 460px); padding: 8px 14px;
+           border-radius: 12px; font-size: 13px; color: #fff; background: rgba(29, 29, 31, 0.88); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18); }
+  #toast[hidden] { display: none; }
   #busy { position: absolute; z-index: 2; top: 50px; right: 18px; width: 16px; height: 16px; border-radius: 50%; border: 2px solid rgba(118, 118, 128, 0.25);
           border-top-color: var(--text); animation: spin .8s linear infinite; opacity: 0; transition: opacity .2s; pointer-events: none; }
   #stage.busy #busy { opacity: 1; transition-delay: .15s; }
   @keyframes spin { to { transform: rotate(1turn); } }
-  #hint { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); color: var(--text-3); font-size: 11px; pointer-events: none;
+  #hint { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); color: var(--text-2); font-size: 11px; pointer-events: none;
           transition: opacity 1.2s; white-space: nowrap; }
 
   /* the panel */
@@ -193,7 +196,8 @@
   </header>
   <div id="main">
     <section id="stage" aria-label="3D view">
-      <canvas id="c" tabindex="0" role="img" aria-label="the architectural element"></canvas>
+      <canvas id="c" tabindex="0" role="application" aria-roledescription="3D viewer"
+              aria-label="3D view of the element. Arrow keys orbit, + and − zoom, F frames the whole element."></canvas>
       <div id="dims" class="ov glass" aria-live="polite"></div>
       <div id="modes" class="ov seg glass" role="group" aria-label="rendering">
         <button type="button" data-mode="stone" aria-pressed="true" title="materials (stone, metal, slate…)">stone</button>
@@ -205,6 +209,7 @@
         <button type="button" data-view="front" aria-pressed="false" title="front elevation (orthographic)">front</button>
         <button type="button" data-view="side" aria-pressed="false" title="side elevation (orthographic)">side</button>
         <button type="button" data-view="top" aria-pressed="false" title="plan from above (orthographic)">top</button>
+        <button type="button" id="fit" title="frame the whole element (F, or double-click)" aria-label="frame the whole element">fit</button>
       </div>
       <div id="extra" class="ov">
         <button type="button" id="figure" class="pill glass" aria-pressed="false" title="a 1.80 m figure for scale">
@@ -216,8 +221,9 @@
         </div>
       </div>
       <div id="busy" aria-hidden="true"></div>
+      <div id="toast" role="status" hidden></div>
       <div id="msg" role="status"><span class="spin" aria-hidden="true"></span>loading the CAD kernel…</div>
-      <div id="hint" aria-hidden="true">drag to orbit · scroll to zoom · right-drag to pan</div>
+      <div id="hint" aria-hidden="true">drag to orbit · scroll to zoom · right-drag to pan · double-click to fit</div>
     </section>
 
     <aside id="panel" aria-label="request and specification">
@@ -227,7 +233,8 @@
                placeholder="e.g. Ionic column 3.6 m on a pedestal">
         <button id="go" type="submit">build</button>
       </form>
-      <div id="read" aria-live="polite">
+      <div id="sr" class="sr-only" aria-live="polite"></div>
+      <div id="read">
         <div id="interp"></div>
         <div id="notes"></div>
       </div>
