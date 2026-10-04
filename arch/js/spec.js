@@ -34,6 +34,8 @@ export const SCHEMA = {
   ribs: { type: 'int', min: 0, max: 48 },
   steps: { type: 'int', min: 0, max: 8 },
   pitch: { type: 'number', min: 5, max: 75, unit: '°' },
+  overhang: { type: 'number', min: 0, max: 3, unit: 'm' },
+  dormers: { type: 'bool' },
   base: { type: 'enum', values: ['attic', 'tuscan', 'none'] },
   pedestal: { type: 'bool' },
   entasis: { type: 'bool' },
