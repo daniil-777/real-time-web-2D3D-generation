@@ -31,9 +31,12 @@ export async function generate(input) {
   const mod = await family(spec.element);
   const t0 = now();
   const parts = mod.build(spec);
+  // Manifold evaluates booleans lazily: force every part inside the timer so ms is the real cost
+  const tris = parts.reduce((s, p) => s + partTris(p), 0);
   const ms = now() - t0;
   const bbox = partsBBox(parts);
   const size = [0, 1, 2].map((a) => bbox.max[a] - bbox.min[a]);
-  const tris = parts.reduce((s, p) => s + partTris(p), 0);
+  // generators report limitations through part meta (meta.warning / meta.warnings)
+  for (const p of parts) for (const w of [].concat(p.meta?.warning || [], p.meta?.warnings || [])) if (w && !warnings.includes(w)) warnings.push(w);
   return { parts, bbox, size, tris, ms, spec, warnings, expected: mod.expected ? mod.expected(spec) : null };
 }
