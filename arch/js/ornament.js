@@ -9,7 +9,7 @@ const sstep = (x) => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 
  * Acanthus leaf, height h (to the top of its curl), width w. The blade is lobed (lobes per side) and serrated, cupped,
  * with a raised midrib; its lower part wraps a bell of radius `wrap` (0 = flat) and its tip curls forward and down.
  */
-export function acanthusLeaf({ h, w, lobes = 4, curl = 1, lean = 0.1, wrap = 0, t = 0, nu = 34, nv = 72 }) {
+export function acanthusLeaf({ h, w, lobes = 4, curl = 1, lean = 0.1, wrap = 0, t = 0, nu = 36, nv = 96 }) {
   const th = t || Math.max(0.004 * h, 0.012 * w);
   // spine in the YZ plane: rises leaning outward (-Y), then turns over by up to ~150 degrees
   const S = 160, sp = [[0, 0]], ang = [lean];
@@ -26,21 +26,26 @@ export function acanthusLeaf({ h, w, lobes = 4, curl = 1, lean = 0.1, wrap = 0, 
     return { y: k * (sp[i][0] * (1 - r) + sp[i + 1][0] * r), z: k * (sp[i][1] * (1 - r) + sp[i + 1][1] * r), a: ang[i] * (1 - r) + ang[i + 1] * r };
   };
   const env = (v) => (v < 0.45 ? 0.26 + 0.74 * sstep(v / 0.45) : v < 0.84 ? 1 - 0.42 * sstep((v - 0.45) / 0.39) : 0.58 * Math.sqrt(Math.max(0.02, 1 - ((v - 0.84) / 0.16) ** 2)));
+  // lobes: pointed, leaning toward the tip, separated by deep "eyes"; each lobe carries three serrated fingers
   const lobeAt = (v) => {
-    const x = (v - 0.12) / 0.84 * lobes;
-    if (x <= 0 || x >= lobes) return { tooth: 1, f: 0 };
-    const f = x - Math.floor(x);
-    return { tooth: Math.sin(Math.PI * f) ** 0.65, f };
+    const x = ((v - 0.1) / 0.8) * lobes;
+    if (x <= 0 || x >= lobes) return { tooth: v >= 0.9 ? 1 : 0.55, f: 0, finger: 0 };
+    const f = x - Math.floor(x), g = f ** 0.8;                       // skew: lobes lean toward the tip
+    const tooth = Math.sin(Math.PI * g) ** 1.1;
+    const finger = Math.abs(Math.sin(Math.PI * g * 3)) ** 0.6;
+    return { tooth, f, finger };
   };
   const f = (u, v) => {
-    const s = spine(v), uu = 2 * u - 1, L = lobeAt(v);
-    const serr = 0.07 * Math.abs(Math.sin(Math.PI * L.f * 3));
-    const half = (w / 2) * env(v) * (0.5 + 0.42 * L.tooth + serr);
+    const s = spine(v), uu = 2 * u - 1, L = lobeAt(v), au = Math.abs(uu);
+    const half = (w / 2) * env(v) * (0.46 + 0.44 * L.tooth + 0.1 * L.finger * L.tooth);
     let x = uu * half;
-    // depth along the spine normal (outward): midrib ridge, cupped blade, lobe tips turning out, "pipes" to each lobe
-    let d = 0.045 * w * Math.exp(-((uu / 0.08) ** 2)) * (1 - 0.6 * v)
-          + 0.10 * w * uu * uu * (0.5 + 0.5 * L.tooth)
-          + 0.03 * w * Math.exp(-(((Math.abs(uu) - 0.45) / 0.12) ** 2)) * L.tooth;
+    // depth along the spine normal (outward): midrib ridge, cupped blade, lobe tips turning out, raised "pipes" from the
+    // midrib to each lobe, and a shadowed hollow ("eye") at each notch
+    let d = 0.05 * w * Math.exp(-((uu / 0.07) ** 2)) * (1 - 0.6 * v)
+          + 0.12 * w * uu * uu * (0.35 + 0.65 * L.tooth)
+          + 0.05 * w * au ** 3 * L.tooth * (0.6 + 0.4 * L.finger)
+          + 0.03 * w * Math.exp(-(((au - 0.42) / 0.1) ** 2)) * L.tooth
+          - 0.025 * w * Math.exp(-(((au - 0.62) / 0.12) ** 2)) * (1 - L.tooth);
     // wrap the lower blade around the bell (fades out where the leaf turns over)
     let back = 0;
     if (wrap > 0) {

@@ -288,8 +288,8 @@ function corinthianCapital(d, segs, composite = false) {
   parts.push(part('abacus', 'stone', concaveAbacus(D, zab - 0.001, abH, segs)));
   if (!composite) {
     parts.push(...leafRows(d, [
-      { name: 'leaf-lower', h: 0.36 * c, w: 0.36 * D, phase: TAU / 16, rad: rt - 0.004 * D, z: 0, wrap: 0.48 * D, lean: 0.16 },
-      { name: 'leaf-upper', h: 0.64 * c, w: 0.33 * D, phase: 0, rad: rt - 0.02 * D, z: 0.02 * c, wrap: 0.5 * D, lean: 0.1, lobes: 5 },
+      { name: 'leaf-lower', h: 0.36 * c, w: 0.44 * D, phase: TAU / 16, rad: rt - 0.004 * D, z: 0, wrap: 0.48 * D, lean: 0.16 },
+      { name: 'leaf-upper', h: 0.64 * c, w: 0.42 * D, phase: 0, rad: rt - 0.02 * D, z: 0.02 * c, wrap: 0.5 * D, lean: 0.1, lobes: 5 },
     ]));
     // caulicoli (stalks) between the upper leaves, with a collar
     const stalk = union([
@@ -327,8 +327,8 @@ function corinthianCapital(d, segs, composite = false) {
     parts.push(part('volute', 'stone', face, instances([0, 1, 2, 3].map((k) => mat.Rz((k * Math.PI) / 2)))));
   } else {
     parts.push(...leafRows(d, [
-      { name: 'leaf-lower', h: 0.33 * c, w: 0.36 * D, phase: TAU / 16, rad: rt - 0.004 * D, z: 0, wrap: 0.48 * D, lean: 0.16 },
-      { name: 'leaf-upper', h: 0.56 * c, w: 0.33 * D, phase: 0, rad: rt - 0.02 * D, z: 0.02 * c, wrap: 0.5 * D, lean: 0.1, lobes: 5 },
+      { name: 'leaf-lower', h: 0.33 * c, w: 0.44 * D, phase: TAU / 16, rad: rt - 0.004 * D, z: 0, wrap: 0.48 * D, lean: 0.16 },
+      { name: 'leaf-upper', h: 0.56 * c, w: 0.42 * D, phase: 0, rad: rt - 0.02 * D, z: 0.02 * c, wrap: 0.5 * D, lean: 0.1, lobes: 5 },
     ]));
     // Ionic part: echinus with eggs, four diagonal volutes under the horns
     const ze = 0.6 * c, echR = 0.56 * D, echH = 0.12 * c;
