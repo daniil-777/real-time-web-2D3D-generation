@@ -90,12 +90,18 @@ export const DEFAULTS = {
   console: { height: 0.6, depth: 0.42, width: 0.26, material: 'limestone' },
 };
 
+/** Default dimensions that give way when a count is stated. */
+export const DEFAULT_YIELDS = { balustrade: { balusters: ['length'] } };
+
 /** Fill defaults and clamp out-of-range values. Returns { spec, warnings }. Never throws on user values. */
 export function normalize(input) {
   const warnings = [];
   const element = ELEMENTS.includes(input.element) ? input.element : 'column';
   if (input.element && input.element !== element) warnings.push(`unknown element "${input.element}", made a column`);
-  const spec = { ...DEFAULTS[element], ...strip(input), element };
+  // a stated count takes the place of a default dimension (12 balusters fix the run's length unless one is stated)
+  const given = strip(input), defaults = { ...DEFAULTS[element] };
+  for (const [count, dims] of Object.entries(DEFAULT_YIELDS[element] || {})) if (given[count] !== undefined) for (const d of dims) delete defaults[d];
+  const spec = { ...defaults, ...given, element };
   if (spec.order && !ORDERS[spec.order]) { warnings.push(`unknown order "${spec.order}"`); spec.order = DEFAULTS[element].order || 'tuscan'; }
   const o = ORDERS[spec.order || 'tuscan'];
   if (['column', 'pilaster', 'capital', 'base', 'pedestal', 'portico', 'arcade', 'entablature', 'cornice'].includes(element)) {
