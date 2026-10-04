@@ -81,10 +81,12 @@ function envelope(d, entasis, z) {
 
 /** z samples: dense in the ends (flute terminations and flares), even in between. */
 function zSamples(Hs, D, n = 64) {
-  const zs = new Set();
-  for (let i = 0; i <= n; i++) zs.add(+((i / n) * Hs).toFixed(6));
-  for (let i = 0; i <= 24; i++) { const e = (i / 24) * 0.22 * D; zs.add(+e.toFixed(6)); zs.add(+(Hs - e).toFixed(6)); }
-  return [...zs].filter((z) => z >= 0 && z <= Hs).sort((a, b) => a - b);
+  // clamp, never filter: a rounded top sample a hair above Hs must still give the top ring
+  const zs = new Set(), add = (z) => zs.add(+Math.min(Hs, Math.max(0, z)).toFixed(7));
+  for (let i = 0; i <= n; i++) add((i / n) * Hs);
+  for (let i = 0; i <= 24; i++) { const e = (i / 24) * 0.22 * D; add(e); add(Hs - e); }
+  zs.add(Hs);
+  return [...zs].sort((a, b) => a - b).filter((z, i, a) => i === 0 || z - a[i - 1] > 1e-7);
 }
 
 /**
@@ -402,7 +404,7 @@ function gothicCapital(d, segs) {
     out.push(one(r).translate([at * Math.cos(a), at * Math.sin(a), 0]));
   }
   const half = 0.66 * D, oct = Array.from({ length: 8 }, (_, i) => [half * Math.cos((i + 0.5) * TAU / 8), half * Math.sin((i + 0.5) * TAU / 8)]);
-  out.push(extrudeXY(oct, c * 0.2).translate([0, 0, c * 0.8]));
+  out.push(extrudeXY(oct, c * 0.2 + 0.004 * D).translate([0, 0, c * 0.8 - 0.004 * D]));
   // Early English stiff-leaf: a tight curling leaf on each shaft's bell, turning out under the abacus
   const leaf = acanthusLeaf({ h: c * 0.62, w: 0.2 * D, lobes: 3, curl: 0.95, lean: 0.32, wrap: 0.12 * D });
   const xf = [];
@@ -510,24 +512,26 @@ function buildUnit(spec) {
   const pedHalf = Math.max(b.half, 0.6 * d.D);
   if (spec.element === 'pedestal') return pedestalParts({ ...d, ped: d.ped || d.H / 3 }, pedHalf);
 
+  // Stacking with real overlaps so the column unions into one solid: the base seats OV into the pedestal, the shaft
+  // starts OV inside the base and ends OV inside the capital; the capital sits exactly at total - cap, so the overall
+  // height stays exact. (Unit build: D = 1, OV scales with D.)
+  const OV = 0.004;
   let z = 0;
-  if (d.ped) { parts.push(...pedestalParts(d, pedHalf)); z = d.ped; }
+  if (d.ped) { parts.push(...pedestalParts(d, pedHalf)); z = d.ped - OV; }
   const baseH = baseKind === 'none' ? 0 : d.base;
-  // when the base is left out the shaft takes its height, so the column keeps its order's proportions
-  const dd = { ...d, shaft: d.shaft + (d.base - baseH) };
   parts.push(...lift(b.parts, z));
   z += baseH;
+  const zCap = d.total - d.cap, z0 = baseH ? z - OV : z, z1 = d.cap > 0 ? zCap + OV : zCap;
+  const dd = { ...d, shaft: z1 - z0 };
   if (spec.element === 'pilaster') {
     parts.splice(parts.length - b.parts.length, b.parts.length, ...lift(pilasterBase(baseKind, { ...d, base: baseH }), z - baseH));
-    parts.push(...lift(pilasterParts(spec, dd), z - 0.001));
-    z += dd.shaft;
-    parts.push(...lift(pilasterCapital(spec, dd), z - 0.001));
+    parts.push(...lift(pilasterParts(spec, dd), z0));
+    parts.push(...lift(pilasterCapital(spec, { ...d, shaft: dd.shaft }), zCap));
     return parts;
   }
-  parts.push(...lift(shaftParts(spec, dd, segs), z - 0.001));
-  z += dd.shaft;
-  if (o.classical || spec.order === 'solomonic') parts.push(...lift([part('astragal', 'stone', astragal(dd, segs))], z));
-  if (dd.cap > 0) parts.push(...lift(capitalParts(spec, dd, segs), z - 0.001));
+  parts.push(...lift(shaftParts(spec, dd, segs), z0));
+  if (o.classical || spec.order === 'solomonic') parts.push(...lift([part('astragal', 'stone', astragal({ ...dd, D: d.D }, segs))], zCap));
+  if (d.cap > 0) parts.push(...lift(capitalParts(spec, { ...dd, shaft: dd.shaft }, segs), zCap));
   return parts;
 }
 
