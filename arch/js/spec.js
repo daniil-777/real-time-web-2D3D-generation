@@ -81,8 +81,8 @@ export const DEFAULTS = {
   window: { width: 1.2, height: 2.1, pediment: 'triangular', keystone: false, material: 'limestone' },
   door: { width: 1.6, height: 3.0, pediment: 'segmental', keystone: false, material: 'limestone' },
   roof: { roofType: 'hip', width: 8, length: 12 },
-  dome: { domeType: 'hemisphere', diameter: 8, drum: true, lantern: true, oculus: false, ribs: 0, material: 'copper' },
-  cupola: { domeType: 'hemisphere', diameter: 2.4, drum: true, lantern: false, ribs: 0, material: 'copper' },
+  dome: { domeType: 'hemisphere', diameter: 8, drum: true, lantern: true, oculus: false, material: 'copper' },
+  cupola: { domeType: 'hemisphere', diameter: 2.4, drum: true, lantern: false, material: 'copper' },
   spire: { spireType: 'octagonal', height: 14, width: 3, finial: 'cross', material: 'slate' },
   finial: { finial: 'pineapple', height: 0.8, material: 'limestone' },
   urn: { finial: 'urn', height: 0.9, material: 'limestone' },
@@ -129,6 +129,8 @@ export function normalize(input) {
     } else if (s.type === 'bool') spec[k] = !!v;
   }
   if (spec.flutes > 0 && spec.flutes < 6) { warnings.push(`${spec.flutes} flutes is too few, used 6`); spec.flutes = 6; }
+  // which fields the request stated (the rest are defaults): families use it instead of comparing with defaults
+  spec.given = Object.keys(given).filter((k) => k !== 'element' && k in spec).sort();
   return { spec, warnings };
 }
 
