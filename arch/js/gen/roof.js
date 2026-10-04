@@ -70,23 +70,37 @@ const COVER = {
 };
 const COVER_NAME = { tiles: 'tile', slate: 'slate', shingles: 'shingle', pantiles: 'pantile', seam: 'pan' };
 
+// Materials a roof covering can be made of (a stated material outside this set describes the masonry: cornice, walls).
+const ROOFING = new Set(['terracotta', 'brick', 'concrete', 'slate', 'copper', 'zinc', 'lead', 'wood', 'gold']);
+const METALS = new Set(['copper', 'zinc', 'lead', 'gold']);
+const MASONRY = new Set(['marble', 'limestone', 'sandstone', 'granite', 'travertine', 'plaster']);
+const COVER_MATERIAL = { tiles: 'terracotta', pantiles: 'terracotta', slate: 'slate', seam: 'zinc', shingles: 'wood' };
+
+/** The covering: a stated covering always wins; unset, the stated material chooses it (copper / zinc / lead / gold →
+ *  standing seam, slate → slate, wood → shingles, terracotta / brick / concrete → tiles); otherwise plain tiles. */
 function effectiveCovering(spec) {
-  const c = spec.covering || 'tiles', m = spec.material;
-  if (c !== DEFAULTS.roof.covering) return c;
+  if (spec.covering !== undefined && spec.covering !== null) return spec.covering;
+  const m = spec.material;
+  if (METALS.has(m)) return 'seam';
   if (m === 'slate') return 'slate';
-  if (m === 'copper' || m === 'zinc' || m === 'lead') return 'seam';
   if (m === 'wood') return 'shingles';
-  return c;
+  return 'tiles';
 }
 
-/** Material hints per part (the viewer maps roles; these say what the piece is actually made of). */
+/** What each kind of piece is made of (part meta.material; the viewer's roles alone cannot say it).
+ *  Covering: the stated material when it is a roofing material ("copper tiles" are copper tiles, like copper shingles
+ *  or zinc diamond tiles in Swiss practice; a standing seam needs a metal), else the covering's own material (tiles and
+ *  pantiles terracotta, slate slate, seam zinc, shingles wood). A stated masonry material (marble, limestone, sandstone,
+ *  granite, travertine, plaster) goes to the cornice and the walls instead; they default to limestone and plaster.
+ *  Metalwork (gutters, flashings, rolls, snow guards) matches a metal covering, is zinc on slate (French practice) and
+ *  copper otherwise; finials are gilded when the material is gold. */
 function materials(spec, cover) {
   const m = spec.material;
-  const metalLike = m === 'copper' || m === 'zinc' || m === 'lead';
-  const covering = cover === 'seam' ? (metalLike ? m : 'zinc') : cover === 'slate' ? 'slate' : cover === 'shingles' ? 'wood'
-    : (m === 'terracotta' || m === 'brick' ? m : 'terracotta');
-  const metal = metalLike ? m : cover === 'seam' ? covering : 'copper';
-  return { covering, metal, wood: 'wood', cornice: 'limestone', wall: 'plaster' };
+  const covering = m && ROOFING.has(m) && (cover !== 'seam' || METALS.has(m)) ? m : COVER_MATERIAL[cover];
+  const metal = METALS.has(covering) && covering !== 'gold' ? covering : cover === 'slate' ? 'zinc' : 'copper';
+  const stone = MASONRY.has(m) ? m : null;
+  return { covering, metal, finial: m === 'gold' ? 'gold' : metal, wood: 'wood', cornice: stone || 'limestone', wall: stone || 'plaster',
+    coverRole: covering === 'wood' ? 'wood' : 'roof' };
 }
 
 // ------------------------------------------------------------------------------------------------ dimensions
@@ -121,6 +135,7 @@ export function dims(spec) {
     rg: 0.07 * k, gt: 0.004 * k, rb: 0.011 * k, tcap: 0.004 * k,
   };
   D.gw = 2 * D.rg + 2 * D.rb - 1.5 * D.gt;            // gutter projection in front of the fascia
+  D.coverMat = materials(spec, D.cover).covering;
   let { lo, up } = pitches(spec, type);
   levels(D, lo, up);
   if (spec.height) solveHeight(D, spec.height);
@@ -182,6 +197,7 @@ function covering(D) {
   const C = { ...C0 };
   for (const key of ['w', 'wMin', 'wMax', 'L', 't', 'g', 'gap', 'proj', 'P', 'A', 'sh', 'sw']) if (C[key] !== undefined) C[key] *= kt;
   if (D.cover === 'seam') { C.L = 1; C.g = 1; }
+  if (D.cover === 'shingles' && D.coverMat !== 'wood') C.ridge = 'roll';   // metal shingles get a metal ridge roll
   C.kt = kt;
   // lift of the tail: a lapped piece rests on the course below; double lap needs lift = t·L/g
   C.lift = D.cover === 'seam' ? 0 : D.cover === 'pantiles' ? C.t : (C.t * C.L) / C.g;
@@ -1013,7 +1029,7 @@ function extraParts(D, G, mats) {
       const pr = D.up * DEG, z = D.zR + D.C.hT / Math.cos(pr) + ridgeSection(D.C.ridge, pr, D.C, 16).top * 0.5;
       xf.push(mat.T(-D.R, 0, z), mat.T(D.R, 0, z));
     }
-    out.push(part('finial', 'metal', f, instances(xf), { material: mats.metal }));
+    out.push(part('finial', 'metal', f, instances(xf), { material: mats.finial }));
   }
   return out;
 }
@@ -1179,7 +1195,7 @@ export function build(spec) {
     const base = coverPiece(D);
     const out = { whole: [], cut: new CutSink() };
     for (const f of half) coverFace(D, f, base, rnd, out);
-    const role = D.cover === 'shingles' ? 'wood' : 'roof';
+    const role = mats.coverRole;
     parts.push(part(D.detail === 'low' ? `${name}-course` : name, role, base, instances(both(out.whole)), { material: mats.covering }));
     const cut = out.cut.manifold();
     if (cut) parts.push(part(`${name}-cut`, role, cut, cutXf, { material: mats.covering, clipFallbacks: out.cut.fallbacks }));

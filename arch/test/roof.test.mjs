@@ -12,7 +12,7 @@
 import assert from 'node:assert/strict';
 import { initKernel } from './node-kernel.mjs';
 import { generate } from '../js/generate.js';
-import { SCHEMA } from '../js/spec.js';
+import { SCHEMA, MATERIALS } from '../js/spec.js';
 import { mat, partsBBox, instanceCount } from '../js/kernel.js';
 import { dims } from '../js/gen/roof.js';
 
@@ -36,6 +36,8 @@ cases.push({ roofType: 'hip', width: SCHEMA.width.max, length: SCHEMA.length.max
 cases.push({ roofType: 'mansard', width: SCHEMA.width.max, length: SCHEMA.length.max, covering: 'slate' });
 cases.push({ roofType: 'gable', width: SCHEMA.width.max, length: SCHEMA.length.max, covering: 'pantiles' });
 cases.push({ roofType: 'gable', material: 'copper' }, { roofType: 'hip', material: 'slate' }, { roofType: 'gable', material: 'wood' });
+cases.push({ roofType: 'gable', covering: 'tiles', material: 'copper' }, { roofType: 'hip', covering: 'shingles', material: 'zinc' },
+  { roofType: 'mansard', covering: 'slate', material: 'limestone' }, { roofType: 'gable', covering: 'seam', material: 'terracotta' });
 cases.push({ roofType: 'mansard', pitch: 75 }, { roofType: 'mansard', pitch: 20 }, { roofType: 'gambrel', pitch: 50 }, { roofType: 'gambrel', pitch: 15 });
 cases.push({ roofType: 'gable', width: 9, length: 13, pitch: 45, covering: 'shingles', detail: 'medium' });
 cases.push({ roofType: 'gable', overhang: 1.4, pitch: 25, covering: 'shingles' });            // a chalet
@@ -154,6 +156,7 @@ for (const c of cases) {
       assert.ok(p.manifold.volume() > 0, `${p.name} has no volume`);
       if (p.transforms) assert.ok(p.transforms.length >= 16 && p.transforms.every(Number.isFinite), `${p.name} transforms`);
       if (p.meta && p.meta.clipFallbacks !== undefined) assert.equal(p.meta.clipFallbacks, 0, `${p.name}: clipper fell back to Manifold trims`);
+      assert.ok(p.meta && (MATERIALS.includes(p.meta.material) || p.meta.material === 'glass'), `${p.name}: meta.material ${p.meta && p.meta.material}`);
     }
     assert.ok(Math.abs(r.bbox.min[2]) < 1e-6, `lowest point at z = ${r.bbox.min[2]}, not 0`);
     ['x', 'y', 'z'].forEach((a, i) => {
@@ -209,9 +212,31 @@ assert.equal(R({ roofType: 'gambrel', pitch: 20 }).up, 20);
 assert.equal(R({ roofType: 'shed' }).lo, 15);
 assert.equal(R({ roofType: 'shed', pitch: 35 }).lo, 35);
 assert.equal(R({ roofType: 'gable' }).lo, 35);
-assert.equal(R({ roofType: 'gable', pitch: 35, material: 'zinc', covering: 'tiles' }).cover, 'seam');
-assert.equal(R({ roofType: 'gable', pitch: 35, covering: 'tiles' }).cover, 'tiles');
+// covering: stated wins; unset → from the stated material; neither → tiles
+assert.equal(R({ roofType: 'gable', material: 'zinc' }).cover, 'seam');
+assert.equal(R({ roofType: 'gable', material: 'slate' }).cover, 'slate');
+assert.equal(R({ roofType: 'gable', material: 'wood' }).cover, 'shingles');
+assert.equal(R({ roofType: 'gable', material: 'brick' }).cover, 'tiles');
+assert.equal(R({ roofType: 'gable', material: 'limestone' }).cover, 'tiles');
+assert.equal(R({ roofType: 'gable' }).cover, 'tiles');
+assert.equal(R({ roofType: 'gable', material: 'zinc', covering: 'tiles' }).cover, 'tiles');
+// material of the pieces (part meta), for a few stated / unstated combinations
+const matOf = async (c, name) => (await generate({ element: 'roof', roofType: 'gable', ...c })).parts.find((p) => p.name === name).meta.material;
+assert.equal(await matOf({}, 'tile'), 'terracotta');
+assert.equal(await matOf({ covering: 'pantiles' }, 'pantile'), 'terracotta');
+assert.equal(await matOf({ covering: 'slate' }, 'slate'), 'slate');
+assert.equal(await matOf({ covering: 'seam' }, 'pan'), 'zinc');
+assert.equal(await matOf({ covering: 'shingles' }, 'shingle'), 'wood');
+assert.equal(await matOf({ covering: 'tiles', material: 'copper' }, 'tile'), 'copper');         // copper tiles
+assert.equal(await matOf({ material: 'copper' }, 'pan'), 'copper');                             // a copper roof: seam
+assert.equal(await matOf({ covering: 'seam', material: 'terracotta' }, 'pan'), 'zinc');         // a seam needs a metal
+assert.equal(await matOf({ covering: 'slate', material: 'limestone' }, 'slate'), 'slate');      // stone → the masonry
+assert.equal(await matOf({ covering: 'slate', material: 'limestone' }, 'cornice'), 'limestone');
+assert.equal(await matOf({}, 'cornice'), 'limestone');
+assert.equal(await matOf({}, 'gable'), 'plaster');
+assert.equal(await matOf({ covering: 'slate' }, 'gutter'), 'zinc');
+assert.equal(await matOf({}, 'gutter'), 'copper');
 assert.equal(R({ roofType: 'gable', overhang: 1.2 }).o, 1.2);
 assert.ok(R({ roofType: 'gable', overhang: 1.2, pitch: 25 }).knee, 'a long overhang on a low pitch raises a knee wall');
-console.log('pitch / overhang / covering rules ok');
+console.log('pitch / overhang / covering / material rules ok');
 if (fail) process.exit(1);
