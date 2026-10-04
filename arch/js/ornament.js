@@ -94,9 +94,10 @@ export function voluteScroll({ r0, depth, side = 1, eye = 0.13, turns = 2.75, ch
   const disc = K().CrossSection.hull([crossSection(firstTurn)]);
   let body = extrudeElevation(disc, depth, -depth / 2, 28);
   // the bolster narrows toward its middle (the balteus)
+  // the pulvinus keeps a straight top under the abacus and narrows below and at the sides
   body = body.warp((v) => {
-    const s = 1 - pinch * Math.exp(-((v[1] / (0.22 * depth)) ** 2));
-    v[0] *= s; v[2] *= s;
+    const w = pinch * Math.exp(-((v[1] / (0.22 * depth)) ** 2)), below = v[2] < 0 ? 1 : 1 - Math.min(1, v[2] / r0) ** 0.5;
+    v[0] *= 1 - w * (0.6 + 0.4 * below); v[2] *= 1 - w * below;
   });
   // spiral channel: a strip between r(th) and r(th)(1 - channel), cut into both faces
   const outer = sp.filter((q) => q[3] <= TAU * (turns - 0.25));
@@ -104,6 +105,14 @@ export function voluteScroll({ r0, depth, side = 1, eye = 0.13, turns = 2.75, ch
   const g = groove * r0;
   const cut = Manifold.union([extrudeElevation(strip, g * 2, -depth / 2 - g), extrudeElevation(strip, g * 2, depth / 2 - g)]);
   body = body.subtract(cut);
+  // the balteus: a belt of two fillets round the waist of the bolster
+  if (pinch > 0) {
+    const belt = extrudeElevation(disc, 0.1 * depth, -0.05 * depth, 4).warp((v) => {
+      const top = v[2] > 0 ? 1 - Math.min(1, v[2] / r0) ** 0.5 : 1;
+      v[0] *= (1 - pinch * 0.62) * 1.03; v[2] *= v[2] < 0 ? (1 - pinch) * 1.03 : 1 - (1 - top) * 0.0;
+    });
+    body = union([body, belt.subtract(extrudeElevation(disc, 0.03 * depth, -0.015 * depth).scale([1.2, 1, 1.2]).subtract(extrudeElevation(disc, 0.03 * depth, -0.015 * depth).scale([(1 - pinch * 0.62) * 1.0, 1, (1 - pinch) * 1.0])))]);
+  }
   // the eye: a small boss on each face
   const eyeBoss = Manifold.cylinder(depth + g * 0.6, re, re, 32).rotate([90, 0, 0]).translate([0, depth / 2 + g * 0.3, 0]);
   return union([body, eyeBoss]);
