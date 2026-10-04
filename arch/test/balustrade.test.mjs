@@ -42,11 +42,26 @@ function honours(input) {
   return (r, errs) => {
     const { spec } = normalize(input), ex = r.expected;
     if (spec.element === 'baluster') { if (Math.abs(ex.size.z - spec.height) > 1e-9) errs.push('z not the requested height'); return; }
+    const lay = layout(spec), meta = r.parts.find((p) => p.name === 'baluster').meta;
     if (spec.balusters) {
       if (ex.counts.baluster !== spec.balusters) errs.push('count not the requested one');
-      // a length other than the default asked together with a count: both honoured whenever they can fit
-      if (layout(spec).both && Math.abs(ex.size.x - spec.length) > 1e-9) errs.push('x not the requested length');
+      if (spec.length === undefined) {                 // count only: the length follows (classical spacing)
+        if (lay.both || lay.fallback) errs.push('count-only request treated as length and count');
+      } else if (lay.both) {                           // both stated: both honoured exactly
+        if (Math.abs(ex.size.x - spec.length) > 1e-9) errs.push('x not the requested length');
+      } else if (!lay.fallback || !/cannot fit/.test(meta.warning || '')) errs.push('both stated, neither honoured nor warned');
     } else if (Math.abs(ex.size.x - spec.length) > 1e-9) errs.push('x not the requested length');
+    // slimmed balusters (length and count): the baluster and the half-balusters are both built at the slim diameter Db,
+    // with the classical gap Db/2, and the UI is told
+    if (lay.both && lay.d.half && lay.d.Db < lay.d.D - 1e-9) {
+      const Db = lay.d.Db, bb = r.parts.find((p) => p.name === 'baluster').manifold.boundingBox();
+      const hb = r.parts.find((p) => p.name === 'half-baluster').manifold.boundingBox();
+      if (Math.abs(bb.max[0] - bb.min[0] - Db) > 0.01 * Db) errs.push(`baluster width ${(bb.max[0] - bb.min[0]).toFixed(4)} != Db ${Db.toFixed(4)}`);
+      if (Math.abs(hb.max[0] - hb.min[0] - (Db / 2 + 0.001)) > 0.01 * Db) errs.push('half-baluster not half of the slim baluster');
+      if (Db < 0.5 * lay.d.D - 1e-9) errs.push('slimmed below 0.5 D');
+      if (Db > 0.5 * lay.d.D + 1e-9 && Math.abs(meta.gap - Db / 2) > 1e-9) errs.push(`gap ${meta.gap} != Db/2`);
+      if (!/slimmed/.test(meta.warning || '')) errs.push('no slimming warning');
+    }
     if (!spec.urns && Math.abs(ex.size.z - spec.height) > 1e-9) errs.push('z not the requested height');
   };
 }
@@ -116,6 +131,8 @@ cases.push(
   { element: 'balustrade', balusters: SCHEMA.balusters.min }, { element: 'balustrade', balusters: SCHEMA.balusters.max },
   { element: 'balustrade', balusters: SCHEMA.balusters.max, baluster: 'double-vase', urns: true },
   { element: 'balustrade', balusters: 37 }, { element: 'balustrade', balusters: 20, baluster: 'bottle' },
+  { element: 'balustrade', length: 3, balusters: 12 }, { element: 'balustrade', length: 3, balusters: 12, baluster: 'bottle' },
+  { element: 'balustrade', length: 3, balusters: 6 }, { element: 'balustrade', length: 3, balusters: 3 },
   { element: 'balustrade', length: 60, balusters: 200 }, { element: 'balustrade', length: 6, balusters: 12 },
   { element: 'balustrade', length: 10, balusters: 10 }, { element: 'balustrade', length: 2, balusters: 40 },
   { element: 'balustrade', length: 4, balusters: 14, baluster: 'bar' }, { element: 'balustrade', length: 5, balusters: 16, urns: true },
@@ -126,6 +143,8 @@ for (const baluster of BALUSTERS) await similar({ element: 'baluster', baluster 
 // a one-bay balustrade with a given count, its height scaled: the same layout k times larger (longer runs gain
 // pedestals every ~3 m, so they are not similar by design)
 for (const baluster of BALUSTERS.filter((b) => b !== 'bar')) await similar({ element: 'balustrade', baluster, balusters: 5, urns: true }, ['height'], [0.25, 1.3]);
+// the heaviest legal request at full detail stays under the triangle budget (check() asserts < 2 M)
+for (const baluster of BALUSTERS) cases.push({ element: 'balustrade', baluster, balusters: SCHEMA.balusters.max, urns: true, detail: 'high' });
 for (const c of cases) {
   const hon = honours(c), sp = c.element === 'balustrade' ? spacing(c) : null;
   await check(c, (r, errs) => { hon(r, errs); if (sp) sp(r, errs); });

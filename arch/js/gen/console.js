@@ -1,7 +1,7 @@
 // Console (bracket, corbel, ancon, modillion): an S-scroll seen in side elevation — a large volute at the top, rolling
 // back toward the wall, and a small opposed volute at the foot — joined by a cyma-shaped face; the scrolls are carved
-// discs on both cheeks (ornament.js voluteScroll); an acanthus leaf springs from the lower scroll and climbs the face,
-// its tip turning over under the upper scroll; a small moulded cap (abacus) crowns it.
+// discs on both cheeks (spiral channel inside a continuous rim); the face is sunk between raised margins and carries an
+// acanthus leaf that springs from the lower scroll and clasps the upper one; a small moulded cap (abacus) crowns it.
 // Z-up, metres; the console stands against a wall at y = +depth/2 and projects toward -Y; origin at its base centre.
 //
 // Proportions (in the manner of the mensole of Vignola's door plates and the "trusses" of Gibbs' pattern books):
@@ -10,13 +10,14 @@
 // cyma leaving each scroll tangentially; the scroll cheeks 0.90 W wide, the face 0.80 W, sunk ~6 mm between margins
 // of 0.12 of its width.
 
-import { TAU, mat, loft, union, part, bezier, crossSection } from '../kernel.js';
+import { K, TAU, mat, loft, union, part, bezier, crossSection, thickSurface } from '../kernel.js';
 import { Prof } from '../profiles.js';
-import { acanthusLeaf, voluteScroll, spiral } from '../ornament.js';
+import { spiral, extrudeElevation } from '../ornament.js';
 
 export const ELEMENTS = ['console'];
 
 const OV = 0.001;
+const sstep = (x) => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
 const TURNS = 2.2, EYE = 0.16;             // both volutes: 2.2 turns, eye 0.16 of the outer radius
 
 /** First turn of a volute's spiral, as voluteScroll draws it in elevation, rotated in its plane by phi (as Ry(phi)),
@@ -92,23 +93,94 @@ function contour(pts) {
   return { at, L };
 }
 
+/**
+ * A scroll disc for the console's cheeks (the voluteScroll of ornament.js, adapted): the hull of the spiral's first turn
+ * extruded through `depth` (centred on y = 0, elevation in XZ), a spiral channel carved into both faces, an eye boss.
+ * The channel runs inside a continuous rim (listel) of `rim` r and opens from nothing over its first half turn, so the
+ * disc's outline is never notched where the spiral starts.
+ */
+function scrollDisc({ r0, depth, side, groove, channel = 0.32, rim = 0.07 }) {
+  const { Manifold, CrossSection } = K();
+  const sp = spiral(r0, r0 * EYE, TURNS, 240, side);
+  const disc = CrossSection.hull([crossSection(sp.filter((q) => q[3] <= TAU + 1e-9).map(([x, z]) => [x, z]))]);
+  let body = extrudeElevation(disc, depth, -depth / 2);
+  const o = [], i = [];
+  for (const [x, z, , th] of sp.filter((q) => q[3] <= TAU * (TURNS - 0.25))) {
+    const k = sstep(th / Math.PI), a = 1 - rim, b = 1 - rim - (channel - rim) * k;
+    o.push([x * a, z * a]); i.push([x * b, z * b]);
+  }
+  const strip = [...o, ...i.reverse()], g = groove * r0;
+  body = body.subtract(Manifold.union([extrudeElevation(strip, 2 * g, -depth / 2 - g), extrudeElevation(strip, 2 * g, depth / 2 - g)]));
+  const re = r0 * EYE;
+  return union([body, Manifold.cylinder(depth + 0.6 * g, re, re, 32).rotate([90, 0, 0]).translate([0, depth / 2 + 0.3 * g, 0])]);
+}
+
+/**
+ * The acanthus leaf of the console, carved on its face: a shell built directly on the face's contour (arc length s
+ * from s0 to s1, outward normal), so it hugs the cyma and the front of the upper scroll at every point. Outline: a
+ * narrow stalk springing from the lower scroll, then a broad oval blade of three pointed lobes a side (leaning toward
+ * the tip, each with three small teeth) and a pointed tip lobe. Relief (outward, at most ~0.07 w): a
+ * raised midrib, raised ribs ("pipes") running from the midrib out and up to each lobe, the blade between them
+ * slightly hollow, the lobe edges turning out, a small hollow "eye" at each notch. `base(s)` is the face's own offset
+ * there (negative inside the sunk panel). Coordinates: t along the leaf (0 stalk .. 1 tip), uu across (-1 .. 1).
+ */
+function faceLeaf({ C, s0, s1, w, th, base, uMax, Dp, nu, nv }) {
+  const T0 = 0.07, LOB = 3, T1 = 0.84;                 // stalk below T0, lobes T0..T1, tip lobe above
+  const lobeC = Array.from({ length: LOB + 1 }, (_, k) => T0 + ((T1 - T0) * (k + 0.55)) / LOB).map((c, k) => (k === LOB ? 0.93 : c));
+  const env = (t) => (t < 0.38 ? 0.3 + 0.7 * Math.sin((Math.PI / 2) * (t / 0.38)) : Math.cos((Math.PI / 2) * ((t - 0.38) / 0.62)) ** 0.85);
+  const half = (t) => {
+    if (t < T0) return 0.065 + 0.045 * sstep(t / T0);                                   // the stalk
+    const x = Math.min(LOB, ((t - T0) / (T1 - T0)) * LOB), g = t >= T1 ? 0.5 + 0.5 * (t - T1) / (1 - T1) : x - Math.floor(x);
+    const gg = g ** 0.8;                                                                  // lobes lean toward the tip
+    const lobe = 0.72 + 0.28 * (1 - Math.abs(2 * gg - 1)) ** 0.6;                         // pointed lobe, notch between
+    const teeth = 0.06 * (1 - Math.abs(2 * ((3 * gg) % 1) - 1)) ** 1.5 * (t < T1 ? 1 : 0);   // three teeth per lobe
+    return 0.5 * Math.max(0.03, env(t)) * (lobe + teeth);
+  };
+  const relief = (uu, t) => {
+    const au = Math.abs(uu);
+    let d = 0.03 * w * Math.exp(-((uu / 0.06) ** 2)) * (1 - 0.5 * t)                    // midrib
+      + 0.03 * w * uu * uu * sstep((t - T0) / 0.1)                                         // edges turning out
+      - 0.012 * w * Math.sin(Math.PI * au) * sstep((t - T0) / 0.1);                       // blade hollow between
+    for (const c of lobeC) {                                                               // pipes: midrib -> lobe
+      const ax = 0.05, ay = c - 0.13, bx = 0.82, by = c + 0.01;
+      const px = au - ax, py = t - ay, vx = bx - ax, vy = by - ay, k = Math.max(0, Math.min(1, (px * vx + py * vy) / (vx * vx + vy * vy)));
+      const dist = Math.hypot(px - k * vx, (py - k * vy) * 2.2);
+      d += 0.022 * w * Math.exp(-((dist / 0.06) ** 2)) * (t > T0 ? 1 : 0);
+    }
+    for (let k = 1; k <= LOB; k++) {                                                       // eyes at the notches
+      const tn = T0 + ((T1 - T0) * k) / LOB;
+      d -= 0.016 * w * Math.exp(-(((au - 0.7) / 0.09) ** 2 + ((t - tn) / 0.025) ** 2));
+    }
+    return d * (1 - 0.6 * sstep((t - 0.72) / 0.28));                                     // the tip lies flatter
+  };
+  const f = (u, v) => {
+    const uu = 2 * u - 1, s = s0 + v * (s1 - s0), c = C.at(s);
+    const d = base(s) + 0.1 * th + relief(uu, v);                                          // its back sunk in the stone
+    return [uu * half(v) * w, Dp / 2 - Math.min(uMax, c.u + d * c.nu), c.v + d * c.nv];
+  };
+  return thickSurface(f, nu, nv, (u, v) => th * (0.45 + 0.55 * (1 - (2 * u - 1) ** 2)) * (1 - 0.45 * v));
+}
+
 export function build(spec) {
   const g = design(spec), { Dp, Wv, Wb } = g;
   const parts = [];
-  // body, its face (the cyma between the scrolls) sunk between two raised margins of 0.12 of the face width
+  // the face's contour from the lower scroll's start, up the cyma and on round the front of the upper scroll
   const run = [...g.face, ...g.big.slice(1, 70)], C = contour(run), Lf = contour(g.face).L;
-  const dep = Math.min(0.03 * Wb, 0.12 * g.r2), Wr = 0.76 * Wb, sa = 0.02 * Lf, ns = 40;
+  // body, its face (the cyma between the scrolls) sunk between two raised margins of 0.12 of the face width; the
+  // panel's floor rises smoothly into the scrolls at both ends (no step against the scroll's roll)
+  const dep = Math.min(0.03 * Wb, 0.12 * g.r2), Wr = 0.76 * Wb, sa = 0.04 * Lf, sb = 0.98 * Lf, ns = 48;
+  const panel = (s) => dep * sstep((s - sa) / (0.14 * Lf)) * sstep((sb - s) / (0.16 * Lf));
   const outer = [], inner = [];
   for (let i = 0; i <= ns; i++) {
-    const c = C.at(sa + ((Lf - sa) * i) / ns);
+    const s = sa + ((sb - sa) * i) / ns, c = C.at(s), d = Math.max(panel(s), 1e-4 * Wb);
     outer.push([c.u + 0.002 * Wb * c.nu, c.v + 0.002 * Wb * c.nv]);
-    inner.push([c.u - dep * c.nu, c.v - dep * c.nv]);
+    inner.push([c.u - d * c.nu, c.v - d * c.nv]);
   }
   const recess = crossSection([[...outer, ...inner.reverse()]]).extrude(Wr).transform(PROFILE_TO_WORLD(Wr, Dp));
   const body = bodySection(g).extrude(Wb).transform(PROFILE_TO_WORLD(Wb, Dp)).subtract(recess);
-  // the scroll discs on the cheeks, slightly wider than the face so their spiral channels read on both sides
+  // the scroll discs on the cheeks, slightly wider than the face so their spiral channels read on both sides;
   // channel depth 0.045 r, but never more than 8 % of the cheek width (very thin, very large scrolls)
-  const place = (r, side, phi, uc, vc) => voluteScroll({ r0: r, depth: Wv, side, eye: EYE, turns: TURNS, channel: 0.3, groove: Math.min(0.045, (0.08 * Wv) / r), pinch: 0 })
+  const place = (r, side, phi, uc, vc) => scrollDisc({ r0: r, depth: Wv, side, groove: Math.min(0.045, (0.08 * Wv) / r) })
     .transform(mat.mul(mat.T(0, Dp / 2 - uc, vc), mat.Rz(-Math.PI / 2), mat.Ry(phi)));
   parts.push(part('console', 'stone', union([body, place(g.r1, -1, g.PB, g.u1, g.v1), place(g.r2, 1, g.PS, g.u2, g.v2)])));
   // cap: fillet, cyma reversa, fillet, corona, ovolo, fillet — returned on the front and both sides, flush at the wall
@@ -120,31 +192,15 @@ export function build(spec) {
     return [[-hx, yf], [hx, yf], [hx, yb], [-hx, yb]];
   });
   parts.push(part('cap', 'stone', loft(rings, cp.pts.map(([, h]) => g.Hb + (h / hTot) * g.hc))));
-  // acanthus leaf on the face, bent to follow it (and the upper scroll's front) from the lower scroll upward
+  // acanthus leaf carved on the face: springs from the lower scroll, fills the sunk panel, clasps the upper scroll's
+  // front and ends just short of its most projecting point; at most 3.2 face-widths long, at most 0.65 of its length wide
   if (spec.enrichment !== 'none') {
-    // the leaf springs from the lower scroll, climbs the face and clasps the front of the upper scroll, its tip
-    // turning over at about the scroll's start
-    // the leaf ends 0.75 r1 up the upper scroll; it is at most 3.2 face-widths long (a tall ancon's leaf starts higher)
-    const sEnd = Lf + 0.75 * g.r1, hLeaf = Math.min(0.98 * sEnd, 3.2 * Wb), s0 = sEnd - hLeaf;
-    const wLeaf = Math.min(0.92 * Wb, 0.62 * hLeaf), tLeaf = Math.min(0.012 * wLeaf, 0.03 * Dp, 0.03 * g.H);
-    const nu = spec.detail === 'low' ? 18 : 30, nv = spec.detail === 'low' ? 40 : 72;
-    // flatten the blade's relief to 50 % and sink its back into the face, so it lies on the stone like a carving
-    const sink = 0.02 * wLeaf, flat = 0.5;
-    const make = (curl, nu, nv) => acanthusLeaf({ h: hLeaf, w: wLeaf, lobes: 3, curl, lean: 0, wrap: 0, t: tLeaf, nu, nv }).warp((v) => {
-      const sv = s0 + v[2], dip = dep * Math.min(1, Math.max(0, (Lf * 1.02 - sv) / (0.04 * Lf)));   // down into the sunk face
-      const c = C.at(sv), d = -v[1] * flat - sink - dip;
-      const u = c.u + d * c.nu, vv = c.v + d * c.nv;
-      v[1] = Dp / 2 - u; v[2] = vv;
-    });
-    // the turned-over tip must stay under the cap's overhang: relax the curl until it does
-    // (at absurd proportions where no curl fits, the console is left plain rather than with a protruding leaf)
-    // (the search runs on a coarse leaf; the full one is built once and checked again)
-    const fits = (m) => { const bb = m.boundingBox(); return bb.min[1] >= -Dp / 2 + 0.15 * g.ef && bb.min[2] >= 0 && bb.max[2] <= g.Hb; };
-    for (const curl of [0.45, 0.3, 0.18, 0.08, 0]) {
-      if (!fits(make(curl, 12, 24))) continue;
-      const leaf = make(curl, nu, nv);
-      if (fits(leaf)) { parts.push(part('leaf', 'stone', leaf)); break; }
-    }
+    const s1 = Lf + 0.6 * g.r1, s0 = Math.max(0.06 * Lf, s1 - 3.2 * Wb), w = Math.min(0.94 * Wr, 0.65 * (s1 - s0));
+    const th = Math.min(0.03 * w, 0.25 * g.ef);
+    const nu = spec.detail === 'low' ? 16 : spec.detail === 'medium' ? 24 : 32, nv = spec.detail === 'low' ? 48 : spec.detail === 'medium' ? 72 : 96;
+    const leaf = faceLeaf({ C, s0, s1, w, th, base: (s) => -panel(s), uMax: g.Db + 0.8 * g.ef, Dp, nu, nv }), bb = leaf.boundingBox();
+    // (at absurd proportions where the leaf would leave the requested box, the console is left plain)
+    if (bb.min[1] >= -Dp / 2 && bb.max[1] <= Dp / 2 && bb.min[2] >= 0 && bb.max[2] <= g.Hb) parts.push(part('leaf', 'stone', leaf));
   }
   return parts;
 }

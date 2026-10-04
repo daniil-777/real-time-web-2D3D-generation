@@ -10,7 +10,6 @@
 
 import { mat, revolve, loft, box, union, part, instances, extrudeProfileX, bezier } from '../kernel.js';
 import { Prof } from '../profiles.js';
-import { DEFAULTS } from '../spec.js';
 import { urnParts } from './finial.js';
 
 export const ELEMENTS = ['balustrade', 'baluster'];
@@ -110,25 +109,26 @@ function place(d, L, e, Ws, counts, extra = {}) {
  * Plan layout along X. Returns { d, L, peds: [x of pedestal centres], bays: [{ x0, x1, n, xs: [baluster axes] }] }.
  * B = number of bays (one per ~3 m once the run exceeds 4 m), Wd = pedestal die, e = projection of its mouldings,
  * s = axis spacing (classical 1.5 D: gap D/2), half-balusters engaged against every die (bars: none).
- *  - `balusters` given (and the length left at its default): the count is exact, the spacing classical, and the
- *    length follows:  L = (B + 1) Wd + 2 e + sum over bays of (n_b + 1) s     (bars: n_b Db + (n_b + 1) gap)
+ *  - `balusters` given, no length (normalize() leaves `length` unset when a count is stated): the count is exact,
+ *    the spacing classical, and the length follows:
+ *       L = (B + 1) Wd + 2 e + sum over bays of (n_b + 1) s     (bars: n_b Db + (n_b + 1) gap)
  *  - `length` given: the length is exact; each bay of clear width W = (L - (B + 1) Wd - 2 e) / B takes the fewest
  *    balusters that keep the gap at most D/2 (and at least D/3 when the bay allows), the spacing adjusted to fill W;
  *    bars keep gaps <= 100 mm.
- *  - both given (a length other than the default 3 m and a count): both are exact; the spacing is (L - (B + 1) Wd -
- *    2 e) / (N + B) and the balusters are slimmed (down to 0.5 D) to keep the gap at D/2; a count that cannot fit even
- *    so falls back to the count rule (the length then follows).
+ *  - both given: both are exact; the spacing is (L - (B + 1) Wd - 2 e) / (N + B) and the balusters are slimmed (down
+ *    to 0.5 D) to keep the gap at D/2, or spaced wider than classical when few are asked for (a warning in meta); a
+ *    count that cannot fit even with 0.5 D balusters falls back to the count rule (the length follows, `fallback`).
  * Runs too short for two pedestals and a baluster have no pedestals: rail and plinth run the full length.
  */
 export function layout(spec) {
-  const d = dims(spec), e = d.pmax, N = spec.balusters, L = spec.length;
-  if (N && L !== DEFAULTS.balustrade.length) {
+  const d = dims(spec), e = d.pmax, N = spec.balusters, L = spec.length ?? (N ? undefined : 3);
+  if (N && L !== undefined) {
     const r = fitBoth(d, e, N, L);
     if (r) return r;
   }
   if (N) {
     const B = bayCount(2 * d.Wd + 2 * e + bayW(d, N), N), counts = distribute(N, B), Ws = counts.map((n) => bayW(d, n));
-    return place(d, (B + 1) * d.Wd + 2 * e + Ws.reduce((a, b) => a + b, 0), e, Ws, counts);
+    return place(d, (B + 1) * d.Wd + 2 * e + Ws.reduce((a, b) => a + b, 0), e, Ws, counts, { fallback: L !== undefined });
   }
   if (L < 2 * (d.Wd + e) + bayW(d, 1)) return shortRun(spec, d, L);
   const nFor = (W) => {
@@ -340,6 +340,7 @@ export function build(spec) {
   const mode = !peds.length ? 'short run' : lay.both ? 'length and count' : spec.balusters ? 'count' : 'length';
   let warning;
   if (lay.capped) warning = `the run would need more than ${maxN(d)} balusters; spacing widened`;
+  else if (lay.fallback) warning = `${N} balusters cannot fit in ${spec.length} m even slimmed; the run is ${lay.L.toFixed(2)} m`;
   else if (!d.bar && peds.length && gap > d.Db * 0.55) warning = `gaps of ${(gap * 100).toFixed(0)} cm exceed half the baluster's diameter; more balusters would suit this length`;
   else if (d.bar && gap > 0.1 + 1e-9) warning = `gaps of ${(gap * 100).toFixed(0)} cm exceed 10 cm (SIA 358 guarding)`;
   else if (d.Db < d.D - 1e-9) warning = `balusters slimmed to ${(d.Db * 100).toFixed(1)} cm to fit ${N} in ${spec.length} m`;
@@ -369,9 +370,9 @@ export function build(spec) {
  * What the generator promises.
  * balustrade: x = the overall length, measured over the end pedestals' base and cap mouldings (pedestals included):
  *   - length given (no count): x = spec.length;
- *   - balusters given (length left at its default): x = (B + 1) Wd + 2 e + sum_b (n_b + 1) s, where s = 1.5 D (gap
+ *   - balusters given, no length: x = (B + 1) Wd + 2 e + sum_b (n_b + 1) s, where s = 1.5 D (gap
  *     D/2), Wd = 1.8 D the pedestal die, e its mouldings' projection, B bays of ~3 m (bars: n_b Db + (n_b + 1) gap);
- *   - both given: x = spec.length (see layout());
+ *   - both given: x = spec.length (see layout()), unless the count cannot fit even slimmed (then as above);
  *   - runs shorter than two pedestals and a baluster have no pedestals and x = spec.length.
  *   z = height, plus the urns' height (1.8 Wd, sunk 1 mm into the pedestal cap) when urns are on and there are
  *   pedestals to carry them. counts: baluster = the requested count, or the count derived from the length.
