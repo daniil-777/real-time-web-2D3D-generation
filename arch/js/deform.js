@@ -45,7 +45,8 @@
 //      edge is already below l is not refined. The refinement is capped so the element stays under maxTris (1.5 M) and
 //      the cap is reported. Stretch and shear alone are (piecewise) affine and need no refinement.
 //    - fold check: det J <= 0 at any sampled vertex or instance centre -> warnings ['fold'] (the shape passes through
-//      itself), a bend over 360 degrees -> 'overlap'. Exports stay honest; the UI shows the warning.
+//      itself); a bend whose ends meet (|angle| >= 330°, or a closing gap narrower than the element's depth) ->
+//      'overlap'. Exports stay honest; the UI shows the warning.
 //
 // Ranges: an op's `range` (stretch: `keep`) left out or 'auto' acts on the element's shaft when it has one (column,
 // pilaster, obelisk: base, capital and pedestal stay true — resolveOps), else on the whole extent (stretch: [0.12, 0.88]).
@@ -286,7 +287,13 @@ function compileBend(op, F) {
     v[1] = O[1] + T * tv[1] + N * nv[1] + m * bv[1];
     v[2] = O[2] + T * tv[2] + N * nv[2] + m * bv[2];
   };
-  return { type: 'bend', map, refine: true, angle: th, overlap: Math.abs(th) > 2 * Math.PI + 1e-9 };
+  // Overlap (the ends meet or pass each other: the shape intersects itself without a fold, which det J cannot see).
+  // Conservative: any bend of 330° or more; below that, when the closing gap 2R sin((360° - |angle|) / 2) of the arc
+  // of radius R = bent length / |angle| is narrower than the element's depth across the bend.
+  const at = Math.abs(th), R = ((b - a) * L) / at;
+  const depth = [0, 1, 2].reduce((acc, k) => acc + Math.abs(nv[k]) * (F.max[k] - F.min[k]), 0);
+  const overlap = at >= (330 * Math.PI) / 180 || (at > Math.PI && 2 * R * Math.sin((2 * Math.PI - at) / 2) < depth);
+  return { type: 'bend', map, refine: true, angle: th, overlap };
 }
 
 function compileTwist(op, F) {
@@ -768,7 +775,16 @@ function warpManifold(m, fn, viaMesh = false) {
 const mat3det = (M) => det3(mat3of(M));
 
 /**
- * Apply ops to an element's parts. opts:
+ * Apply ops to an element's parts.
+ *
+ * Which parts stay rigid: a part is "small and repeated" — moved rigidly, never bent — when it has >= 2 instances
+ * (transforms) and its mesh bbox diagonal (times the instance scale) is below rigidRatio (20 %) of the element's bbox
+ * diagonal: balusters, dentils, eggs, leaves and volutes on a whole column, roof tiles, voussoirs, urns. Everything else
+ * (single parts, parts placed once, large repeated parts such as the leaves of a capital shown on its own, or a
+ * balustrade's pedestals once they pass 20 % of a short run) is warped; each instance of a warped part becomes its own
+ * piece (same name, meta.instance = i). A part with no triangles passes through unchanged.
+ *
+ * opts:
  *   rigidInstances (true)  small repeated parts move rigidly (see the header); false bakes and warps everything
  *   scaleInstances ('auto') 'auto' median singular value of J | true / 'volume' det(J)^(1/3) | false none
  *   refine (true)          true: deformation-aware edge length; a number: that edge length (m); false: no refinement
@@ -779,8 +795,19 @@ const mat3det = (M) => det3(mat3of(M));
  *   bbox                   the element's bbox (default partsBBox(parts)) — pass the original one when re-deforming
  *   warpViaMesh (false)    force the mesh path of warpManifold (tests; it is taken automatically past a 2 GB heap)
  * Ops are first passed through resolveOps (range / keep 'auto' -> the shaft, when there is one).
- * Returns { parts, warnings, stats, deformer, ops (resolved) }. Input parts and their manifolds are never modified; rigid parts share
- * the input manifold object, warped parts get new manifolds (owned by the caller: .delete() them when replaced).
+ *
+ * Returns { parts, warnings, stats, deformer, ops (resolved) }.
+ *   parts     rigid parts: same manifold object as the input, new transforms (meta.deform 'rigid'); warped pieces: new
+ *             manifolds, transforms null or one ground shift (meta.deform 'warp'). Input parts are never modified.
+ *             Warped manifolds are owned by the caller: .delete() them when the result is replaced (never the 'rigid'
+ *             ones — they are the input's). If deformParts throws, every manifold it created is already deleted.
+ *   warnings  'fold' | 'overlap' | 'refine-capped' | 'not-manifold:<part name>'
+ *   stats     { ms, tris (after instancing), rigid: [names], warped: [names], refined (pieces), edge (refinement edge,
+ *             m; 0 = none), refineCapped, curvature (H, 1/m), folds, samples, minDet, timing: {rigid, refine, warp} ms,
+ *             ground }: ground is the z shift (m) applied after the warp to put the lowest point back on the element's
+ *             ground (0 when none). The deformer's point() / frames are BEFORE this shift: a UI drawing lattice points
+ *             or handles over the result adds [0, 0, stats.ground].
+ *   deformer  makeDeformer(ops resolved, bbox) — the exact map that was applied (point, jacobian, frames, compiled).
  */
 export function deformParts(parts, ops, opts = {}) {
   const t0 = now();
@@ -857,111 +884,126 @@ export function deformParts(parts, ops, opts = {}) {
   // Instances stay separate pieces (same part name, meta.instance = i): warping eight 14k-triangle leaves one by one
   // takes 94 ms, composing them into one Manifold first 350-500 ms (measured), and nothing downstream needs one mesh.
   const scaleOf = (M) => (M ? Math.max(Math.hypot(M[0], M[1], M[2]), Math.hypot(M[4], M[5], M[6]), Math.hypot(M[8], M[9], M[10])) : 1);
+  // Every Manifold this call creates is registered here (never an input one). Intermediates are freed as soon as they
+  // are used; if anything throws (a WASM error, out of memory) everything still registered — mirrored copies, refined
+  // meshes, already warped pieces — is deleted before the error is rethrown, so a live drag loop cannot leak.
+  const inputs = new Set(parts.map((p) => p.manifold)), created = new Set();
+  const own = (m) => { if (!inputs.has(m)) created.add(m); return m; };
+  const free = (m) => { if (m && created.delete(m)) m.delete(); };
   const pieces = [];
-  for (let pi = 0; pi < plan.length; pi++) {
-    const { p, n, rigid, empty } = plan[pi];
-    if (empty) { out[pi] = [p]; continue; } // nothing to move (and a zero volume is no fold)
-    if (rigid) continue;
-    // per triangle of the shared local mesh (cheap: the local mesh, not the n copies): longest edge and area, which
-    // decide whether a piece needs refining and predict how many triangles refining it makes
-    const g = p.manifold.getMesh(), V = g.vertProperties, T = g.triVerts, np = g.numProp, nt = T.length / 3;
-    const tri = new Float64Array(2 * nt);
-    let e2 = 0;
-    for (let t = 0; t < nt; t++) {
-      const a = T[3 * t] * np, b = T[3 * t + 1] * np, c = T[3 * t + 2] * np;
-      const ux = V[b] - V[a], uy = V[b + 1] - V[a + 1], uz = V[b + 2] - V[a + 2];
-      const vx = V[c] - V[a], vy = V[c + 1] - V[a + 1], vz = V[c + 2] - V[a + 2];
-      const wx = V[c] - V[b], wy = V[c + 1] - V[b + 1], wz = V[c + 2] - V[b + 2];
-      const m = Math.max(ux * ux + uy * uy + uz * uz, vx * vx + vy * vy + vz * vz, wx * wx + wy * wy + wz * wz);
-      tri[2 * t] = Math.sqrt(m);
-      tri[2 * t + 1] = 0.5 * Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx);
-      if (m > e2) e2 = m;
-    }
-    for (let i = 0; i < n; i++) {
-      const M = p.transforms ? p.transforms.subarray(16 * i, 16 * i + 16) : null, sc = scaleOf(M);
-      // an instance with a proper frame (det > 0) is warped straight from the shared local mesh through v -> f(M v),
-      // refined to l / scale: no transformed copy is ever built. A mirroring frame would turn the warped mesh inside
-      // out (warp keeps the winding), so that one is transformed by Manifold first.
-      const direct = !M || mat3det(M) > 0;
-      pieces.push({ pi, i, p, M: direct ? M : null, sc: direct ? sc : 1, es: sc, tri, nt, maxEdge: Math.sqrt(e2) * sc,
-        src: direct ? p.manifold : p.manifold.transform(Array.from(M)) });
-    }
-  }
-  // Predicted triangles of a piece refined to edge l: a triangle splits into about max(ceil(e_max / l), 2.31 A / l^2)
-  // (a strip along a sliver, area / equilateral-triangle area for a compact one), so the budget is met before refining.
-  const predict = (pc, l) => {
-    if (!(l > 0) || pc.maxEdge <= l) return pc.nt;
-    let k = 0;
-    const s = pc.es / l, s2 = 2.31 * s * s;
-    for (let t = 0; t < pc.nt; t++) k += Math.max(1, Math.ceil(pc.tri[2 * t] * s), pc.tri[2 * t + 1] * s2);
-    return k;
-  };
-  const predictAll = (l) => pieces.reduce((acc, pc) => acc + predict(pc, l), rigidTris);
-  let ell = 0;
-  if (o.refine && D.needsRefine) {
-    if (typeof o.refine === 'number' && o.refine > 0) ell = o.refine;
-    else {
-      // chord rule: an edge of length l under a map with second derivative H sags l^2 H / 8 off the true image, so
-      // l = sqrt(8 eps / H) keeps every warped edge within eps of the exact deformation; capped at L / 16 in case
-      // the 5^3-grid estimate of H missed a local bend
-      const H = D.curvature(), eps = num(o.tolerance, L / 4000);
-      stats.curvature = H;
-      ell = Math.min(L / 16, H > 1e-12 ? Math.sqrt((8 * eps) / H) : Infinity);
-    }
-    ell = Math.max(ell, L / 4000);
-  }
-  if (ell > 0 && predictAll(ell) > o.maxTris) {
-    // over budget: the coarsest edge that fits (bisection on log l; the prediction falls monotonically with l)
-    stats.refineCapped = true;
-    const top = Math.max(...pieces.map((pc) => pc.maxEdge), ell);
-    if (predictAll(top) > o.maxTris) ell = 0; // already over budget unrefined: do not refine at all
-    else {
-      let lo = ell, hi = top;
-      for (let k = 0; k < 24; k++) { const mid = Math.sqrt(lo * hi); if (predictAll(mid) > o.maxTris) lo = mid; else hi = mid; }
-      ell = hi;
-    }
-  }
-  for (let attempt = 0; ; attempt++) {
-    let tris = rigidTris;
-    for (const pc of pieces) {
-      pc.ref = ell > 0 && pc.maxEdge > ell ? pc.src.refineToLength(ell / pc.sc) : pc.src;
-      tris += pc.ref.numTri();
-    }
-    if (!(ell > 0) || tris <= o.maxTris * 1.1 || attempt >= 2) break;
-    // the prediction was short (it is within ~10 % on the families): coarsen by the miss and redo once more
-    for (const pc of pieces) if (pc.ref !== pc.src) pc.ref.delete();
-    ell *= Math.sqrt((tris - rigidTris) / Math.max(1, o.maxTris - rigidTris)) * 1.05;
-    stats.refineCapped = true;
-  }
-  if (stats.refineCapped) warnings.add('refine-capped');
-  stats.edge = ell;
-  stats.refined = pieces.filter((pc) => pc.ref !== pc.src).length;
-  tl = lap('refine', tl);
-  const perPiece = Math.max(100, Math.floor(6000 / Math.max(1, pieces.length)));
-  for (const pc of pieces) {
-    const m = warpManifold(pc.ref, (verts, count) => {
-      // a stride of the vertices, before they move, for the fold check (about 6000 samples in all)
-      const stride = Math.max(1, Math.floor(count / perPiece));
-      const M = pc.M;
-      if (M) { // local -> world first
-        for (let o = 0; o < 3 * count; o += 3) {
-          const x = verts[o], y = verts[o + 1], z = verts[o + 2];
-          verts[o] = M[0] * x + M[4] * y + M[8] * z + M[12];
-          verts[o + 1] = M[1] * x + M[5] * y + M[9] * z + M[13];
-          verts[o + 2] = M[2] * x + M[6] * y + M[10] * z + M[14];
-        }
+  try {
+    for (let pi = 0; pi < plan.length; pi++) {
+      const { p, n, rigid, empty } = plan[pi];
+      if (empty) { out[pi] = [p]; continue; } // nothing to move (and a zero volume is no fold)
+      if (rigid) continue;
+      // per triangle of the shared local mesh (cheap: the local mesh, not the n copies): longest edge and area, which
+      // decide whether a piece needs refining and predict how many triangles refining it makes
+      const g = p.manifold.getMesh(), V = g.vertProperties, T = g.triVerts, np = g.numProp, nt = T.length / 3;
+      const tri = new Float64Array(2 * nt);
+      let e2 = 0;
+      for (let t = 0; t < nt; t++) {
+        const a = T[3 * t] * np, b = T[3 * t + 1] * np, c = T[3 * t + 2] * np;
+        const ux = V[b] - V[a], uy = V[b + 1] - V[a + 1], uz = V[b + 2] - V[a + 2];
+        const vx = V[c] - V[a], vy = V[c + 1] - V[a + 1], vz = V[c + 2] - V[a + 2];
+        const wx = V[c] - V[b], wy = V[c + 1] - V[b + 1], wz = V[c + 2] - V[b + 2];
+        const m = Math.max(ux * ux + uy * uy + uz * uz, vx * vx + vy * vy + vz * vz, wx * wx + wy * wy + wz * wz);
+        tri[2 * t] = Math.sqrt(m);
+        tri[2 * t + 1] = 0.5 * Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx);
+        if (m > e2) e2 = m;
       }
-      for (let i = 0; i < count; i += stride) foldAt([verts[3 * i], verts[3 * i + 1], verts[3 * i + 2]]);
-      D.warpBatch(verts, count);
-    }, o.warpViaMesh);
-    if (m.status() !== 'NoError') warnings.add(`not-manifold:${pc.p.name}`);
-    else if (!(m.volume() > 0)) warnings.add('fold');
-    if (pc.ref !== pc.src) pc.ref.delete();
-    if (pc.src !== pc.p.manifold) pc.src.delete();
-    const meta = { ...pc.p.meta, deform: 'warp' };
-    if (plan[pc.pi].n > 1) meta.instance = pc.i;
-    (out[pc.pi] ||= []).push({ ...pc.p, manifold: m, transforms: null, meta });
-    if (pc.i === 0) stats.warped.push(pc.p.name);
+      for (let i = 0; i < n; i++) {
+        const M = p.transforms ? p.transforms.subarray(16 * i, 16 * i + 16) : null, sc = scaleOf(M);
+        // an instance with a proper frame (det > 0) is warped straight from the shared local mesh through v -> f(M v),
+        // refined to l / scale: no transformed copy is ever built. A mirroring frame would turn the warped mesh inside
+        // out (warp keeps the winding), so that one is transformed by Manifold first.
+        const direct = !M || mat3det(M) > 0;
+        pieces.push({ pi, i, p, M: direct ? M : null, sc: direct ? sc : 1, es: sc, tri, nt, maxEdge: Math.sqrt(e2) * sc,
+          src: direct ? p.manifold : own(p.manifold.transform(Array.from(M))) });
+      }
+    }
+    // Predicted triangles of a piece refined to edge l: a triangle splits into about max(ceil(e_max / l), 2.31 A / l^2)
+    // (a strip along a sliver, area / equilateral-triangle area for a compact one), so the budget is met before refining.
+    const predict = (pc, l) => {
+      if (!(l > 0) || pc.maxEdge <= l) return pc.nt;
+      let k = 0;
+      const s = pc.es / l, s2 = 2.31 * s * s;
+      for (let t = 0; t < pc.nt; t++) k += Math.max(1, Math.ceil(pc.tri[2 * t] * s), pc.tri[2 * t + 1] * s2);
+      return k;
+    };
+    const predictAll = (l) => pieces.reduce((acc, pc) => acc + predict(pc, l), rigidTris);
+    let ell = 0;
+    if (o.refine && D.needsRefine) {
+      if (typeof o.refine === 'number' && o.refine > 0) ell = o.refine;
+      else {
+        // chord rule: an edge of length l under a map with second derivative H sags l^2 H / 8 off the true image, so
+        // l = sqrt(8 eps / H) keeps every warped edge within eps of the exact deformation; capped at L / 16 in case
+        // the 5^3-grid estimate of H missed a local bend
+        const H = D.curvature(), eps = num(o.tolerance, L / 4000);
+        stats.curvature = H;
+        ell = Math.min(L / 16, H > 1e-12 ? Math.sqrt((8 * eps) / H) : Infinity);
+      }
+      ell = Math.max(ell, L / 4000);
+    }
+    if (ell > 0 && predictAll(ell) > o.maxTris) {
+      // over budget: the coarsest edge that fits (bisection on log l; the prediction falls monotonically with l)
+      stats.refineCapped = true;
+      const top = Math.max(...pieces.map((pc) => pc.maxEdge), ell);
+      if (predictAll(top) > o.maxTris) ell = 0; // already over budget unrefined: do not refine at all
+      else {
+        let lo = ell, hi = top;
+        for (let k = 0; k < 24; k++) {
+          const mid = Math.sqrt(lo * hi);
+          if (predictAll(mid) > o.maxTris) lo = mid; else hi = mid;
+        }
+        ell = hi;
+      }
+    }
+    for (let attempt = 0; ; attempt++) {
+      let tris = rigidTris;
+      for (const pc of pieces) {
+        pc.ref = ell > 0 && pc.maxEdge > ell ? own(pc.src.refineToLength(ell / pc.sc)) : pc.src;
+        tris += pc.ref.numTri();
+      }
+      if (!(ell > 0) || tris <= o.maxTris * 1.1 || attempt >= 2) break;
+      // the prediction was short (it is within ~10 % on the families): coarsen by the miss and redo once more
+      for (const pc of pieces) if (pc.ref !== pc.src) free(pc.ref);
+      ell *= Math.sqrt((tris - rigidTris) / Math.max(1, o.maxTris - rigidTris)) * 1.05;
+      stats.refineCapped = true;
+    }
+    if (stats.refineCapped) warnings.add('refine-capped');
+    stats.edge = ell;
+    stats.refined = pieces.filter((pc) => pc.ref !== pc.src).length;
+    tl = lap('refine', tl);
+    const perPiece = Math.max(100, Math.floor(6000 / Math.max(1, pieces.length)));
+    for (const pc of pieces) {
+      const m = own(warpManifold(pc.ref, (verts, count) => {
+        // a stride of the vertices, before they move, for the fold check (about 6000 samples in all)
+        const stride = Math.max(1, Math.floor(count / perPiece));
+        const M = pc.M;
+        if (M) { // local -> world first
+          for (let o = 0; o < 3 * count; o += 3) {
+            const x = verts[o], y = verts[o + 1], z = verts[o + 2];
+            verts[o] = M[0] * x + M[4] * y + M[8] * z + M[12];
+            verts[o + 1] = M[1] * x + M[5] * y + M[9] * z + M[13];
+            verts[o + 2] = M[2] * x + M[6] * y + M[10] * z + M[14];
+          }
+        }
+        for (let i = 0; i < count; i += stride) foldAt([verts[3 * i], verts[3 * i + 1], verts[3 * i + 2]]);
+        D.warpBatch(verts, count);
+      }, o.warpViaMesh));
+      if (m.status() !== 'NoError') warnings.add(`not-manifold:${pc.p.name}`);
+      else if (!(m.volume() > 0)) warnings.add('fold');
+      if (pc.ref !== pc.src) free(pc.ref);
+      free(pc.src);
+      const meta = { ...pc.p.meta, deform: 'warp' };
+      if (plan[pc.pi].n > 1) meta.instance = pc.i;
+      (out[pc.pi] ||= []).push({ ...pc.p, manifold: m, transforms: null, meta });
+      if (pc.i === 0) stats.warped.push(pc.p.name);
+    }
+  } catch (e) {
+    for (const m of created) { try { m.delete(); } catch (e2) { /* already freed */ } }
+    created.clear();
+    throw e;
   }
   tl = lap('warp', tl);
 

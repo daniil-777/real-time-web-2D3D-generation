@@ -318,6 +318,57 @@ await t('empty part passes through; re-grounding reported', () => {
   assert.ok(r.stats.ground > 0, 'lifted back onto z = 0');
   return `lifted ${r.stats.ground.toFixed(3)} m`;
 });
+await t('no leaks: a throw mid-loop frees every Manifold deformParts created', () => {
+  // record every Manifold made by the calls deformParts uses, inject a failure, check what survives
+  // (the methods live on the prototype of Manifold instances, which is not W.Manifold.prototype in this binding)
+  const P = Object.getPrototypeOf(W.Manifold.cube([1, 1, 1])), orig = { transform: P.transform, refineToLength: P.refineToLength, warpBatch: P.warpBatch, ofMesh: W.Manifold.ofMesh };
+  let made = [], fail = null;
+  const calls = { transform: 0, refineToLength: 0, warpBatch: 0 };
+  const wrap = (name) => function (...a) {
+    calls[name]++;
+    if (fail && fail.name === name && calls[name] === fail.at) throw new Error(`injected ${name} failure`);
+    const r = orig[name].apply(this, a); made.push(r); return r;
+  };
+  const install = () => { P.transform = wrap('transform'); P.refineToLength = wrap('refineToLength'); P.warpBatch = wrap('warpBatch');
+    W.Manifold.ofMesh = (...a) => { const r = orig.ofMesh(...a); made.push(r); return r; }; };
+  const restore = () => { Object.assign(P, { transform: orig.transform, refineToLength: orig.refineToLength, warpBatch: orig.warpBatch }); W.Manifold.ofMesh = orig.ofMesh; };
+  // a mirrored large instanced part (Manifold transform), two long boxes (refined), all warped by a twist
+  const wedge = W.Manifold.cylinder(2, 0.4, 0.1, 24).translate([0.6, 0, 0]);
+  const parts = [part('wedge', 'stone', wedge, instances([mat.mul(mat.T(-0.2, 0, 0), mat.S(-1, 1, 1)), mat.T(0.2, 0, 0)])),
+    part('post', 'stone', box(-1.2, -0.1, 0, -1, 0.1, 2)), part('post2', 'stone', box(1, -0.1, 0, 1.2, 0.1, 2))];
+  const ops = [{ type: 'twist', axis: 'z', angle: 160 }];
+  const notes = [];
+  try {
+    for (const f of [{ name: 'warpBatch', at: 3 }, { name: 'refineToLength', at: 2 }]) {
+      made = []; fail = f; for (const k in calls) calls[k] = 0;
+      install();
+      assert.throws(() => deformParts(parts, ops), /injected/);
+      restore();
+      assert.ok(made.length >= 2, `created ${made.length} before the failure`);
+      for (const m of made) assert.ok(m.isDeleted(), `${f.name} failure: a created Manifold survived`);
+      for (const p of parts) { assert.ok(!p.manifold.isDeleted(), 'input deleted'); assert.ok(p.manifold.volume() > 0); }
+      notes.push(`${f.name} #${f.at}: ${made.length} freed`);
+    }
+    // and on success only the returned pieces are alive
+    made = []; fail = null; install();
+    const r = deformParts(parts, ops);
+    restore();
+    const outs = new Set(r.parts.map((q) => q.manifold));
+    for (const m of made) assert.equal(m.isDeleted(), !outs.has(m), 'only outputs survive');
+    notes.push(`success: ${made.length} made, ${made.filter((m) => !m.isDeleted()).length} alive = ${r.parts.length} outputs`);
+  } finally { restore(); }
+  return notes.join('; ');
+});
+await t('overlap warning when a bend closes on itself', () => {
+  const rail = part('rail', 'stone', box(-2, -0.05, 0, 2, 0.05, 0.1)), deep = part('deep', 'stone', box(-2, -0.4, 0, 2, 0.4, 0.3));
+  const w = (p, angle) => deformParts([p], [{ type: 'bend', axis: 'x', angle }]).warnings;
+  assert.ok(w(rail, 330).includes('overlap'), '330°');
+  assert.ok(w(rail, -340).includes('overlap'), '-340°');
+  assert.ok(!w(rail, 300).includes('overlap'), 'thin rail at 300° leaves a gap');
+  assert.ok(w(deep, 300).includes('overlap'), 'deep run at 300°: gap 2R sin 30° = 0.76 m < 0.8 m depth');
+  assert.ok(!w(deep, 180).includes('overlap'));
+  return 'rail 330°/-340° overlap, 300° not; deep 300° overlap';
+});
 await t('fold check: a bend tighter than the depth folds; 400° overlaps', () => {
   const thick = part('slab', 'stone', box(-0.25, -0.3, 0, 0.25, 0.3, 0.2));
   const r = deformParts([thick], [{ type: 'bend', axis: 'x', angle: 300 }]);
