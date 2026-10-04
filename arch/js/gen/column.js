@@ -2,7 +2,7 @@
 // also pilasters and the capital / base / pedestal on their own. Z-up, metres, base centre at the origin, front -Y.
 
 import { ORDERS, columnDims } from '../orders.js';
-import { K, TAU, mat, revolve, loft, box, union, part, radial, instances, tube, extrudeXY } from '../kernel.js';
+import { K, TAU, mat, revolve, loft, box, union, part, radial, instances, tube, extrudeXY, memo } from '../kernel.js';
 import { Prof } from '../profiles.js';
 import { acanthusLeaf, voluteScroll, eggAndDart, rosette, extrudeElevation } from '../ornament.js';
 
@@ -473,7 +473,29 @@ function pilasterParts(spec, d) {
 
 // ------------------------------------------------------------------------------------------------ assembly
 
+/**
+ * Every measure of a column is a multiple of its lower diameter D, so the family is built once at D = 1 per shape
+ * (order, element, flutes, base, pedestal, entasis, detail) and scaled: changing only the height or diameter costs a
+ * scale, not a rebuild. Scaled handles share the cached geometry; deleting them leaves the cache intact.
+ */
 export function build(spec) {
+  const D = dimsFor(spec).D;
+  const shape = { ...spec, height: undefined, diameter: 1, material: undefined, style: undefined, seed: undefined };
+  const key = 'column:' + JSON.stringify(shape, Object.keys(shape).sort());
+  const unit = memo(key, () => {
+    const ps = buildUnit(shape);
+    for (const p of ps) p.manifold.numTri(); // evaluate now: the cache holds finished meshes
+    return ps;
+  });
+  const S = mat.S(D), Si = mat.S(1 / D);
+  return unit.map((p) => ({
+    ...p, meta: { ...p.meta }, manifold: p.manifold.scale(D),
+    transforms: p.transforms ? instances(Array.from({ length: p.transforms.length / 16 }, (_, i) =>
+      mat.mul(S, p.transforms.subarray(16 * i, 16 * i + 16), Si))) : null,
+  }));
+}
+
+function buildUnit(spec) {
   const d = dimsFor(spec), segs = segsFor(spec.detail), o = d.o;
   const baseKind = spec.base ?? o.base;
   const style = o.base === 'gothic' || o.base === 'stepped' || o.base === 'disc' ? o.base : null;

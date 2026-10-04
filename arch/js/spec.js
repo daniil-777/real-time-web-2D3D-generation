@@ -71,7 +71,7 @@ export const DEFAULTS = {
   pedestal: { order: 'tuscan', material: 'limestone' },
   entablature: { order: 'ionic', length: 3, returns: true, material: 'limestone' },
   cornice: { order: 'corinthian', length: 3, returns: true, material: 'limestone' },
-  moulding: { profile: 'ovolo', enrichment: 'egg-and-dart', length: 1.2, height: 0.16, material: 'plaster' },
+  moulding: { profile: 'ovolo', length: 1.2, height: 0.16, material: 'plaster' },
   pediment: { pediment: 'triangular', order: 'ionic', width: 5, material: 'limestone' },
   portico: { order: 'ionic', columns: 4, pediment: 'triangular', steps: 3, material: 'limestone' },
   balustrade: { baluster: 'vase', length: 3, height: 0.95, urns: false, material: 'limestone' },

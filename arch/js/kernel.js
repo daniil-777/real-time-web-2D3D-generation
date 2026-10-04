@@ -3,10 +3,23 @@
 // (the layout of three.js Matrix4.elements and of Manifold.transform).
 // Spec: /Volumes/LaCie/morph3d/work/2026-10-04-arch-studio-design.md
 
-let W = null;
+let W = null, GEN = 0;
+const MEMO = new Map();
 
-/** Inject the Manifold module (after `await Module(); wasm.setup()`), once, before any generator runs. */
-export function setKernel(wasm) { W = wasm; }
+/** Inject the Manifold module (after `await Module(); wasm.setup()`). A new module (a recycled worker, a recovered
+ *  crash) starts a new generation: everything memoised for the old one is dropped. */
+export function setKernel(wasm) { W = wasm; GEN++; MEMO.clear(); }
+export function kernelGeneration() { return GEN; }
+
+/** Build once per kernel generation and key. The value must not be deleted by callers — hand out derived handles
+ *  (e.g. manifold.scale(k)), which share the cached geometry and are safe to delete. */
+export function memo(key, build) {
+  if (!MEMO.has(key)) {
+    if (MEMO.size > 64) MEMO.delete(MEMO.keys().next().value);
+    MEMO.set(key, build());
+  }
+  return MEMO.get(key);
+}
 export function K() { if (!W) throw new Error('arch kernel: setKernel(wasm) was not called'); return W; }
 
 const TAU = Math.PI * 2;

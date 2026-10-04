@@ -82,7 +82,10 @@ for (const p of prompts) {
         if (g.tris > 2.5e6) row.errors.push(`heavy ${g.tris} tris`);
       } catch (e) {
         if (/Cannot find module|Failed to load|ERR_MODULE_NOT_FOUND/.test(e.message)) row.geomSkipped = 'family missing';
-        else row.errors.push('build threw: ' + e.message.split('\n')[0]);
+        else {
+          row.errors.push('build threw: ' + e.message.split('\n')[0]);
+          await initKernel(); // a WASM error can leave the module unusable: start a fresh one so failures do not cascade
+        }
       }
     } else if (spec && spec.element) row.geomSkipped = 'no family';
   }

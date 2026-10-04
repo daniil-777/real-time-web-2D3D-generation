@@ -87,15 +87,15 @@ export function extrudeElevation(poly, depth, y0 = 0, div = 0) {
 export function voluteScroll({ r0, depth, side = 1, eye = 0.13, turns = 2.75, channel = 0.32, groove = 0.05, pinch = 0.18 }) {
   const { Manifold } = K();
   const re = r0 * eye;
-  const sp = spiral(r0, re, turns, 240, side);
+  const sp = spiral(r0, re, turns, pinch > 0 ? 240 : 150, side);
   // disc = the area inside the first turn
   const firstTurn = sp.filter((q) => q[3] <= TAU + 1e-9).map(([x, z]) => [x, z]);
   // the hull of the first turn: a round scroll face without the notch where the spiral closes
   const disc = K().CrossSection.hull([crossSection(firstTurn)]);
-  let body = extrudeElevation(disc, depth, -depth / 2, 28);
+  let body = extrudeElevation(disc, depth, -depth / 2, pinch > 0 ? 28 : 0);
   // the bolster narrows toward its middle (the balteus)
   // the pulvinus keeps a straight top under the abacus and narrows below and at the sides
-  body = body.warp((v) => {
+  if (pinch > 0) body = body.warp((v) => {
     const w = pinch * Math.exp(-((v[1] / (0.22 * depth)) ** 2)), below = v[2] < 0 ? 1 : 1 - Math.min(1, v[2] / r0) ** 0.5;
     v[0] *= 1 - w * (0.6 + 0.4 * below); v[2] *= 1 - w * below;
   });
