@@ -480,7 +480,7 @@ function pilasterParts(spec, d) {
  */
 export function build(spec) {
   const D = dimsFor(spec).D;
-  const shape = { ...spec, height: undefined, diameter: 1, material: undefined, style: undefined, seed: undefined };
+  const shape = { ...spec, height: undefined, diameter: 1, material: undefined, style: undefined, seed: undefined, given: undefined };
   const key = 'column:' + JSON.stringify(shape, Object.keys(shape).sort());
   const unit = memo(key, () => {
     const ps = buildUnit(shape);
