@@ -429,12 +429,16 @@ function capitalParts(spec, d, segs) {
 // ------------------------------------------------------------------------------------------------ pedestal
 
 function pedestalParts(d, half) {
+  // Vignola's pedestal: base (plinth, torus, cyma reversa), die, and a cornice that projects about its own height
+  // (cyma reversa, corona with drip, cymatium)
   const P = d.ped, a = half, D = d.D;
-  const baseH = 0.12 * P, capH = 0.11 * P;
-  const base = new Prof(0.1 * D).fillet(baseH * 0.55).cymaReversa(-0.07 * D, baseH * 0.35).fillet(baseH * 0.1, -0.012 * D);
+  const baseH = 0.13 * P, capH = 0.1 * P, k = baseH;
+  const base = new Prof(0.13 * D).fillet(k * 0.42).torus(k * 0.18, 0.7).fillet(k * 0.06, -0.03 * D)
+    .cymaReversa(-0.08 * D, k * 0.26).fillet(k * 0.08, -0.01 * D);
   const die = new Prof(0).fillet(P - baseH - capH + 0.002);
-  const cap = new Prof(0).fillet(capH * 0.08, 0).cymaReversa(0.045 * D, capH * 0.3).fillet(capH * 0.42, 0.02 * D).ovolo(0.025 * D, capH * 0.2, 6)
-    .out(-0.09 * D);
+  const c = capH;
+  const cap = new Prof(0).fillet(c * 0.06, 0).bead(c * 0.08).cymaReversa(0.06 * D, c * 0.22).fillet(c * 0.3, 0.035 * D)
+    .cavetto(-0.012 * D, c * 0.06, 4).cymaRecta(0.04 * D, c * 0.22).fillet(c * 0.06, 0.004 * D).out(-0.137 * D);
   const m = (p, z0) => { const { rings, zs } = p.toRings(a, a, z0); return loft(rings, zs); };
   return [part('pedestal', 'stone', union([m(base, 0), m(die, baseH - 0.001), m(cap, P - capH)]))];
 }
