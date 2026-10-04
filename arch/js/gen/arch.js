@@ -10,7 +10,7 @@
 // constructions (equilateral pointed arch, Cordoban horseshoe, three- and four-centred arches), documented in archGeom().
 
 import { ORDERS, entablatureDims } from '../orders.js';
-import { K, mat, revolve, box, union, part, instances, loft, crossSection, extrudeXY } from '../kernel.js';
+import { K, mat, revolve, box, union, part, instances, loft, crossSection, extrudeXY, memo } from '../kernel.js';
 import { Prof } from '../profiles.js';
 import { extrudeElevation, rosette, acanthusLeaf } from '../ornament.js';
 import { normalize, DEFAULTS } from '../spec.js';
@@ -623,7 +623,8 @@ function voussoirParts(L) {
     const keyXf = plan.groups.find((q) => q.name === 'keystone').xf;
     const xf = [];
     for (const k of keyXf) for (const m of o.local) xf.push(mat.mul(k, m));
-    parts.push(part(o.name + (o.suffix || ''), 'stone', o.solid, instances(xf)));
+    // a derived handle: the caller owns (and may delete) what build() returns, the memoised carving stays intact
+    parts.push(part(o.name + (o.suffix || ''), 'stone', o.solid.translate([0, 0, 0]), instances(xf)));
   }
   return parts;
 }
@@ -713,19 +714,15 @@ function classicalKeystone(L, a, deg) {
   return key;
 }
 
-const ornCache = new Map();
-/** Scrolls and leaf of a console keystone in units of the key's height (widths quantised for the cache). */
+/** Scrolls and leaf of a console keystone in units of the key's height (widths quantised for the memo). Memoised per
+ *  kernel generation (kernel.memo): never hand these out - parts get derived handles (see voussoirParts). */
 function consoleOrnament(wt, wb) {
   wt = Math.round(wt * 50) / 50; wb = Math.round(wb * 50) / 50;
-  const k = `${wt}|${wb}`;
-  if (!ornCache.has(k)) {
-    ornCache.set(k, {
-      big: keyScroll(0.2, 0.86 * wt, 2.2, 0.2),
-      small: keyScroll(0.12, 0.8 * wb, 1.8, 0.24),
-      leaf: acanthusLeaf({ h: 0.56, w: 0.62 * wb, lean: 0.0, curl: 0.35, lobes: 3, nu: 14, nv: 30 }),
-    });
-  }
-  return ornCache.get(k);
+  return memo(`arch|key-ornament|${wt}|${wb}`, () => ({
+    big: keyScroll(0.2, 0.86 * wt, 2.2, 0.2),
+    small: keyScroll(0.12, 0.8 * wb, 1.8, 0.24),
+    leaf: acanthusLeaf({ h: 0.56, w: 0.62 * wb, lean: 0.0, curl: 0.35, lobes: 3, nu: 14, nv: 30 }),
+  }));
 }
 
 /**
@@ -923,7 +920,8 @@ function engagedColumns(L) {
     const own = p.transforms ? splitInst(p.transforms) : [mat.I()];
     const xf = [];
     for (const q of places) for (const m of own) xf.push(mat.mul(q, m));
-    return { ...p, name: `column-${p.name}`, transforms: instances(xf) };
+    // a derived handle per build: the caller owns (and may delete) it, the memoised column stays intact
+    return { ...p, meta: { ...p.meta }, name: `column-${p.name}`, manifold: p.manifold.translate([0, 0, 0]), transforms: instances(xf) };
   });
 }
 
@@ -942,10 +940,12 @@ function splitInst(t) { return Array.from({ length: t.length / 16 }, (_, i) => t
  * and 10 x 22. A Corinthian column is ~480k triangles at every detail level of column.js.
  */
 const COL_REF = 3;
-const colCache = new Map();
+// memoised per kernel generation (kernel.memo); the parts handed out are derived handles (columnHandles)
 function referenceColumn(order, detail, step) {
-  const key = `${order}|${detail}|${step}`;
-  if (colCache.has(key)) return colCache.get(key);
+  return memo(`arch|column|${order}|${detail}|${step}`, () => buildReferenceColumn(order, detail, step));
+}
+
+function buildReferenceColumn(order, detail, step) {
   let parts;
   if (step === 0) parts = buildColumn(normalize({ element: 'column', order, height: COL_REF, detail }).spec);
   else {
@@ -959,22 +959,21 @@ function referenceColumn(order, detail, step) {
       return p;
     });
   }
-  colCache.set(key, parts);
   return parts;
 }
 
 /** The lightening steps of an order's column: leaves first, then its plain parts from the heaviest down. */
 function lightSteps(order, detail) {
-  const key = `steps|${order}|${detail}`;
-  if (colCache.has(key)) return colCache.get(key);
+  return memo(`arch|column-steps|${order}|${detail}`, () => planLightSteps(order, detail));
+}
+
+function planLightSteps(order, detail) {
   const base = referenceColumn(order, detail, 0);
   const hasLeaves = base.some((p) => p.name === 'leaf-lower');
   const heavy = base.filter((p) => !/leaf/.test(p.name) && p.manifold.numTri() > 800)
     .map((p) => ({ name: p.name, w: p.manifold.numTri() * (p.transforms ? p.transforms.length / 16 : 1) }))
     .sort((a, b) => b.w - a.w).map((q) => ({ simplify: q.name }));
-  const steps = [...(hasLeaves ? [{ leaves: [20, 44] }] : []), ...heavy, ...(hasLeaves ? [{ leaves: [14, 30] }, { leaves: [10, 22] }] : [])];
-  colCache.set(key, steps);
-  return steps;
+  return [...(hasLeaves ? [{ leaves: [20, 44] }] : []), ...heavy, ...(hasLeaves ? [{ leaves: [14, 30] }, { leaves: [10, 22] }] : [])];
 }
 
 /** The column for `count` copies within `budget` triangles, and its scale from the reference height. */
@@ -997,7 +996,8 @@ function columnParts(L) {
     const own = p.transforms ? splitInst(p.transforms) : [mat.I()];
     const xf = [];
     for (const x of xs) for (const m of own) xf.push(mat.mul(mat.T(x, 0, 0), mat.S(f), m));
-    return { ...p, name: `column-${p.name}`, transforms: instances(xf) };
+    // a derived handle per build: the caller owns (and may delete) it, the memoised column stays intact
+    return { ...p, meta: { ...p.meta }, name: `column-${p.name}`, manifold: p.manifold.translate([0, 0, 0]), transforms: instances(xf) };
   });
   // dosseret: a block of entablature (architrave fascia, frieze, small cornice) as in Brunelleschi's loggia
   const D = L.D, a = L.P / 2, t = L.T / 2 + 0.03 * D, h = L.hDos, n = L.detail === 'high' ? 8 : 4;

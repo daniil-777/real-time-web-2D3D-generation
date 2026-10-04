@@ -95,6 +95,33 @@ for (const c of cases) {
     rows.push(`FAIL ${c.name.padEnd(44)} ${err.message.split('\n')[0]}`);
   }
 }
+// Ownership (family conventions, "Ownership of returned manifolds"): the caller owns and may delete every returned
+// manifold. Build, delete everything, build the same again; then re-initialise the kernel and build once more.
+const OWN = [
+  { element: 'arcade', bays: 5, supports: 'columns', order: 'tuscan' },     // the crash: memoised columns
+  { element: 'arch', order: 'corinthian' },                                  // console keystone carvings + half-columns
+  { element: 'arcade', order: 'corinthian', supports: 'columns' },           // lightened columns
+  { element: 'arch', archType: 'horseshoe' }, { element: 'arch', material: 'brick', archType: 'pointed' },
+];
+const freeAll = (r) => { const seen = new Set(); for (const p of r.parts) if (!seen.has(p.manifold)) { seen.add(p.manifold); p.manifold.delete(); } };
+const ownRound = async (label) => {
+  for (const spec of OWN) {
+    const name = `ownership ${label}: ${JSON.stringify(spec)}`;
+    try {
+      const r = await generate(spec);
+      for (const p of r.parts) assert.equal(p.manifold.status(), 'NoError', `${p.name} not manifold`);
+      const tol = r.expected.tol ?? 0.005;
+      assert.ok(Math.abs(r.size[0] - r.expected.size.x) <= tol * r.expected.size.x, `x ${r.size[0]} vs ${r.expected.size.x}`);
+      freeAll(r);
+      rows.push(`ok   ${name}`);
+    } catch (err) { fails++; rows.push(`FAIL ${name} ${err.message.split('\n')[0]}`); }
+  }
+};
+await ownRound('first build, then delete');
+await ownRound('rebuild after delete');
+await initKernel();
+await ownRound('fresh kernel');
+
 console.log(rows.join('\n'));
-console.log(`\n${cases.length - fails}/${cases.length} passed; slowest ${Math.round(worst.ms)} ms (${worst.name}); most triangles ${maxTris.tris} (${maxTris.name})`);
+console.log(`\n${cases.length + 3 * OWN.length - fails}/${cases.length + 3 * OWN.length} passed; slowest ${Math.round(worst.ms)} ms (${worst.name}); most triangles ${maxTris.tris} (${maxTris.name})`);
 if (fails) process.exit(1);
