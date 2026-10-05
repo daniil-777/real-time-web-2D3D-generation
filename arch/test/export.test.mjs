@@ -334,11 +334,11 @@ try {
     const crafted = JSON.parse('{"element":"pedestal","order":"tuscan","constructor":"\\u0001","toString":"\\u0002","__proto__":{"x":1}}');
     const s = await sheetFor(crafted);
     if (s) {
-      const bad = 'bad\u0000\u0001\u0008\u000B\u000C\u001F￾￿\uD800x\uDC00y\uDBFF';
+      const bad = 'bad\u0000\u0001\u0008\u000B\u000C\u001F\uFFFE\uFFFF\uD800x\uDC00y\uDBFF';
       const sheet = { ...s.sheet, title: `title ${bad}`, number: `no ${bad}`,
         items: [...s.sheet.items, { t: 'text', x: 10, y: 10, str: `${bad} 🏛 tab\tnl\n`, size: 2, weight: 400, anchor: 'start' }] };
       const svg = D.toSVG(sheet);
-      const XML_BAD = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+      const XML_BAD = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
       ok(!XML_BAD.test(svg) && svg.includes('badxy 🏛 tab\tnl\n'), 'SVG text: XML-invalid characters dropped, a surrogate pair kept');
       ok(!/constructor|toString|__proto__/.test(D.toSVG(s.sheet)) && !Object.hasOwn(s.spec, 'constructor'), 'inherited names of a crafted spec reach neither the spec nor the sheet');
     }
