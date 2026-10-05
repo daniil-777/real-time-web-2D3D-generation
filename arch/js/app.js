@@ -2,6 +2,8 @@
 // examples, exports, the A3 drawing sheet, the transform panel, the idle showcase and the URL. Exposes
 // window.__arch = { ready, errors, busy, last, run, drawing, showcase } for the site and tests.
 //
+// Grips: parametric handles over the canvas (grips.js descriptors; drag, type, nudge), undo / redo (Cmd/Ctrl+Z).
+//
 // URL: ?q=<prompt>  ?spec=<json> (bypasses the parser; q is then only shown)  &deform=<transform>  &mode=stone|white|line
 //      &view=three-quarter|front|side|top  &shot=1 (canvas only)  &embed=1 (inside the site: the showcase runs at once)
 //      &showcase=1 (run the idle showcase now, and again after 12 s idle) | 0 (never)
@@ -26,7 +28,7 @@ const EMBED = Q.get('embed') === '1';
 // temporaries behind), after an error of the kernel itself (abort, out of bounds, unreachable…: the build is retried
 // once on the fresh worker), and by a watchdog when a build, the preview geometry, an export or a drawing does not answer
 // within its time limit (that request is reported as what hung; a build caught in the restart is sent again).
-const HEAP_LIMIT_MB = 512, MAX_BUILDS = 25, BUILD_TIMEOUT_MS = 45000, EXPORT_TIMEOUT_MS = 90000;
+const HEAP_LIMIT_MB = 512, MAX_BUILDS = 60, BUILD_TIMEOUT_MS = 45000, EXPORT_TIMEOUT_MS = 90000;
 // what the watchdog says of the request that hung, by its type
 const HUNG = { build: 'building this', base: 'preparing the live preview', export: 'exporting', drawing: 'drawing the sheet' };
 
@@ -252,6 +254,9 @@ const SC = { on: false, paused: false, gen: 0, i: 0, timer: 0, idleT: 0, typeT: 
   forced: Q.get('showcase') === '1',
   allowed: Q.get('showcase') === '1' || (!SHOT && Q.get('showcase') !== '0' && !Q.get('q') && !Q.get('spec') && !Q.get('deform')) };
 A.showcase = { running: false, index: -1, phase: '', shown: [] };
+// the parametric grips (see "grips" below): their descriptors, buttons, the drag / typed entry under way
+const COARSE = matchMedia('(pointer: coarse)');
+const G = { list: [], els: new Map(), drag: null, typing: null, hover: null, focus: null, shown: !COARSE.matches, buildT: 0, urlT: 0 };
 
 
 const stage = $('#stage'), msgEl = $('#msg');
@@ -271,7 +276,7 @@ function toast(text) {
   toastT = setTimeout(() => { t.hidden = true; }, 5000);
 }
 /** Announce to screen readers (only finished builds and answers, never every typing pause). */
-const announce = (text) => { if (!SC.on) $('#sr').textContent = text; };   // the showcase speaks once, not every example
+const announce = (text) => { if (!SC.on && !G.drag) $('#sr').textContent = text; };   // the showcase speaks once, not every example; a grip drag on release
 
 const builder = new Builder((m) => { fail(m); A.busy = false; stage.classList.remove('busy'); },
   (id, list) => {
@@ -359,7 +364,10 @@ async function build() {
     const dimsNow = !dragging();
     if (dimsNow) renderDims(null, r.stats);
     if (reveal) viewer.beginReveal();
-    await viewer.setModel(r.meshes, r.stats, { keepCamera: reason === 'deform' && S.stats && S.stats.spec.element === r.stats.spec.element,
+    // a grip drag holds the view still (the element grows under the pointer); a deformation, a grip's release and an
+    // undo keep it unless the element left the frame
+    const same = S.stats && S.stats.spec.element === r.stats.spec.element;
+    await viewer.setModel(r.meshes, r.stats, { keepCamera: reason === 'griplive' && same ? 'hold' : ['deform', 'grip', 'undo', 'griplive'].includes(reason) && same,
       keepPreview: dragging() });
     if (reveal && SC.on) viewer.reveal(1100);
     else if (reveal) viewer.endReveal();            // the showcase was stopped while this model was being shown
@@ -386,7 +394,8 @@ async function build() {
     if (!dragging()) { if (!dimsNow) renderDims(); renderX(); }     // a drag keeps its live estimates until its own bake lands
     syncButtons();
     $('#c').setAttribute('aria-label', `3D view of the ${interp}. Arrow keys orbit, + and − zoom, F frames the whole element.`);
-    announce(`Built: ${interp}${r.stats.deform ? ', transformed' : ''}.`);
+    if (reason !== 'griplive') announce(`Built: ${interp}${r.stats.deform ? ', transformed' : ''}.`);
+    refreshGrips();
     A.last = { prompt, spec: r.stats.spec, interpretation: interp, ms: r.stats.totalMs, buildMs: r.stats.ms, tris: r.stats.tris,
       size: r.stats.size, warnings: r.stats.warnings, parts: r.stats.parts, instances: r.stats.instances, mode: viewer.mode, view: viewer.view,
       heapMB: r.stats.heapMB, workerBuilds: r.stats.builds, recycled: builder.recycled,
@@ -411,17 +420,27 @@ async function build() {
     if (queued) build();
     else {
       stage.classList.remove('busy'); idleWaiters.splice(0).forEach((r) => r());
+      // nothing more is coming: a submit waiting for its result has it now, built or failed (C6)
+      settleWaiters.slice().forEach((w) => w.done());
       // nothing more is coming and nobody is dragging: the baked model, never a stale preview, is what shows
       if (viewer && viewer.previewing && !dragging()) viewer.showPreview(false);
     }
   }
 }
 
-let debounce = 0;
-function specChanged() {
+let debounce = 0, debouncing = false;
+/** A spec-card edit: build after a pause (ms: 120 for selects and switches; integer fields wait longer, so typing "12"
+ *  does not build a 1 first, and build at once on change / Enter: flushSpec). */
+function specChanged(ms = 120) {
   S.edited = true;
+  clearTimeout(debounce); debouncing = true;
+  debounce = setTimeout(flushSpec, ms);
+}
+function flushSpec() {
   clearTimeout(debounce);
-  debounce = setTimeout(() => { syncURL(); requestBuild(); }, 120);
+  if (!debouncing) return;
+  debouncing = false;
+  syncURL(); requestBuild();
 }
 
 /** Interpret a prompt and build it. Resolves when the result is on screen (or answered out of scope). */
@@ -444,6 +463,7 @@ async function submit(text, initialX = null, { keepPanel = false } = {}) {
     return;
   }
   renderOOS(null);
+  if (!SC.on) pushHistory();              // a new request is one step back (not the showcase's examples)
   S.prompt = text; S.spec = { ...(p.spec || {}) }; S.edited = false;
   resetX(false);
   if (initialX) { S.x = initialX; if (!keepPanel) $('#xform').open = !isIdentityX(); }
@@ -452,14 +472,14 @@ async function submit(text, initialX = null, { keepPanel = false } = {}) {
   requestBuild();
   return waitLast(text);
 }
+/** Resolves when the build pipeline is next idle (the request built, or failed: C6), with what is on screen; 30 s at most. */
+const settleWaiters = [];
 function waitLast(prompt) {
   return new Promise((resolve) => {
-    const t0 = performance.now();
-    const check = () => {
-      if ((A.last && A.last.prompt === prompt && !A.busy) || performance.now() - t0 > 30000) resolve(A.last);
-      else setTimeout(check, 50);
-    };
-    check();
+    const w = { prompt, done: () => { clearTimeout(w.t); const i = settleWaiters.indexOf(w); if (i >= 0) settleWaiters.splice(i, 1); resolve(A.last); } };
+    w.t = setTimeout(w.done, 30000);
+    settleWaiters.push(w);
+    if (!inflight && !queued) w.done();
   });
 }
 A.run = submit;
@@ -494,9 +514,12 @@ function renderOOS(p) {
   for (const s of list) c.append(chip(typeof s === 'string' ? s : s.text || s.prompt || String(s)));
 }
 
+// the examples in other languages are read in their own (screen readers)
+const LANG = { 'Kranzgesims mit Zahnschnitt': 'de', 'Colonne dorique cannelée': 'fr' };
 function chip(text) {
   const b = document.createElement('button');
   b.type = 'button'; b.className = 'chip'; b.textContent = text;
+  if (LANG[text]) b.lang = LANG[text];
   b.addEventListener('click', () => { submit(text); });
   return b;
 }
@@ -581,6 +604,7 @@ function addField(box, k, spec) {
     if (optional) ctl.append(new Option(k === 'style' ? '—' : 'auto', ''));
     for (const v of s.values) ctl.append(new Option(optLabel(k, v), v));
     ctl.addEventListener('change', () => {
+      pushHistory('card-' + k);
       commitSmart();
       if (k === 'element') {
         // a new element starts from its own defaults; keep a material the user chose
@@ -593,7 +617,7 @@ function addField(box, k, spec) {
     });
   } else if (s.type === 'bool') {
     ctl = document.createElement('input'); ctl.type = 'checkbox';
-    ctl.addEventListener('change', () => { commitSmart(); S.spec[k] = ctl.checked; specChanged(); });
+    ctl.addEventListener('change', () => { pushHistory('card-' + k); commitSmart(); S.spec[k] = ctl.checked; specChanged(); });
   } else {
     ctl = document.createElement('input'); ctl.type = 'number'; ctl.inputMode = 'decimal';
     ctl.min = isLen(k) ? round(toUnit(s.min), 2) : s.min; ctl.max = isLen(k) ? round(toUnit(s.max), 1) : s.max;
@@ -601,20 +625,29 @@ function addField(box, k, spec) {
     ctl.placeholder = 'auto';
     ctl.addEventListener('input', () => {
       const v = parseFloat(ctl.value);
+      if (ctl.value !== '' && !Number.isFinite(v)) return;
+      pushHistory('card-' + k);             // one step per burst of typing in a field
       commitSmart();
       if (ctl.value === '' ) S.spec[k] = undefined;
-      else if (Number.isFinite(v)) S.spec[k] = isLen(k) ? round(fromUnit(v), 4) : v;
-      else return;
-      specChanged();
+      else S.spec[k] = isLen(k) ? round(fromUnit(v), 4) : v;
+      specChanged(s.type === 'int' ? 450 : 120);
     });
+    // a count builds when it is complete (change: Enter, Tab, the stepper), not after its first digit (C5)
+    if (s.type === 'int') ctl.addEventListener('change', flushSpec);
   }
   ctl.id = id; ctl.dataset.field = k;
   wrap.append(ctl);
-  if (s.unit) { const u = document.createElement('span'); u.className = 'unit'; u.dataset.unitFor = k; u.textContent = unitText(k); wrap.append(u); }
+  if (s.unit) {
+    const u = document.createElement('span'); u.className = 'unit'; u.dataset.unitFor = k; u.id = 'u-' + k; u.textContent = unitText(k);
+    u.setAttribute('aria-label', unitWord(k));   // read as the field's description: "height, 3.6, metres"
+    ctl.setAttribute('aria-describedby', u.id);
+    wrap.append(u);
+  }
   box.append(lab, wrap);
   setControl(ctl, spec[k]);
 }
 const unitText = (k) => SCHEMA[k].unit === 'm' ? (S.units === 'ft' ? 'ft' : 'm') : SCHEMA[k].unit;
+const unitWord = (k) => ({ m: S.units === 'ft' ? 'feet' : 'metres', '°': 'degrees', deg: 'degrees', mm: 'millimetres', cm: 'centimetres', '%': 'percent' })[SCHEMA[k].unit] || SCHEMA[k].unit;
 
 function setControl(ctl, v) {
   const k = ctl.dataset.field;
@@ -700,8 +733,7 @@ for (const b of document.querySelectorAll('[data-export]')) b.addEventListener('
       created: new Date().toISOString() };
     return download(new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' }), name + '.spec.json');
   }
-  const old = b.textContent;
-  b.disabled = true; b.textContent = '…';
+  b.disabled = true; b.setAttribute('aria-busy', 'true');   // the label stays (a screen reader hears "GLB, busy")
   try {
     await waitIdle();                     // export what is on screen once the running build has landed
     let r;
@@ -717,13 +749,13 @@ for (const b of document.querySelectorAll('[data-export]')) b.addEventListener('
   } catch (e) {
     toast(`The ${f.toUpperCase()} export failed: ${e.message}`);
     console.error('[arch] export failed', e);
-  } finally { b.disabled = false; b.textContent = old; b.focus(); }
+  } finally { b.disabled = false; b.removeAttribute('aria-busy'); b.focus(); }
 });
 // the drawing sheet: computed in the worker, written here as SVG or painted on a canvas at 300 dpi (PNG with its pHYs)
 for (const b of document.querySelectorAll('[data-drawing]')) b.addEventListener('click', async () => {
   if (!S.stats) return;
-  const f = b.dataset.drawing, old = b.textContent;
-  b.disabled = true; b.textContent = '…';
+  const f = b.dataset.drawing;
+  b.disabled = true; b.setAttribute('aria-busy', 'true');
   try {
     const out = await drawingFile(f);
     download(out.blob, `${slug()}-drawing.${f}`);
@@ -731,7 +763,7 @@ for (const b of document.querySelectorAll('[data-drawing]')) b.addEventListener(
   } catch (e) {
     toast(`The drawing failed: ${e.message}`);
     console.error('[arch] drawing failed', e);
-  } finally { b.disabled = false; b.textContent = old; b.focus(); }
+  } finally { b.disabled = false; b.removeAttribute('aria-busy'); b.focus(); }
 });
 
 /** The drawing sheet of the model on screen as a file: { blob, scale, dpi, sheet, ms }. */
@@ -1123,6 +1155,7 @@ function renderPoint() {
 function movePoint(a, value) {
   const L = S.latticeNow, i = S.sel;
   if (!L || i === null || i === undefined) return;
+  pushHistory('pt-' + i);
   const t = [0, 1, 2].map((k) => Math.round((L.moved[3 * i + k]) * 1e4) / 1e4);
   t[a] = Math.round((L.rest[3 * i + a] + value) * 1e4) / 1e4;
   if ($('#x-only').checked) { S.x.plain[i] = t; delete S.x.pins[i]; } else { S.x.pins[i] = t; delete S.x.plain[i]; }
@@ -1199,6 +1232,8 @@ function warnText(d) {
 }
 
 const fmtM = (m) => (S.units === 'ft' ? fmtLen(m, 'ft') : `${m.toFixed(2)} m`);
+const NEUTRAL = { sx: '1×, not stretched', sy: '1×, not stretched', sz: '1×, not stretched', bend: '0°, straight', bow: '0°, straight',
+  twist: '0°, no twist', taper: '1×, no taper', lx: '0 %, upright', ly: '0 %, upright' };
 function renderXOutputs() {
   const x = S.x, info = S.element;
   const extent = (axis, k) => {
@@ -1225,6 +1260,9 @@ function renderXOutputs() {
   for (const id of ['bend', 'bow', 'twist', 'taper', 'lx', 'ly']) $('#o-' + id).classList.toggle('off', $('#o-' + id).textContent === '—');
   // the track is filled from the neutral value (1x, 0°) to the setting, so a bend left reads as left of neutral
   for (const el of document.querySelectorAll('#xform input[type=range]')) {
+    // what a screen reader says for the slider: the readout, not the bare number ("1.20× · 3.60 m", "35°")
+    const out = $('#o-' + el.dataset.x).textContent;
+    el.setAttribute('aria-valuetext', out === '—' ? NEUTRAL[el.dataset.x] : out);
     const span = el.max - el.min, v = (el.value - el.min) / span, n = (XDEF[el.dataset.x] - el.min) / span;
     el.style.setProperty('--lo', `${(100 * Math.min(v, n)).toFixed(1)}%`);
     el.style.setProperty('--hi', `${(100 * Math.max(v, n)).toFixed(1)}%`);
@@ -1253,6 +1291,7 @@ function renderX() {
 for (const el of document.querySelectorAll('#xform [data-x]')) {
   el.addEventListener('pointerdown', () => { S.sliderActive = true; });
   el.addEventListener('input', () => {
+    pushHistory('x-' + el.dataset.x);
     S.x[el.dataset.x] = +el.value;
     $('#xnote').textContent = isIdentityX() ? '' : 'on';
     schedulePreview();
@@ -1266,7 +1305,7 @@ for (const el of document.querySelectorAll('#xform [data-x]')) {
   });
   // double-click the label: back to neutral
   const lab = el.parentElement.querySelector('label');
-  if (lab) lab.addEventListener('dblclick', () => { el.value = XDEF[el.dataset.x]; S.x[el.dataset.x] = XDEF[el.dataset.x]; syncURL(); renderX(); requestBuild('deform'); });
+  if (lab) lab.addEventListener('dblclick', () => { pushHistory(); el.value = XDEF[el.dataset.x]; S.x[el.dataset.x] = XDEF[el.dataset.x]; syncURL(); renderX(); requestBuild('deform'); });
 }
 // a drag can end without a change event (a cancelled touch, the window losing focus): end it and bake what is shown
 function endDrag() {
@@ -1288,20 +1327,21 @@ window.addEventListener('pointerup', () => {
 });
 window.addEventListener('pointercancel', endDrag);
 window.addEventListener('blur', endDrag);
-$('#x-keep').addEventListener('change', (e) => { S.x.keep = e.target.checked; syncURL(); requestBuild('deform'); renderX(); });
-$('#x-rigid').addEventListener('change', (e) => { S.x.rigid = e.target.checked; syncURL(); requestBuild('deform'); maybeBase(); });
+$('#x-keep').addEventListener('change', (e) => { pushHistory(); S.x.keep = e.target.checked; syncURL(); requestBuild('deform'); renderX(); });
+$('#x-rigid').addEventListener('change', (e) => { pushHistory(); S.x.rigid = e.target.checked; syncURL(); requestBuild('deform'); maybeBase(); });
 $('#x-ffd').addEventListener('change', (e) => {
+  pushHistory();
   S.x.ffd = e.target.checked; syncURL(); renderX();
   if (viewer && S.x.ffd && !viewer.fits(0.96)) viewer.frameAll();   // every control point in view
   if (!isIdentityX()) requestBuild('deform');
 });
-$('#x-dims').addEventListener('change', (e) => { S.x.dims = +e.target.value; S.x.pins = {}; S.x.plain = {}; syncURL(); renderX(); requestBuild('deform'); });
-$('#x-reset').addEventListener('click', () => { const was = !isIdentityX(); resetX(); syncURL(); if (was) requestBuild('deform'); });
+$('#x-dims').addEventListener('change', (e) => { pushHistory(); S.x.dims = +e.target.value; S.x.pins = {}; S.x.plain = {}; syncURL(); renderX(); requestBuild('deform'); });
+$('#x-reset').addEventListener('click', () => { const was = !isIdentityX(); if (was) pushHistory(); resetX(); syncURL(); if (was) requestBuild('deform'); });
 $('#xform').addEventListener('toggle', () => { if ($('#xform').open) { maybeBase(); renderX(); } else if (viewer) viewer.setLattice(null); });
 
 // lattice handles: drag = ARAP (neighbours follow), shift-drag = that point only
 viewerReady.then((v) => v.enableHandles({
-  down: (i) => { S.sel = i; renderPoint(); },
+  down: (i) => { pushHistory(); S.sel = i; renderPoint(); },
   move: (i, q, shift) => {
     const t = [q[0], q[1], q[2] - latticeGround].map((a) => Math.round(a * 1e4) / 1e4);
     if (shift) { S.x.plain[i] = t; delete S.x.pins[i]; } else { S.x.pins[i] = t; delete S.x.plain[i]; }
@@ -1350,6 +1390,400 @@ function decodeX(str) {
   }
   return x;
 }
+
+// ------------------------------------------------------------------------------------------------ undo / redo
+//
+// Whole-state snapshots of { request spec, transform state, prompt } (a few hundred bytes each), at most 100. A grip
+// gesture is one step (pushed on release; Esc bails out without one); a burst of the same edit (typing in a card
+// field, one slider's drag, arrow nudges of one grip) is one step too.
+const HIST = { past: [], future: [], tag: '', at: 0, limit: 100 };
+const snapshot = () => ({ spec: structuredClone(clean(S.spec)), x: structuredClone(S.x), edited: S.edited, prompt: S.prompt, parsed: S.parsed });
+function pushSnap(snap) {
+  HIST.past.push(snap);
+  if (HIST.past.length > HIST.limit) HIST.past.splice(0, HIST.past.length - HIST.limit);
+  HIST.future.length = 0;
+  syncHistory();
+}
+/** Record the state before an edit. tag: edits of the same kind within 1.5 s of each other make one step. */
+function pushHistory(tag = '') {
+  if (SC.on || !S.stats || G.drag) return;          // the showcase and the first load are not edits; a drag pushes on release
+  const now = performance.now();
+  if (tag && tag === HIST.tag && now - HIST.at < 1500) { HIST.at = now; return; }
+  HIST.tag = tag; HIST.at = now;
+  pushSnap(snapshot());
+}
+function restoreState(snap, reason = 'undo') {
+  S.spec = { ...snap.spec }; S.x = structuredClone(snap.x); S.edited = snap.edited; S.prompt = snap.prompt; S.parsed = snap.parsed;
+  S.applied = { sx: 1, sy: 1, sz: 1 }; S.baseSize = null; S.baseNorm = null;
+  $('#prompt').value = S.prompt;
+  if (viewer) { viewer.setLattice(null); viewer.showPreview(false); }
+  renderX(); syncURL();
+  requestBuild(reason);
+}
+function undo() {
+  if (G.drag || !HIST.past.length) return;
+  closeTyped();
+  HIST.future.push(snapshot()); HIST.tag = '';
+  restoreState(HIST.past.pop());
+  syncHistory();
+}
+function redo() {
+  if (G.drag || !HIST.future.length) return;
+  closeTyped();
+  HIST.past.push(snapshot()); HIST.tag = '';
+  restoreState(HIST.future.pop());
+  syncHistory();
+}
+function syncHistory() {
+  $('#undo').disabled = !HIST.past.length; $('#redo').disabled = !HIST.future.length;
+  A.history = { undo: HIST.past.length, redo: HIST.future.length };
+}
+A.undo = undo; A.redo = redo;
+$('#undo').addEventListener('click', undo);
+$('#redo').addEventListener('click', redo);
+window.addEventListener('keydown', (e) => {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+  const t = e.target, k = e.key.toLowerCase();
+  // a text field keeps its own undo
+  if (t && (t.isContentEditable || t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && !['checkbox', 'range', 'button'].includes(t.type)))) return;
+  if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+  else if ((k === 'z' && e.shiftKey) || (k === 'y' && e.ctrlKey && !e.metaKey)) { e.preventDefault(); redo(); }
+});
+syncHistory();
+
+// ------------------------------------------------------------------------------------------------ grips
+//
+// Parametric grips (grips.js: one descriptor per parameter of the built element) as buttons over the canvas, placed
+// every frame at their projected anchors. A drag projects the pointer's travel on the screen image of the grip's
+// direction: metres -> value = start + travel x perMetre -> snapped (ticks with hysteresis, so a count does not
+// flicker at a threshold). While dragging, the request spec takes the value and the worker rebuilds, throttled and
+// latest-wins, quietly (no history, no address); the release builds once more and is one undo step; Esc goes back to
+// where the drag started. Click (or Enter on) a grip types its value (parseTyped: units, D modules, +x / -y%); arrows
+// nudge one tick or 1 % (Shift x10). Hidden during the showcase, while the lattice is up or a slider drags, and while a
+// free-form transform is applied (the grips sit on the undeformed element: a hint says so).
+let gripsFor = null, parseTyped = null;
+import('./grips.js').then((m) => { gripsFor = m.gripsFor; parseTyped = m.parseTyped; refreshGrips(); },
+  (e) => console.info('[arch] grips unavailable:', e && e.message ? e.message : e));
+const gLayer = $('#grips'), gBtns = $('#gripBtns'), gTip = $('#gripTip'), gInput = $('#gripInput'), gHint = $('#gripHint');
+const gLine = $('#gaLine'), gTicks = $('#gaTicks');
+const gSize = () => (COARSE.matches ? 44 : 26);
+const gripById = (id) => G.list.find((g) => g.id === id);
+const gripText = (g, v = g.value) => `${g.label} ${g.format(v)}`;
+
+/** Why the grips are off now ('' when they are on). */
+function gripsBlocked() {
+  if (!gripsFor || !S.stats || !viewer || SHOT) return 'none';
+  if (SC.on || viewer.revealPlane) return 'showcase';
+  if (viewer.lattice || dragging()) return 'lattice';
+  if (S.stats.deform) return 'transform';
+  return '';
+}
+
+/** New descriptors for the element on screen (after every build). */
+function refreshGrips() {
+  if (!gripsFor || !S.stats) return;
+  let list = [];
+  try { list = gripsFor(S.stats.spec, { size: S.stats.element.size, bbox: S.stats.element.bbox, expected: S.stats.expected }) || []; }
+  catch (e) { console.warn('[arch] grips failed for this element:', e && e.message ? e.message : e); }
+  G.list = list.filter((g) => g && g.id && Array.isArray(g.anchor) && Array.isArray(g.dir));
+  const keep = new Set(G.list.map((g) => g.id));
+  for (const [id, el] of G.els) if (!keep.has(id)) { el.remove(); G.els.delete(id); }
+  // DOM (tab) order = the descriptors' order; a button that exists stays where it is (moving it would drop its focus
+  // and the pointer capture of a drag under way)
+  let prev = null;
+  for (const g of G.list) {
+    let el = G.els.get(g.id);
+    if (!el) { el = gripButton(g.id); G.els.set(g.id, el); }
+    if (el.parentNode !== gBtns || (prev ? prev.nextSibling !== el : gBtns.firstChild !== el)) {
+      if (!(G.drag && G.drag.id === g.id) && document.activeElement !== el) gBtns.insertBefore(el, prev ? prev.nextSibling : gBtns.firstChild);
+    }
+    prev = el;
+    el.dataset.kind = g.kind;
+    el.setAttribute('aria-label', `${gripText(g)}, drag or press Enter to type`);
+  }
+  A.grips = G.list.map((g) => ({ id: g.id, field: g.field, label: g.label, kind: g.kind, value: g.value, text: g.format(g.value), anchor: g.anchor, dir: g.dir }));
+  if (G.typing && !gripById(G.typing)) closeTyped();
+  positionGrips();
+}
+
+function gripButton(id) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'grip'; b.dataset.grip = id; b.hidden = true;
+  b.addEventListener('pointerenter', () => { G.hover = id; positionGrips(); });
+  b.addEventListener('pointerleave', () => { if (G.hover === id) G.hover = null; positionGrips(); });
+  b.addEventListener('focus', () => { G.focus = id; positionGrips(); });
+  b.addEventListener('blur', () => { if (G.focus === id) G.focus = null; positionGrips(); });
+  b.addEventListener('pointerdown', (e) => gripDown(e, id));
+  b.addEventListener('pointermove', gripMove);
+  b.addEventListener('pointerup', (e) => gripUp(e, false));
+  b.addEventListener('pointercancel', (e) => gripUp(e, false));
+  b.addEventListener('lostpointercapture', (e) => { if (G.drag && G.drag.pid === e.pointerId) gripUp(e, false); });
+  b.addEventListener('click', (e) => { if (e.detail === 0) openTyped(id); });    // Space (Enter is handled below)
+  b.addEventListener('keydown', (e) => gripKey(e, id));
+  return b;
+}
+
+// ---- drag
+
+function gripDown(e, id) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  const g = gripById(id);
+  if (!g || !viewer || gripsBlocked()) return;
+  e.preventDefault(); e.stopPropagation();
+  closeTyped();
+  try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { /* synthetic */ }
+  viewer.controls.enabled = false;                      // a grip drag never orbits
+  G.drag = { id, grip: g, pid: e.pointerId, x0: e.clientX, y0: e.clientY, ax: viewer.screenAxis(g.anchor, g.dir),
+    start: g.value, value: g.value, moved: false, built: false, snap: snapshot(), base: null };
+  e.currentTarget.classList.add('drag');
+  hideHint();
+}
+function gripMove(e) {
+  const d = G.drag;
+  if (!d || e.pointerId !== d.pid) return;
+  const dx = e.clientX - d.x0, dy = e.clientY - d.y0;
+  if (!d.moved) {
+    if (Math.hypot(dx, dy) < 4) return;
+    d.moved = true;
+    commitSmart();                                      // smart stretches become the spec first (as a card edit does)
+    d.base = { ...S.spec };
+  }
+  const v = dragValue(d, dx, dy);
+  if (v !== d.value) {
+    d.value = v;
+    S.spec = { ...d.base, ...d.grip.apply(v) }; S.edited = true;
+    // throttled, latest-wins: at most one request per 120 ms; a build under way takes the newest spec when it ends
+    if (!G.buildT) G.buildT = setTimeout(() => { G.buildT = 0; if (G.drag) { G.drag.built = true; requestBuild('griplive'); } }, 120);
+  }
+  positionGrips();
+}
+/** The value under the pointer: travel along the screen image of dir (or up / down when dir points at the camera). */
+function dragValue(d, dx, dy) {
+  const { vx, vy, ref } = d.ax, len = Math.hypot(vx, vy), g = d.grip;
+  d.vertical = !(len > 0.3 * ref && len > 1e-3);
+  const metres = d.vertical ? -dy / Math.max(ref, 1e-3) : (dx * vx + dy * vy) / (len * len);
+  const raw = d.start + metres * g.perMetre;
+  return snapH(g, raw, d.value);
+}
+/** Snap with hysteresis: a tick (or an integer count) changes only when the pointer is 20 % of a step past the midpoint. */
+function snapH(g, raw, cur) {
+  const ticks = g.ticks && g.ticks.length ? g.ticks.map((t) => t.v).sort((a, b) => a - b) : null;
+  if (ticks) {
+    let best = ticks[0];
+    for (const t of ticks) if (Math.abs(t - raw) < Math.abs(best - raw)) best = t;
+    const i = ticks.indexOf(cur);
+    if (best !== cur && i >= 0) {
+      const n = ticks[raw > cur ? Math.min(i + 1, ticks.length - 1) : Math.max(i - 1, 0)];
+      if (Math.abs(raw - cur) < 0.7 * Math.abs(n - cur)) return cur;
+    }
+    return g.snap(best);
+  }
+  if (g.kind === 'count' && Math.abs(raw - cur) < 0.7) return cur;
+  return g.snap(raw);
+}
+function gripUp(e, cancel) {
+  const d = G.drag;
+  if (!d || (e && e.pointerId !== d.pid)) return;
+  G.drag = null;
+  clearTimeout(G.buildT); G.buildT = 0;
+  const el = G.els.get(d.id);
+  if (el) { el.classList.remove('drag'); try { el.releasePointerCapture(d.pid); } catch (err) { /* released */ } }
+  if (viewer) viewer.controls.enabled = true;
+  if (!d.moved && !cancel) { openTyped(d.id); return; }       // a click: type the value (a drag needs no dragging, WCAG 2.5.7)
+  if (cancel || d.value === d.start) {
+    // back to where the drag started, exactly; no step in the history
+    S.spec = { ...d.snap.spec }; S.x = structuredClone(d.snap.x); S.edited = d.snap.edited;
+    S.applied = { sx: 1, sy: 1, sz: 1 };
+    if (d.built || JSON.stringify(clean(S.spec)) !== JSON.stringify(clean(d.base || S.spec))) requestBuild('grip');
+    renderX();
+    positionGrips();
+    if (cancel) announce(`${d.grip.label}: cancelled.`);
+    return;
+  }
+  S.spec = { ...d.base, ...d.grip.apply(d.value) }; S.edited = true;
+  pushSnap(d.snap); HIST.tag = '';
+  syncURL();
+  requestBuild('grip');
+  announce(`${gripText(d.grip, d.value)}.`);
+  positionGrips();
+}
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && G.drag) { e.preventDefault(); gripUp(null, true); } }, true);
+window.addEventListener('blur', () => { if (G.drag) gripUp(null, false); });
+
+// ---- keyboard and typed values
+
+/** Apply a value to a grip outside a drag (typed, nudged): one step in the history (nudges of one grip coalesce). */
+function applyGrip(g, v, tag = '') {
+  v = g.snap(v);
+  pushHistory(tag);
+  commitSmart();
+  S.spec = { ...S.spec, ...g.apply(v) }; S.edited = true;
+  g.value = v;                                          // the next nudge goes on from here before the build lands
+  const el = G.els.get(g.id);
+  if (el) el.setAttribute('aria-label', `${gripText(g)}, drag or press Enter to type`);
+  clearTimeout(G.urlT);
+  G.urlT = setTimeout(syncURL, 200);
+  requestBuild('grip');
+  positionGrips();
+}
+function gripKey(e, id) {
+  const g = gripById(id);
+  if (!g) return;
+  if (e.key === 'Enter') { e.preventDefault(); openTyped(id); return; }
+  const dir = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1 }[e.key];
+  if (!dir || e.metaKey || e.ctrlKey || e.altKey) return;
+  e.preventDefault();
+  const n = e.shiftKey ? 10 : 1, cur = g.value;
+  let v = cur;
+  const ticks = g.ticks && g.ticks.length ? g.ticks.map((t) => t.v).sort((a, b) => a - b) : null;
+  if (ticks) {
+    let i = ticks.indexOf(cur);
+    if (i < 0) i = ticks.reduce((bi, t, k) => (Math.abs(t - cur) < Math.abs(ticks[bi] - cur) ? k : bi), 0);
+    v = ticks[Math.max(0, Math.min(ticks.length - 1, i + dir * n))];
+  } else {
+    const step = g.kind === 'count' ? 1 : Math.max(Math.abs(cur) * 0.01, 1e-3);
+    // a step the snap rounds away is taken again, larger, until the value moves (or the limit is reached)
+    for (let k = 1; k <= 50 && v === cur; k++) v = g.snap(cur + dir * n * step * k);
+  }
+  if (v !== cur) { applyGrip(g, v, 'nudge-' + id); announce(gripText(g, v)); }
+}
+function openTyped(id) {
+  const g = gripById(id);
+  if (!g || !parseTyped || gripsBlocked()) return;
+  G.typing = id;
+  gInput.hidden = false;
+  gInput.value = g.kind === 'length' ? (+g.value).toFixed(2) : String(+(+g.value).toFixed(2));
+  gInput.removeAttribute('aria-invalid');
+  gInput.setAttribute('aria-label', `${g.label}: type a value (${g.kind === 'length' ? 'e.g. 4.5, 450 cm, 12 ft, +0.5, -10%' : g.kind === 'angle' ? 'degrees' : 'a whole number'}), Enter applies, Escape cancels, Tab goes to the next grip`);
+  positionGrips();
+  gInput.focus(); gInput.select();
+}
+function closeTyped(refocus = false) {
+  if (!G.typing) return;
+  const id = G.typing;
+  G.typing = null;
+  gInput.hidden = true;
+  if (refocus && G.els.get(id) && !G.els.get(id).hidden) G.els.get(id).focus();
+  positionGrips();
+}
+/** The typed text as a value (null: not understood), without applying it. */
+function typedValue() {
+  const g = gripById(G.typing);
+  if (!g) return null;
+  let v = null;
+  try { v = parseTyped(gInput.value, g, S.stats.spec); } catch (e) { v = null; }
+  return Number.isFinite(v) ? v : null;
+}
+gInput.addEventListener('keydown', (e) => {
+  const g = gripById(G.typing);
+  if (!g) return;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeTyped(true); return; }
+  if (e.key === 'Enter' || e.key === 'Tab') {
+    e.preventDefault();
+    const v = typedValue();
+    if (e.key === 'Enter' && v === null) { gInput.setAttribute('aria-invalid', 'true'); announce(`${g.label}: not a value I can read.`); return; }
+    if (v !== null && g.snap(v) !== g.value) applyGrip(g, v);
+    if (e.key === 'Enter') { closeTyped(true); return; }
+    // Tab / Shift+Tab: the next grip's value
+    const vis = G.list.filter((x) => G.els.get(x.id) && !G.els.get(x.id).hidden), i = vis.findIndex((x) => x.id === g.id);
+    const next = vis[(i + (e.shiftKey ? -1 : 1) + vis.length) % vis.length];
+    closeTyped();
+    if (next) openTyped(next.id);
+  }
+});
+gInput.addEventListener('input', () => gInput.removeAttribute('aria-invalid'));
+gInput.addEventListener('blur', () => { setTimeout(() => { if (G.typing && document.activeElement !== gInput) closeTyped(); }, 0); });
+gTip.addEventListener('click', () => { const id = G.hover || G.focus; if (id) openTyped(id); });
+gTip.addEventListener('pointerenter', () => { G.tipHover = true; });
+gTip.addEventListener('pointerleave', () => { G.tipHover = false; positionGrips(); });
+
+// ---- touch: the grips come with the element's selection (a tap on the stage), not over every touch-orbit
+{
+  let t0 = null;
+  $('#c').addEventListener('pointerdown', (e) => { t0 = e.pointerType === 'mouse' ? null : { x: e.clientX, y: e.clientY, t: performance.now() }; });
+  $('#c').addEventListener('pointerup', (e) => {
+    if (!t0 || e.pointerType === 'mouse') return;
+    const tap = Math.hypot(e.clientX - t0.x, e.clientY - t0.y) < 10 && performance.now() - t0.t < 400;
+    t0 = null;
+    if (tap) { G.shown = !G.shown; positionGrips(); }
+  });
+}
+
+// ---- placement, every rendered frame
+
+function positionGrips() {
+  if (!gLayer) return;
+  const why = gripsBlocked();
+  const hint = why === 'transform' && G.list.length ? 'Grips are off while a transform is applied · reset it to edit the parameters' : '';
+  if (gHint.textContent !== hint) gHint.textContent = hint;
+  const on = !why && G.list.length && (G.shown || G.drag || G.typing || G.focus);
+  gLayer.hidden = !on;
+  if (!on) return;
+  // reads first (the bars' boxes, the stage), then writes
+  const st = stage.getBoundingClientRect(), W = viewer._w, H = viewer._h, s = gSize(), half = s / 2;
+  const bars = [];
+  for (const el of document.querySelectorAll('#stage > .ov')) {
+    const r = el.getBoundingClientRect();
+    if (r.width && r.height) bars.push({ l: r.left - st.left - 4, t: r.top - st.top - 4, r: r.right - st.left + 4, b: r.bottom - st.top + 4 });
+  }
+  const clear = (x, y, h) => x > h && x < W - h && y > h && y < H - h && !bars.some((b) => x + h > b.l && x - h < b.r && y + h > b.t && y - h < b.b);
+  const placed = [], pos = new Map(), d = G.drag;
+  for (const g of G.list) {
+    const el = G.els.get(g.id);
+    if (d && d.id !== g.id) { el.hidden = true; continue; }
+    let p;
+    if (d) {
+      const k = (d.value - d.start) / (g.perMetre || 1);
+      p = d.vertical ? { x: d.ax.x, y: d.ax.y - k * d.ax.ref, z: d.ax.z } : { x: d.ax.x + k * d.ax.vx, y: d.ax.y + k * d.ax.vy, z: d.ax.z };
+    } else p = viewer.project(g.anchor, {});
+    // two grips on one spot (a short element): the second steps aside
+    for (const q of placed) if (Math.hypot(p.x - q.x, p.y - q.y) < s) { p.x = q.x + s + 2; }
+    const vis = p.z <= 1 && (d || clear(p.x, p.y, half));
+    el.hidden = !vis;
+    if (!vis) continue;
+    placed.push(p); pos.set(g.id, p);
+    el.style.transform = `translate(${(p.x - half).toFixed(1)}px, ${(p.y - half).toFixed(1)}px)`;
+    el.classList.toggle('on', g.id === (d && d.id) || g.id === G.hover || g.id === G.focus || g.id === G.typing);
+  }
+  // the active grip: its axis, ticks and live label (or the typed field)
+  const id = (d && d.id) || G.typing || G.hover || G.focus || (G.tipHover && G.lastTip);
+  const g = id && gripById(id), p = id && pos.get(id);
+  if (!g || !p) { gLine.setAttribute('visibility', 'hidden'); gTicks.innerHTML = ''; gTip.hidden = true; gInput.hidden = !G.typing; return; }
+  G.lastTip = id;
+  const ax = d ? d.ax : viewer.screenAxis(g.anchor, g.dir);
+  let ux = ax.vx, uy = ax.vy, ppm = Math.hypot(ux, uy);
+  if (d && d.vertical) { ux = 0; uy = -ax.ref; ppm = ax.ref; }
+  if (ppm > 1e-3) {
+    const nx = ux / ppm, ny = uy / ppm, L = Math.max(W, H);
+    gLine.setAttribute('x1', (p.x - nx * L).toFixed(1)); gLine.setAttribute('y1', (p.y - ny * L).toFixed(1));
+    gLine.setAttribute('x2', (p.x + nx * L).toFixed(1)); gLine.setAttribute('y2', (p.y + ny * L).toFixed(1));
+    gLine.setAttribute('visibility', 'visible');
+    // the legal values along the axis (counts, arch types): where the grip will snap
+    let ticks = '';
+    const val = d ? d.value : g.value;
+    if (g.ticks && g.ticks.length <= 40) for (const t of g.ticks) {
+      const off = ((t.v - val) / (g.perMetre || 1)) * ppm;
+      if (Math.abs(off) < 2 || Math.abs(off) > Math.max(W, H)) continue;
+      ticks += `<circle cx="${(p.x + nx * off).toFixed(1)}" cy="${(p.y + ny * off).toFixed(1)}" r="3"/>`;
+    }
+    if (gTicks.innerHTML !== ticks) gTicks.innerHTML = ticks;
+  } else gLine.setAttribute('visibility', 'hidden');
+  // the label beside the grip, kept inside the stage
+  const at = (box) => {
+    let x = p.x + half + 6, y = p.y - half - box.offsetHeight - 2;
+    if (x + box.offsetWidth > W - 6) x = p.x - half - 6 - box.offsetWidth;
+    if (y < 6) y = p.y + half + 4;
+    box.style.transform = `translate(${Math.max(6, x).toFixed(1)}px, ${Math.min(H - box.offsetHeight - 6, y).toFixed(1)}px)`;
+  };
+  if (G.typing === id) { gTip.hidden = true; gInput.hidden = false; at(gInput); return; }
+  gInput.hidden = true;
+  const v = d ? d.value : g.value, text = `<b>${esc(g.label)}</b> ${esc(g.format(v))}${d && d.vertical ? ' · drag up / down' : ''}`;
+  if (gTip.innerHTML !== text) gTip.innerHTML = text;
+  gTip.hidden = false;
+  at(gTip);
+}
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+viewerReady.then((v) => { v.onFrame = positionGrips; }).catch(() => {});
 
 // ------------------------------------------------------------------------------------------------ URL
 

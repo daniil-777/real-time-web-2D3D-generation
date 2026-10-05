@@ -276,6 +276,45 @@
   }
   html.embed #stage { min-height: 300px; }
 
+  /* parametric grips: constant-size buttons over the canvas (app.js places them every frame), under the bars */
+  #grips { position: absolute; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+  #grips[hidden], .grip[hidden], #gripTip[hidden], #gripInput[hidden] { display: none; }
+  #gripAxis { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #gaLine { stroke: #0a84ff; stroke-width: 1.25; stroke-dasharray: 6 5; opacity: 0.75; }
+  #gaTicks circle { fill: #fff; stroke: #0a84ff; stroke-width: 1.5; }
+  .grip { --s: 26px; position: absolute; left: 0; top: 0; width: var(--s); height: var(--s); margin: 0; padding: 0; border: 0; border-radius: 50%;
+          background: none; pointer-events: auto; cursor: grab; touch-action: none; display: grid; place-items: center; -webkit-tap-highlight-color: transparent; }
+  .grip::before { content: ''; width: 11px; height: 11px; background: #fff; border: 2px solid #0a84ff; border-radius: 2px; transform: rotate(45deg);
+                  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28); transition: transform .12s var(--ease), background .12s var(--ease); }
+  .grip[data-kind=count]::before { transform: none; border-radius: 3px; }
+  .grip[data-kind=angle]::before { transform: none; border-radius: 50%; }
+  .grip.on::before, .grip:hover::before { background: #0a84ff; transform: rotate(45deg) scale(1.3); }
+  .grip[data-kind=count].on::before, .grip[data-kind=count]:hover::before, .grip[data-kind=angle].on::before, .grip[data-kind=angle]:hover::before { transform: scale(1.3); }
+  .grip.drag { cursor: grabbing; }
+  .grip:focus-visible { outline: 3px solid rgba(0, 113, 227, 0.55); outline-offset: -2px; border-radius: 50%; }
+  #gripTip { position: absolute; left: 0; top: 0; padding: 4px 9px; border-radius: 8px; background: rgba(29, 29, 31, 0.88); color: #fff; font-size: 12px;
+             font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: auto; cursor: text; }
+  #gripTip b { font-weight: 600; margin-right: 1px; color: rgba(255, 255, 255, 0.72); }
+  #gripInput { position: absolute; left: 0; top: 0; width: 140px; height: 30px; border: 0; border-radius: 8px; padding: 0 9px; background: #fff; font-size: 13px;
+               font-variant-numeric: tabular-nums; pointer-events: auto; outline: none; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18), 0 0 0 4px rgba(0, 113, 227, 0.28); }
+  #gripInput[aria-invalid=true] { box-shadow: 0 0 0 1px #c4302b, 0 0 0 4px rgba(196, 48, 43, 0.25); }
+  #gripHint { position: absolute; z-index: 1; left: 50%; bottom: 54px; transform: translateX(-50%); max-width: 90%; font-size: 11.5px; color: var(--text-2);
+              pointer-events: none; text-align: center; }
+  #gripHint:empty { display: none; }
+  @media (pointer: coarse) { .grip { --s: 44px; } .grip::before { width: 15px; height: 15px; } #gripInput { height: 36px; font-size: 16px; } }
+  @media (max-width: 600px) { #gripHint { display: none; } }
+  html.shot #grips, html.shot #gripHint { display: none !important; }
+  /* undo / redo */
+  .cardHead { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+  .cardHead h2 { flex: 1; margin: 0; display: flex; justify-content: space-between; align-items: baseline; }
+  .hist { display: inline-flex; gap: 2px; }
+  .hist button { width: 26px; height: 24px; border: 0; border-radius: 7px; background: none; color: var(--text-2); cursor: pointer; display: grid; place-items: center; padding: 0; }
+  .hist button:hover:not(:disabled) { background: var(--fill); color: var(--text); }
+  .hist button:disabled { color: rgba(118, 118, 128, 0.45); cursor: default; }
+  .hist svg { width: 14px; height: 14px; }
+  .pill[aria-busy=true] { opacity: 0.6; cursor: progress; }
+  .pill[aria-busy=true]::after { content: '…'; }
+
   /* screenshots: the canvas, nothing else */
   html.shot #top, html.shot #panel, html.shot .ov, html.shot #hint, html.shot #busy, html.shot #scTag { display: none !important; }
   /* the idle showcase: a quiet tag instead of the controls hint */
@@ -321,6 +360,13 @@
           <button type="button" data-units="ft" aria-pressed="false">ft</button>
         </div>
       </div>
+      <div id="grips" hidden>
+        <svg id="gripAxis" aria-hidden="true"><line id="gaLine" visibility="hidden"/><g id="gaTicks"></g></svg>
+        <div id="gripBtns" role="group" aria-label="parameter grips: drag one, or focus it and press Enter to type a value, arrows to step"></div>
+        <div id="gripTip" aria-hidden="true" hidden></div>
+        <input id="gripInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" enterkeyhint="done" hidden>
+      </div>
+      <div id="gripHint" role="status"></div>
       <div id="busy" aria-hidden="true"></div>
       <div id="toast" role="status" hidden></div>
       <div id="msg" role="status"><span class="spin" aria-hidden="true"></span>loading the CAD kernel…</div>
@@ -346,7 +392,13 @@
         <div class="chips" id="chips"></div>
       </section>
       <section id="card" aria-labelledby="specTitle">
-        <h2 id="specTitle">specification <small id="specNote"></small></h2>
+        <div class="cardHead">
+          <h2 id="specTitle">specification <small id="specNote"></small></h2>
+          <span class="hist">
+            <button type="button" id="undo" aria-label="Undo" title="Undo (⌘Z / Ctrl+Z)" disabled><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M4.5 3L1.5 6l3 3M2 6h6.5a4 4 0 010 8H6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" transform="translate(0 -1.5)"/></svg></button>
+            <button type="button" id="redo" aria-label="Redo" title="Redo (⇧⌘Z / Ctrl+Y)" disabled><svg viewBox="0 0 14 14" aria-hidden="true"><path d="M9.5 3l3 3-3 3M12 6H5.5a4 4 0 000 8H8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" transform="translate(0 -1.5)"/></svg></button>
+          </span>
+        </div>
         <div class="fields" id="fields"></div>
         <details class="more"><summary>more</summary><div class="fields" id="fieldsMore"></div></details>
       </section>

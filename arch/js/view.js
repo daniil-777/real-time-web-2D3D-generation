@@ -607,6 +607,9 @@ export class Viewer {
     r.setClearColor(0xffffff, 0);
     r.shadowMap.enabled = true;
     r.shadowMap.type = THREE.PCFShadowMap;
+    // the shadow map is drawn only when the light or the model moved (shadowsDirty), not every frame
+    r.shadowMap.autoUpdate = false;
+    r.shadowMap.needsUpdate = true;
     r.toneMapping = THREE.AgXToneMapping;   // applied by StudioOutputPass (composer targets are linear)
     r.toneMappingExposure = LIGHT.exposure;
     r.outputColorSpace = THREE.SRGBColorSpace;
@@ -655,6 +658,7 @@ export class Viewer {
     this.deformDepth = this.withDeform(new THREE.MeshDepthMaterial());
     this.preview = null; this.previewGroup = null; this.previewing = false;
     this.lattice = null; this.handleCb = null; this.drag = null;
+    this.onFrame = null;                         // called after every rendered frame (the page's grips follow the camera)
 
     this.persp = new THREE.PerspectiveCamera(30, 1, 0.05, 500);
     this.ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.05, 500);
@@ -799,8 +803,11 @@ export class Viewer {
     this.fitAO();
     // a deformation bake keeps the view unless the shape left the frame (then all of it is framed); otherwise re-frame
     // for a new element or a clearly different size
-    if (opts.keepCamera) { if (!this.fits()) this.setView(this.view, true); }
+    // keepCamera 'hold': never re-frame (a grip is being dragged: the view must not move under the pointer)
+    if (opts.keepCamera === 'hold') { /* the view stays */ }
+    else if (opts.keepCamera) { if (!this.fits()) this.setView(this.view, true); }
     else if (changed) this.setView(this.view);
+    this.shadowsDirty();
     if (!opts.keepPreview) this.showPreview(false);
     try { await this.renderer.compileAsync(this.scene, this.camera); } catch (e) { /* compiles on first render instead */ }
     if (this.ao) this.ao.firstFrame();
@@ -808,6 +815,7 @@ export class Viewer {
     // throttled page may not run); a few more let the ambient occlusion settle, but never hold the caller long
     this.controls.update();
     this.composer.render();
+    if (this.onFrame) this.onFrame();
     const settle = this.frames(this.opts.shot ? 24 : 3);
     return Promise.race([settle, new Promise((r) => setTimeout(r, this.opts.shot ? 2500 : 600))]);
   }
@@ -863,6 +871,7 @@ export class Viewer {
     if (this.edges) this.edges.visible = mode === 'line';
     const lit = mode !== 'line';
     this.sun.castShadow = lit;
+    this.shadowsDirty();
     this.groundMat.userData.u.uShadow.value = lit ? 0.42 : 0;
     this.setPipeline();
     this.applyLook();
@@ -894,6 +903,7 @@ export class Viewer {
     const s = this.size || [1, 1, 1];
     const auto = Math.max(...s) > 1.5;
     this.figure.visible = this.figureWanted === null ? auto : !!this.figureWanted;
+    this.shadowsDirty();
     // at the front-right of the element, half a metre clear and near its front face (Z-up numbers): the three-quarter
     // camera (front-left) sees it in front of anything round or deep, never hidden behind it
     const gap = 0.45 + this.figure.userData.width / 2, front = -this.box.max.z, depth = this.box.max.z - this.box.min.z;
@@ -947,6 +957,7 @@ export class Viewer {
     sun.shadow.normalBias = texel * 1.6;
     sun.shadow.bias = -0.00015;
     sun.shadow.needsUpdate = true;
+    this.shadowsDirty();
     // ground under everything; grid centred on the element
     const span = Math.max(R * 60, 60);
     this.ground.scale.set(span, span, 1);
@@ -980,6 +991,7 @@ export class Viewer {
     this.renderer.clippingPlanes = [this.revealPlane];
     this.renderer.localClippingEnabled = true;
     this.revealMats();
+    this.shadowsDirty();
     this.dirty = Math.max(this.dirty, 2);
   }
   /** The reveal plane on every material of the model (called again when a new model brings new materials). */
@@ -1000,6 +1012,7 @@ export class Viewer {
       if (this.revealPlane !== plane) return;
       const t = Math.min(1, (performance.now() - t0) / ms), e = 1 - (1 - t) ** 3;
       plane.constant = Math.max(1e-4, y0 + e * (y1 - y0));
+      this.shadowsDirty();                       // the shadow rises with the model (clipShadows)
       if (this.ao) this.ao.firstFrame();
       this.dirty = Math.max(this.dirty, 2);
       if (t < 1) this.revealRAF = requestAnimationFrame(step); else this.endReveal();
@@ -1013,6 +1026,7 @@ export class Viewer {
     this.revealMats();
     this.renderer.clippingPlanes = [];
     this.renderer.localClippingEnabled = false;
+    this.shadowsDirty();
     if (this.ao) this.ao.firstFrame();
     this.dirty = Math.max(this.dirty, 12);
   }
@@ -1265,6 +1279,7 @@ export class Viewer {
     }
     this.previewGroup = null; this.preview = null; this.previewing = false;
     this.model.visible = true;
+    this.shadowsDirty();
   }
 
   /**
@@ -1305,6 +1320,7 @@ export class Viewer {
       this.fitLights();
     }
     this.showPreview(true);
+    this.shadowsDirty();
     if (this.ao) this.ao.firstFrame();
     this.dirty = Math.max(this.dirty, 3);
     return true;
@@ -1316,6 +1332,7 @@ export class Viewer {
     if (this.previewGroup) this.previewGroup.visible = on;
     this.model.visible = !on;
     if (this.edges) this.edges.visible = !on && this.mode === 'line';
+    this.shadowsDirty();
     this.dirty = Math.max(this.dirty, 3);
   }
 
@@ -1442,6 +1459,38 @@ export class Viewer {
     this.controls.enabled = true;
   }
 
+  // ---------------------------------------------------------------------------------------------- grips (projection)
+
+  /** The shadow map is redrawn on the next frame (the light, the model, its visibility or its clipping changed). */
+  shadowsDirty() {
+    this.renderer.shadowMap.needsUpdate = true;
+    this.dirty = Math.max(this.dirty, 1);
+  }
+
+  /** Screen position (CSS px in the canvas) of a point in element coordinates (Z-up metres), z the NDC depth (> 1:
+   *  behind the camera or beyond the far plane). */
+  project(p, out = { x: 0, y: 0, z: 0 }) {
+    const v = this._pv || (this._pv = new THREE.Vector3());
+    v.set(p[0], p[1], p[2]);
+    this.root.localToWorld(v).project(this.camera);
+    out.x = (v.x + 1) / 2 * this._w; out.y = (1 - v.y) / 2 * this._h; out.z = v.z;
+    return out;
+  }
+
+  /** How a drag direction looks on screen at element point p: { x, y } the point, { vx, vy } the screen image of one
+   *  metre along dir (CSS px), ref the screen length of one metre across the view at p (for a direction that points
+   *  at the camera, whose image is too short to drag along). */
+  screenAxis(p, dir) {
+    const cam = this.camera;
+    cam.updateMatrixWorld();
+    const a = this.project(p, {}), h = 0.05 * (this.box.getSize(new THREE.Vector3()).length() || 1);
+    const b = this.project([p[0] + dir[0] * h, p[1] + dir[1] * h, p[2] + dir[2] * h], {});
+    // a metre across the view: the camera's right vector, taken back to element coordinates (Y-up -> Z-up)
+    const right = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0);
+    const c = this.project([p[0] + right.x * h, p[1] - right.z * h, p[2] + right.y * h], {});
+    return { x: a.x, y: a.y, z: a.z, vx: (b.x - a.x) / h, vy: (b.y - a.y) / h, ref: Math.hypot(c.x - a.x, c.y - a.y) / h };
+  }
+
   // ---------------------------------------------------------------------------------------------- frames
 
   /** Resolves after n more frames have been rendered. */
@@ -1456,6 +1505,7 @@ export class Viewer {
     if (!moved && this.dirty <= 0) return;
     if (moved) this.updateClip();
     this.composer.render();
+    if (this.onFrame) this.onFrame();
     this.dirty = moved ? Math.max(this.dirty, 8) : this.dirty - 1;
     if (this.waiters.length) {
       for (const w of this.waiters) w.n--;
