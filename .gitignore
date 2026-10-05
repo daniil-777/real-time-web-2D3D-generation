@@ -5,3 +5,6 @@
 agentdb.rvf*
 ruvector.db
 *.zip
+/reports/
+/research_notes/
+.superpowers/
