@@ -726,7 +726,10 @@ function elementDims(spec, gen, bbox, scale = 20) {
     } else if (OPENINGS.has(el)) {
       out.opening = { type: el === 'window' || el === 'door' ? spec.archType || null : archTypeOf(spec), archGeom: gen && gen.archGeom };
     }
-  } catch (e) { out.error = e && e.message; }
+  } catch (e) {
+    // the sheet still draws (views, overall size) but loses its chains and key table: say so, never silently (audit C7)
+    out.error = (e && e.message) || String(e);
+  }
   return out;
 }
 
@@ -946,6 +949,11 @@ export function makeSheet({ meshes, spec, deform = null, gen = null, meta = {}, 
   let dims = deformed ? { key: [] } : elementDims(spec, gen, bbox);
   const lay = layout(bbox, { side, plan }, tiersFor(dims, plan, deformed), ground, !deformed && !!dims.capital);
   if (!deformed) dims = elementDims(spec, gen, bbox, lay.scale);   // the figures at the sheet's precision (cm at 1:50 and up)
+  const warnings = [];
+  if (dims.error) {
+    warnings.push(`dimensions unavailable: ${dims.error}`);
+    if (typeof console !== 'undefined') console.warn(`drawing: ${spec.element} sheet without its dimension chains (${dims.error})`);
+  }
   const { f } = lay;
   const fm = (v) => fmtM(v, lay.scale);
   const groups = [], items = [], D = new Draw(items), R = {};
@@ -1005,7 +1013,7 @@ export function makeSheet({ meshes, spec, deform = null, gen = null, meta = {}, 
   const measured = open ? { span: open.span, spans: open.voids.map(([a, b]) => b - a), crown: open.crown, sill: open.sill, rise: open.rise || 0,
     springing: open.zsp ?? null, check: open.check } : null;
   return { w: PAPER.w, h: PAPER.h, paper: PAPER.name, scale: lay.scale, groups, items, timing, cut, measured, views: Object.keys(R),
-    title: meta.title || cap1(spec.element), number: drawingNo(spec, deform) };
+    title: meta.title || cap1(spec.element), number: drawingNo(spec, deform), warnings };
 }
 
 // ------------------------------------------------------------------------------------------------ drawing primitives
@@ -1367,6 +1375,7 @@ function titleStrip(D, { spec, meta, lay, size, dims, deform, fm }) {
     'Orthographic views of the exact solid model (Manifold CAD kernel); hidden lines removed, line weight by depth.',
     'First-angle projection.'];
   if (deform && deform.length) notes.push(`Transformed (${deform.map(opText).join('; ')}): overall dimensions only.`);
+  else if (dims.error) notes.push('Dimensions unavailable: the element\'s dimension chains could not be computed; overall size only.');
   notes.forEach((n, i) => {
     D.text(xi, y, `${i + 1}.`, 2.1);
     for (const l of wrap(n, 2.1, wi - 4)) { D.text(xi + 4, y, l, 2.1); y += 2.9; }

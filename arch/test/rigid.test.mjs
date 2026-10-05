@@ -25,7 +25,7 @@ for (const element of ELEMENTS) {
   console.log(element.padEnd(12), u(rigid), ' | ', u(warped));
 }
 
-// the tags win: balusters keep their mesh under a 120 degree bend, with the default rigidRatio and with the size rule off
+// the tags win: balusters keep their mesh under a 120 degree bend, with the default rigidRatio (RIGID_RATIO) and with the size rule off
 const bend = [{ type: 'bend', axis: 'x', angle: 120 }];
 const g = await generate({ element: 'balustrade', length: 4 });
 const checkBalusters = (label, opts) => {
@@ -46,7 +46,7 @@ const checkBalusters = (label, opts) => {
   }
   console.log(`bend 120 ${label}: baluster instances identical (rigid): ok`);
 };
-checkBalusters('default rigidRatio 0.2', {});
+checkBalusters('default rigidRatio (RIGID_RATIO 0.25)', {});
 checkBalusters('rigidRatio 0 (size rule off)', { rigidRatio: 0 });
 
 // control: the same part tagged false is warped (the tag, not the size, decides)

@@ -32,7 +32,7 @@
 //
 // 3. deformParts(parts, ops, opts) applies f to an element (Part[] from generate()):
 //    - parts tagged meta.rigid by their generator, and untagged small repeated parts (>= 2 instances, mesh bbox
-//      diagonal < rigidRatio = 20 % of the element's) are not deformed: each
+//      diagonal < rigidRatio = RIGID_RATIO, 25 % of the element's) are not deformed: each
 //      instance M is replaced by T(f(c)) * s R_J * T(-c) * M, with c the centre of the instance's mesh, R_J the
 //      rotation of the polar decomposition J = R_J S of the Jacobian at c (balusters stay upright and true on a curved
 //      balustrade, dentils follow a curved cornice undistorted) and s = 1 (scaleInstances false), det(J)^(1/3)
@@ -60,6 +60,7 @@
 
 import { K, mat, instances, instanceCount, partsBBox } from './kernel.js';
 import { SCHEMA, DEFAULTS, normalize } from './spec.js';
+import { RIGID_RATIO } from './export.js';
 
 const DEG = Math.PI / 180;
 const AXES = { x: 0, y: 1, z: 2 };
@@ -86,7 +87,19 @@ export const OP_SCHEMA = {
 /** Eigen-decomposition of a symmetric 3x3 matrix by cyclic Jacobi rotations (Numerical Recipes 11.1). Eigenvalues are
  *  sorted descending; V holds the eigenvectors in its columns and is a proper rotation (det +1). */
 export function eigSym3(a) {
-  const A = Float64Array.from(a), V = Float64Array.of(1, 0, 0, 0, 1, 0, 0, 0, 1);
+  eigInto(a);
+  return { w: [EW[0], EW[1], EW[2]], V: Float64Array.from(EV) };
+}
+
+// scratch of eigInto / polarInto: the GPU preview places thousands of rigid instances per drag frame through polar3, so
+// the decomposition allocates nothing (results are copied out by the callers that keep them)
+const EA = new Float64Array(9), EJ = new Float64Array(9), EV = new Float64Array(9), EW = new Float64Array(3);
+const PB = new Float64Array(9), PR = new Float64Array(9), PU = new Float64Array(9), PS = new Float64Array(3);
+
+/** eigSym3 into EW (eigenvalues, descending) and EV (eigenvectors in columns, det +1). Same arithmetic, same order. */
+function eigInto(a) {
+  const A = EA, V = EJ;
+  for (let i = 0; i < 9; i++) { A[i] = a[i]; V[i] = i % 4 === 0 ? 1 : 0; }
   const scale = Math.abs(A[0]) + Math.abs(A[4]) + Math.abs(A[8]) + 1e-300;
   for (let sweep = 0; sweep < 32; sweep++) {
     const off = Math.abs(A[1]) + Math.abs(A[2]) + Math.abs(A[5]);
@@ -112,12 +125,13 @@ export function eigSym3(a) {
       }
     }
   }
-  const order = [0, 1, 2].sort((i, j) => A[4 * j] - A[4 * i]);
-  const w = order.map((i) => A[4 * i]);
-  const Vs = new Float64Array(9);
-  order.forEach((i, col) => { for (let r = 0; r < 3; r++) Vs[3 * r + col] = V[3 * r + i]; });
-  if (det3(Vs) < 0) for (let r = 0; r < 3; r++) Vs[3 * r + 2] = -Vs[3 * r + 2];
-  return { w, V: Vs };
+  // stable descending order of the diagonal (what [0, 1, 2].sort((i, j) => A[4 * j] - A[4 * i]) gives): insertion sort
+  let o0 = 0, o1 = 1, o2 = 2;
+  if (A[4] - A[0] > 0) { o0 = 1; o1 = 0; }
+  if (A[8] - A[4 * o1] > 0) { o2 = o1; if (A[8] - A[4 * o0] > 0) { o1 = o0; o0 = 2; } else o1 = 2; }
+  EW[0] = A[4 * o0]; EW[1] = A[4 * o1]; EW[2] = A[4 * o2];
+  for (let r = 0; r < 3; r++) { EV[3 * r] = V[3 * r + o0]; EV[3 * r + 1] = V[3 * r + o1]; EV[3 * r + 2] = V[3 * r + o2]; }
+  if (det3(EV) < 0) for (let r = 0; r < 3; r++) EV[3 * r + 2] = -EV[3 * r + 2];
 }
 
 export function det3(a) {
@@ -129,36 +143,55 @@ export function det3(a) {
  * the sign of det A. R = U V^T is the rotation closest to A in the Frobenius norm (the rotation of the polar
  * decomposition A = R S when det A > 0; Kabsch's reflection-free fit otherwise). Via the eigenvectors of A^T A.
  * Returns { R, s, U, V } (row-major).
+ * out (optional, for hot loops): { R: Float64Array(9), s: Float64Array(3) } filled in place and returned (U, V and w
+ * are not written); nothing is allocated. The numbers are bit-identical either way.
  */
-export function polar3(A) {
-  const B = new Float64Array(9);
-  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) B[3 * i + j] = A[i] * A[j] + A[3 + i] * A[3 + j] + A[6 + i] * A[6 + j];
-  const { w, V } = eigSym3(B);
-  const col = (M, j) => [M[j], M[3 + j], M[6 + j]];
-  const mulv = (M, v) => [M[0] * v[0] + M[1] * v[1] + M[2] * v[2], M[3] * v[0] + M[4] * v[1] + M[5] * v[2], M[6] * v[0] + M[7] * v[1] + M[8] * v[2]];
-  const v1 = col(V, 0), v2 = col(V, 1), v3 = col(V, 2);
-  const a1 = mulv(A, v1), a2 = mulv(A, v2), a3 = mulv(A, v3);
-  const s1 = Math.hypot(...a1);
-  const I = Float64Array.of(1, 0, 0, 0, 1, 0, 0, 0, 1);
-  if (!(s1 > 1e-300)) return { R: I, s: [0, 0, 0], U: I, V };
-  const u1 = a1.map((x) => x / s1);
-  const d12 = u1[0] * a2[0] + u1[1] * a2[1] + u1[2] * a2[2];
-  let u2 = [a2[0] - d12 * u1[0], a2[1] - d12 * u1[1], a2[2] - d12 * u1[2]];
-  let n2 = Math.hypot(...u2);
-  if (n2 <= 1e-12 * s1) { // rank one: any unit vector perpendicular to u1
-    const e = Math.abs(u1[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
-    const d = u1[0] * e[0] + u1[1] * e[1] + u1[2] * e[2];
-    u2 = [e[0] - d * u1[0], e[1] - d * u1[1], e[2] - d * u1[2]];
-    n2 = Math.hypot(...u2);
+export function polar3(A, out) {
+  const ok = polarInto(A);
+  if (out) {
+    for (let i = 0; i < 9; i++) out.R[i] = PR[i];
+    out.s[0] = PS[0]; out.s[1] = PS[1]; out.s[2] = PS[2];
+    return out;
   }
-  u2 = u2.map((x) => x / n2);
-  const u3 = [u1[1] * u2[2] - u1[2] * u2[1], u1[2] * u2[0] - u1[0] * u2[2], u1[0] * u2[1] - u1[1] * u2[0]];
-  const s2 = Math.max(0, u2[0] * a2[0] + u2[1] * a2[1] + u2[2] * a2[2]);
-  const s3 = u3[0] * a3[0] + u3[1] * a3[1] + u3[2] * a3[2];
-  const U = Float64Array.of(u1[0], u2[0], u3[0], u1[1], u2[1], u3[1], u1[2], u2[2], u3[2]);
-  const R = new Float64Array(9);
-  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) R[3 * i + j] = U[3 * i] * V[3 * j] + U[3 * i + 1] * V[3 * j + 1] + U[3 * i + 2] * V[3 * j + 2];
-  return { R, s: [s1, s2, s3], U, V, w };
+  if (!ok) { const I = Float64Array.of(1, 0, 0, 0, 1, 0, 0, 0, 1); return { R: I, s: [0, 0, 0], U: I, V: Float64Array.from(EV) }; }
+  return { R: Float64Array.from(PR), s: [PS[0], PS[1], PS[2]], U: Float64Array.from(PU), V: Float64Array.from(EV), w: [EW[0], EW[1], EW[2]] };
+}
+
+/** polar3 into PR, PS, PU (and EV, EW from eigInto); false when A is (numerically) zero: R = I, s = 0. */
+function polarInto(A) {
+  const B = PB;
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) B[3 * i + j] = A[i] * A[j] + A[3 + i] * A[3 + j] + A[6 + i] * A[6 + j];
+  eigInto(B);
+  const V = EV;
+  // a_k = A v_k (v_k the k-th column of V)
+  const a1x = A[0] * V[0] + A[1] * V[3] + A[2] * V[6], a1y = A[3] * V[0] + A[4] * V[3] + A[5] * V[6], a1z = A[6] * V[0] + A[7] * V[3] + A[8] * V[6];
+  const a2x = A[0] * V[1] + A[1] * V[4] + A[2] * V[7], a2y = A[3] * V[1] + A[4] * V[4] + A[5] * V[7], a2z = A[6] * V[1] + A[7] * V[4] + A[8] * V[7];
+  const a3x = A[0] * V[2] + A[1] * V[5] + A[2] * V[8], a3y = A[3] * V[2] + A[4] * V[5] + A[5] * V[8], a3z = A[6] * V[2] + A[7] * V[5] + A[8] * V[8];
+  const s1 = Math.hypot(a1x, a1y, a1z);
+  if (!(s1 > 1e-300)) {
+    for (let i = 0; i < 9; i++) PR[i] = PU[i] = i % 4 === 0 ? 1 : 0;
+    PS[0] = PS[1] = PS[2] = 0;
+    return false;
+  }
+  const u1x = a1x / s1, u1y = a1y / s1, u1z = a1z / s1;
+  const d12 = u1x * a2x + u1y * a2y + u1z * a2z;
+  let u2x = a2x - d12 * u1x, u2y = a2y - d12 * u1y, u2z = a2z - d12 * u1z;
+  let n2 = Math.hypot(u2x, u2y, u2z);
+  if (n2 <= 1e-12 * s1) { // rank one: any unit vector perpendicular to u1
+    const ex = Math.abs(u1x) < 0.9 ? 1 : 0, ey = Math.abs(u1x) < 0.9 ? 0 : 1, ez = 0;
+    const d = u1x * ex + u1y * ey + u1z * ez;
+    u2x = ex - d * u1x; u2y = ey - d * u1y; u2z = ez - d * u1z;
+    n2 = Math.hypot(u2x, u2y, u2z);
+  }
+  u2x /= n2; u2y /= n2; u2z /= n2;
+  const u3x = u1y * u2z - u1z * u2y, u3y = u1z * u2x - u1x * u2z, u3z = u1x * u2y - u1y * u2x;
+  PS[0] = s1;
+  PS[1] = Math.max(0, u2x * a2x + u2y * a2y + u2z * a2z);
+  PS[2] = u3x * a3x + u3y * a3y + u3z * a3z;
+  const U = PU;
+  U[0] = u1x; U[1] = u2x; U[2] = u3x; U[3] = u1y; U[4] = u2y; U[5] = u3y; U[6] = u1z; U[7] = u2z; U[8] = u3z;
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) PR[3 * i + j] = U[3 * i] * V[3 * j] + U[3 * i + 1] * V[3 * j + 1] + U[3 * i + 2] * V[3 * j + 2];
+  return true;
 }
 
 // ================================================================================================ the window
@@ -499,8 +532,9 @@ export function makeDeformer(ops, bbox) {
     }
   };
   const hJ = 1e-5 * diag;
+  const ja = new Float64Array(3), jb = new Float64Array(3); // jacobian's scratch (it runs per rigid instance per drag frame)
   const jacobian = (p, out = new Float64Array(9)) => {
-    const a = new Float64Array(3), b = new Float64Array(3);
+    const a = ja, b = jb;
     for (let j = 0; j < 3; j++) {
       a[0] = p[0]; a[1] = p[1]; a[2] = p[2]; b[0] = p[0]; b[1] = p[1]; b[2] = p[2];
       a[j] += hJ; b[j] -= hJ;
@@ -794,14 +828,14 @@ function taperLift(prefix, op, parts, bbox, o) {
       inst.push({ c: mat.apply(M, cl), corners });
     }
   }
-  const J = new Float64Array(9);
+  const J = new Float64Array(9), pol = { R: new Float64Array(9), s: new Float64Array(3) };
   const topOf = (D, which) => {
     let top = -Infinity;
     for (const q of contPts) top = Math.max(top, D.point(q)[ai]);
     for (const it of which) {
       const fc = D.point(it.c);
       D.jacobian(it.c, J);
-      const { R, s } = polar3(J), k = instanceScale(s, o.scaleInstances);
+      const { R, s } = polar3(J, pol), k = instanceScale(s, o.scaleInstances);
       for (const w of it.corners) {
         const d = [w[0] - it.c[0], w[1] - it.c[1], w[2] - it.c[2]];
         top = Math.max(top, fc[ai] + k * (R[3 * ai] * d[0] + R[3 * ai + 1] * d[1] + R[3 * ai + 2] * d[2]));
@@ -823,7 +857,9 @@ function taperLift(prefix, op, parts, bbox, o) {
   return l1;
 }
 
-const DEFAULT_OPTS = { rigidInstances: true, scaleInstances: 'auto', refine: true, maxTris: 1.5e6, rigidRatio: 0.2, ground: true };
+// rigidRatio: the page's RIGID_RATIO (export.js), so a caller that does not pass one (tests, tools/dataset.mjs) bakes the
+// same rigid set the page previews and bakes (audit C11)
+const DEFAULT_OPTS = { rigidInstances: true, scaleInstances: 'auto', refine: true, maxTris: 1.5e6, rigidRatio: RIGID_RATIO, ground: true };
 
 /**
  * Does a part move rigidly? meta.rigid === true: always (its instances, or the part as one piece); meta.rigid ===
@@ -848,6 +884,43 @@ function instanceScale(s, mode) {
   if (mode === 'auto') k = Math.abs(s[1]);
   else if (mode === true || mode === 'volume') k = Math.cbrt(Math.abs(s[0] * s[1] * s[2]));
   return !(k > 0) || !Number.isFinite(k) || Math.abs(k - 1) < 1e-6 ? 1 : k; // exactly rigid unless J really scales
+}
+
+/** Scratch for placeRigid (one per loop; reused across instances). */
+export function rigidScratch() {
+  return { c: new Float64Array(3), fc: new Float64Array(3), J: new Float64Array(9), pol: { R: new Float64Array(9), s: new Float64Array(3) } };
+}
+
+/**
+ * deformParts' rigid placement of one instance, allocation-free: M' = T(f(c)) * kR * T(-c) * M with c = M cl (cl the
+ * centre of the part's mesh box), R the polar rotation of the Jacobian J(c) and k = instanceScale(s, mode). Writes the
+ * column-major 4x4 into Q at offset `at` and leaves c and J(c) in w.c and w.J (deformParts' fold check reads them).
+ * The arithmetic is deformParts' own, operation for operation, so the page's GPU preview (view.js previewDeform, the
+ * app's box estimator) can place its rigid instances with it per drag frame and match the bake bit for bit.
+ */
+export function placeRigid(D, M, cl, mode, Q, w = rigidScratch(), at = 0) {
+  const { c, fc, J, pol } = w;
+  c[0] = M[0] * cl[0] + M[4] * cl[1] + M[8] * cl[2] + M[12];
+  c[1] = M[1] * cl[0] + M[5] * cl[1] + M[9] * cl[2] + M[13];
+  c[2] = M[2] * cl[0] + M[6] * cl[1] + M[10] * cl[2] + M[14];
+  fc[0] = c[0]; fc[1] = c[1]; fc[2] = c[2];
+  D.apply(fc);
+  D.jacobian(c, J);
+  const { R, s } = polar3(J, pol), k = instanceScale(s, mode);
+  // M' = T(f(c)) * kR * T(-c) * M : linear part kR * M3, translation f(c) + kR (t_M - c)
+  const a0 = R[0] * k, a1 = R[1] * k, a2 = R[2] * k, a3 = R[3] * k, a4 = R[4] * k, a5 = R[5] * k, a6 = R[6] * k, a7 = R[7] * k, a8 = R[8] * k;
+  for (let col = 0; col < 3; col++) {
+    const m0 = M[4 * col], m1 = M[4 * col + 1], m2 = M[4 * col + 2];
+    Q[at + col * 4] = a0 * m0 + a1 * m1 + a2 * m2;
+    Q[at + col * 4 + 1] = a3 * m0 + a4 * m1 + a5 * m2;
+    Q[at + col * 4 + 2] = a6 * m0 + a7 * m1 + a8 * m2;
+  }
+  const t0 = M[12] - c[0], t1 = M[13] - c[1], t2 = M[14] - c[2];
+  Q[at + 12] = fc[0] + a0 * t0 + a1 * t1 + a2 * t2;
+  Q[at + 13] = fc[1] + a3 * t0 + a4 * t1 + a5 * t2;
+  Q[at + 14] = fc[2] + a6 * t0 + a7 * t1 + a8 * t2;
+  Q[at + 3] = Q[at + 7] = Q[at + 11] = 0; Q[at + 15] = 1;
+  return Q;
 }
 
 /** partsBBox over the parts that have geometry (an empty Manifold's box is +-Infinity and would swallow the rest). */
@@ -885,9 +958,9 @@ const mat3det = (M) => det3(mat3of(M));
  * - a part tagged by its generator: meta.rigid === true always moves rigidly (each instance, or the part as one piece
  *   when it has no transforms); meta.rigid === false is always warped. Tagging ornament is the robust way;
  * - an untagged part: when it has >= 2 instances (transforms) and its mesh bbox diagonal (times the instance scale) is
- *   below rigidRatio (default 0.2) of the element's bbox diagonal: balusters, dentils, eggs, leaves and volutes on a
+ *   below rigidRatio (default RIGID_RATIO = 0.25) of the element's bbox diagonal: balusters, dentils, eggs, leaves and volutes on a
  *   whole column, roof tiles, voussoirs, urns. The outcome of this size rule depends on the element's size: the
- *   balusters of a 3 m balustrade measure 22 % of its diagonal (warped at 0.2; the app passes 0.25), the leaves of a
+ *   balusters of a 3 m balustrade measure 22 % of its diagonal (rigid at 0.25, warped at 0.2), the leaves of a
  *   capital shown on its own 26-37 % (warped, as a sculpt of the capital should be);
  * - everything else (single parts, parts placed once, large repeated parts) is warped; each instance of a warped part
  *   becomes its own piece (same name, meta.instance = i). rigidInstances: false warps everything. A part with no
@@ -899,7 +972,7 @@ const mat3det = (M) => det3(mat3of(M));
  *   refine (true)          true: deformation-aware edge length; a number: that edge length (m); false: no refinement
  *   tolerance              chord tolerance eps of the refinement (default L / 4000)
  *   maxTris (1.5e6)        triangle budget of the whole element after refinement
- *   rigidRatio (0.2)       "small" = mesh bbox diagonal below this fraction of the element's diagonal
+ *   rigidRatio (0.25)      "small" = mesh bbox diagonal below this fraction of the element's diagonal (RIGID_RATIO)
  *   ground (true)          translate the result so its lowest point is where the element's was
  *   bbox                   the element's bbox (default partsBBox(parts)) — pass the original one when re-deforming
  *   warpViaMesh (false)    force the mesh path of warpManifold (tests; it is taken automatically past a 2 GB heap)
@@ -958,22 +1031,11 @@ export function deformParts(parts, ops, opts = {}) {
     const { p, n, bb, rigid } = plan[pi];
     if (!rigid) continue;
     const cl = [0, 1, 2].map((k) => (bb.min[k] + bb.max[k]) / 2);
-    const T = new Float64Array(16 * n), J = new Float64Array(9);
+    const T = new Float64Array(16 * n), I4 = mat.I(), w = rigidScratch();
     for (let i = 0; i < n; i++) {
-      const M = p.transforms ? p.transforms.subarray(16 * i, 16 * i + 16) : mat.I(); // a tagged part without instances
-      const c = mat.apply(M, cl), fc = D.point(c);
-      D.jacobian(c, J);
-      foldAt(c, J);
-      const { R, s } = polar3(J), k = instanceScale(s, o.scaleInstances);
-      // M' = T(f(c)) * kR * T(-c) * M : linear part kR * M3, translation f(c) + kR (t_M - c)
-      const A = R.map((x) => x * k), Ml = mat3of(M);
-      const Q = T.subarray(16 * i, 16 * i + 16);
-      for (let r = 0; r < 3; r++) for (let col = 0; col < 3; col++) {
-        Q[col * 4 + r] = A[3 * r] * Ml[col] + A[3 * r + 1] * Ml[3 + col] + A[3 * r + 2] * Ml[6 + col];
-      }
-      const tm = [M[12] - c[0], M[13] - c[1], M[14] - c[2]];
-      for (let r = 0; r < 3; r++) Q[12 + r] = fc[r] + A[3 * r] * tm[0] + A[3 * r + 1] * tm[1] + A[3 * r + 2] * tm[2];
-      Q[3] = Q[7] = Q[11] = 0; Q[15] = 1;
+      const M = p.transforms ? p.transforms.subarray(16 * i, 16 * i + 16) : I4; // a tagged part without instances
+      placeRigid(D, M, cl, o.scaleInstances, T, w, 16 * i);
+      foldAt(w.c, w.J);
     }
     out[pi] = [{ ...p, transforms: T, meta: { ...p.meta, deform: 'rigid' } }];
     rigidTris += p.manifold.numTri() * n;
@@ -1031,6 +1093,14 @@ export function deformParts(parts, ops, opts = {}) {
       for (let t = 0; t < pc.nt; t++) k += Math.max(1, Math.ceil(pc.tri[2 * t] * s), pc.tri[2 * t + 1] * s2);
       return k;
     };
+    // The budget is for the triangles refinement makes: rigid instances are instanced (they cost GPU time, not refinement)
+    // and are never refined, so they only shrink the warped pieces' share, down to a floor of a third of maxTris. Before,
+    // an assembly whose rigid ornament alone neared maxTris (a Corinthian portico: 1.6 M) was never refined and its
+    // entablature bent as straight chords under the curved ornament (audit C1).
+    const budget = Math.max(o.maxTris - rigidTris, o.maxTris / 3);
+    // summed from rigidTris and compared with budget + rigidTris (= maxTris exactly when the floor is not hit, all
+    // integers), so the refinement edge is bit-for-bit what it was whenever the rigid share is small
+    const cap = budget + rigidTris;
     const predictAll = (l) => pieces.reduce((acc, pc) => acc + predict(pc, l), rigidTris);
     let ell = 0;
     if (o.refine && D.needsRefine) {
@@ -1045,30 +1115,30 @@ export function deformParts(parts, ops, opts = {}) {
       }
       ell = Math.max(ell, L / 4000);
     }
-    if (ell > 0 && predictAll(ell) > o.maxTris) {
+    if (ell > 0 && predictAll(ell) > cap) {
       // over budget: the coarsest edge that fits (bisection on log l; the prediction falls monotonically with l)
       stats.refineCapped = true;
       const top = Math.max(...pieces.map((pc) => pc.maxEdge), ell);
-      if (predictAll(top) > o.maxTris) ell = 0; // already over budget unrefined: do not refine at all
+      if (predictAll(top) > cap) ell = 0; // already over budget unrefined: do not refine at all
       else {
         let lo = ell, hi = top;
         for (let k = 0; k < 24; k++) {
           const mid = Math.sqrt(lo * hi);
-          if (predictAll(mid) > o.maxTris) lo = mid; else hi = mid;
+          if (predictAll(mid) > cap) lo = mid; else hi = mid;
         }
         ell = hi;
       }
     }
     for (let attempt = 0; ; attempt++) {
-      let tris = rigidTris;
+      let tris = 0; // warped triangles
       for (const pc of pieces) {
         pc.ref = ell > 0 && pc.maxEdge > ell ? own(pc.src.refineToLength(ell / pc.sc)) : pc.src;
         tris += pc.ref.numTri();
       }
-      if (!(ell > 0) || tris <= o.maxTris * 1.1 || attempt >= 2) break;
+      if (!(ell > 0) || tris <= budget + 0.1 * o.maxTris || attempt >= 2) break;
       // the prediction was short (it is within ~10 % on the families): coarsen by the miss and redo once more
       for (const pc of pieces) if (pc.ref !== pc.src) free(pc.ref);
-      ell *= Math.sqrt((tris - rigidTris) / Math.max(1, o.maxTris - rigidTris)) * 1.05;
+      ell *= Math.sqrt(tris / Math.max(1, budget)) * 1.05;
       stats.refineCapped = true;
     }
     if (stats.refineCapped) warnings.add('refine-capped');

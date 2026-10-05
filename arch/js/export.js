@@ -140,77 +140,93 @@ export function partMesh(part, spec = {}, opts = {}) {
  * vertex per group) and the weld map (mergeFrom -> mergeTo) from split vertices back to the first copy.
  */
 export function creasedNormals(P, T, deg = 30) {
-  const nv = P.length / 3, nt = T.length / 3, cos = Math.cos((deg * Math.PI) / 180);
-  const FN = new Float64Array(3 * nt), A = new Float64Array(3 * nt);     // face normals, corner angles
+  // Math.sqrt rather than Math.hypot (4 per triangle; hypot is several times slower in V8, so normals may differ from
+  // the hypot version in the last bits), a CSR edge pairing rather than a Map keyed by edge, typed outputs (audit O6)
+  const nv = P.length / 3, nc = T.length, nt = nc / 3, cos = Math.cos((deg * Math.PI) / 180);
+  const FN = new Float64Array(3 * nt), A = new Float64Array(nc);     // face normals, corner angles
   for (let t = 0; t < nt; t++) {
     const ia = 3 * T[3 * t], ib = 3 * T[3 * t + 1], ic = 3 * T[3 * t + 2];
     const ux = P[ib] - P[ia], uy = P[ib + 1] - P[ia + 1], uz = P[ib + 2] - P[ia + 2];
     const vx = P[ic] - P[ia], vy = P[ic + 1] - P[ia + 1], vz = P[ic + 2] - P[ia + 2];
     const wx = P[ic] - P[ib], wy = P[ic + 1] - P[ib + 1], wz = P[ic + 2] - P[ib + 2];
     let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
-    const l = Math.hypot(nx, ny, nz);
+    const l = Math.sqrt(nx * nx + ny * ny + nz * nz);
     if (l > 0) { nx /= l; ny /= l; nz /= l; }
     FN[3 * t] = nx; FN[3 * t + 1] = ny; FN[3 * t + 2] = nz;
-    const lu = Math.hypot(ux, uy, uz) || 1, lv = Math.hypot(vx, vy, vz) || 1, lw = Math.hypot(wx, wy, wz) || 1;
-    const ang = (d) => Math.acos(Math.max(-1, Math.min(1, d)));
-    A[3 * t] = ang((ux * vx + uy * vy + uz * vz) / (lu * lv));
-    A[3 * t + 1] = ang((-ux * wx - uy * wy - uz * wz) / (lu * lw));
-    A[3 * t + 2] = Math.max(0, Math.PI - A[3 * t] - A[3 * t + 1]);
+    const lu = Math.sqrt(ux * ux + uy * uy + uz * uz) || 1, lv = Math.sqrt(vx * vx + vy * vy + vz * vz) || 1;
+    const lw = Math.sqrt(wx * wx + wy * wy + wz * wz) || 1;
+    let d0 = (ux * vx + uy * vy + uz * vz) / (lu * lv), d1 = (-ux * wx - uy * wy - uz * wz) / (lu * lw);
+    d0 = d0 < -1 ? -1 : d0 > 1 ? 1 : d0; d1 = d1 < -1 ? -1 : d1 > 1 ? 1 : d1;
+    const a0 = Math.acos(d0), a1 = Math.acos(d1), a2 = Math.PI - a0 - a1;
+    A[3 * t] = a0; A[3 * t + 1] = a1; A[3 * t + 2] = a2 > 0 ? a2 : 0;
   }
   // union-find over corners (corner k = 3 t + j): corners of one vertex join across smooth edges
-  const parent = new Uint32Array(T.length);
-  for (let k = 0; k < T.length; k++) parent[k] = k;
+  const parent = new Uint32Array(nc);
+  for (let k = 0; k < nc; k++) parent[k] = k;
   const find = (k) => { while (parent[k] !== k) { parent[k] = parent[parent[k]]; k = parent[k]; } return k; };
-  const join = (a, b) => { a = find(a); b = find(b); if (a !== b) parent[a < b ? b : a] = a < b ? a : b; };
-  const seen = new Map();     // undirected edge -> the corner pair (k at a, k at b) of its first face
-  for (let t = 0; t < nt; t++) for (let e = 0; e < 3; e++) {
-    const ka = 3 * t + e, kb = 3 * t + ((e + 1) % 3), a = T[ka], b = T[kb];
-    if (a === b) continue;
-    const key = a < b ? a * nv + b : b * nv + a, o = seen.get(key);
-    if (o === undefined) { seen.set(key, a < b ? [ka, kb, t] : [kb, ka, t]); continue; }
-    seen.delete(key);
-    const [oa, ob, to] = o;          // the other face's corners at min(a, b) and max(a, b)
-    const d = FN[3 * t] * FN[3 * to] + FN[3 * t + 1] * FN[3 * to + 1] + FN[3 * t + 2] * FN[3 * to + 2];
-    if (d < cos) continue;           // a sharp edge (or a degenerate face): the groups stay apart
-    const [ma, mb] = a < b ? [ka, kb] : [kb, ka];
-    join(oa, ma); join(ob, mb);
+  const join = (a, b) => { a = find(a); b = find(b); if (a !== b) { if (a < b) parent[b] = a; else parent[a] = b; } };
+  // half-edges bucketed by their smaller vertex (CSR, in corner order): the two faces of an edge pair up in order of
+  // appearance, as a Map keyed by the edge would pair them (a non-manifold edge's 1st with 2nd, 3rd with 4th)
+  const next = (k) => k - (k % 3) + ((k % 3) + 1) % 3;
+  const cnt = new Uint32Array(nv + 1);
+  for (let k = 0; k < nc; k++) { const a = T[k], b = T[next(k)]; if (a !== b) cnt[(a < b ? a : b) + 1]++; }
+  for (let i = 0; i < nv; i++) cnt[i + 1] += cnt[i];
+  const fill = cnt.slice(0, nv), he = new Uint32Array(cnt[nv]);
+  for (let k = 0; k < nc; k++) { const a = T[k], b = T[next(k)]; if (a !== b) he[fill[a < b ? a : b]++] = k; }
+  const used = new Uint8Array(cnt[nv]);
+  for (let v = 0; v < nv; v++) {
+    const e = cnt[v + 1];
+    for (let x = cnt[v]; x < e; x++) {
+      if (used[x]) continue;
+      const k = he[x], kb = next(k), t = (k / 3) | 0, hi = T[k] < T[kb] ? T[kb] : T[k];
+      for (let y = x + 1; y < e; y++) {
+        if (used[y]) continue;
+        const k2 = he[y], kb2 = next(k2), t2 = (k2 / 3) | 0, hi2 = T[k2] < T[kb2] ? T[kb2] : T[k2];
+        if (hi2 !== hi) continue;
+        used[x] = used[y] = 1;
+        const d = FN[3 * t] * FN[3 * t2] + FN[3 * t + 1] * FN[3 * t2 + 1] + FN[3 * t + 2] * FN[3 * t2 + 2];
+        if (d >= cos) { // a smooth edge: join the corners at the smaller and at the larger vertex of the two faces
+          const ma = T[k] < T[kb] ? k : kb, mb = T[k] < T[kb] ? kb : k, oa = T[k2] < T[kb2] ? k2 : kb2, ob = T[k2] < T[kb2] ? kb2 : k2;
+          join(oa, ma); join(ob, mb);
+        }  // else a sharp edge (or a degenerate face): the groups stay apart
+        break;
+      }
+    }
   }
-  // one output vertex per group
-  const sum = new Float64Array(3 * T.length);
-  for (let k = 0; k < T.length; k++) {
-    const r = find(k), t = (k / 3) | 0, w = A[k];
+  // one output vertex per group; the vertex's whole fan (angle-weighted) is the fallback for a group with no direction
+  // (zero-area slivers alone)
+  const sum = new Float64Array(3 * nc), vsum = new Float64Array(3 * nv);
+  for (let k = 0; k < nc; k++) {
+    const r = find(k), t = (k / 3) | 0, w = A[k], v = T[k];
     sum[3 * r] += w * FN[3 * t]; sum[3 * r + 1] += w * FN[3 * t + 1]; sum[3 * r + 2] += w * FN[3 * t + 2];
-  }
-  // fallback for a group with no direction (zero-area slivers alone): the vertex's whole fan, angle-weighted
-  const vsum = new Float64Array(3 * nv);
-  for (let k = 0; k < T.length; k++) {
-    const v = T[k], t = (k / 3) | 0, w = A[k];
     vsum[3 * v] += w * FN[3 * t]; vsum[3 * v + 1] += w * FN[3 * t + 1]; vsum[3 * v + 2] += w * FN[3 * t + 2];
   }
-  const outIndex = new Int32Array(T.length).fill(-1), first = new Int32Array(nv).fill(-1);
-  const outP = [], outN = [], outI = new Uint32Array(T.length), mergeFrom = [], mergeTo = [];
-  let count = 0;
-  for (let k = 0; k < T.length; k++) {
+  const outIndex = new Int32Array(nc).fill(-1), first = new Int32Array(nv).fill(-1);
+  const outP = new Float32Array(3 * nc), outN = new Float32Array(3 * nc), outI = new Uint32Array(nc);
+  const mF = new Uint32Array(nc), mT = new Uint32Array(nc);
+  let count = 0, nm = 0;
+  for (let k = 0; k < nc; k++) {
     const r = find(k);
     if (outIndex[r] < 0) {
       const v = T[k];
       let nx = sum[3 * r], ny = sum[3 * r + 1], nz = sum[3 * r + 2];
-      const l = Math.hypot(nx, ny, nz);
+      const l = Math.sqrt(nx * nx + ny * ny + nz * nz);
       if (l > 1e-12) { nx /= l; ny /= l; nz /= l; }
       else {
         nx = vsum[3 * v]; ny = vsum[3 * v + 1]; nz = vsum[3 * v + 2];
-        const lv = Math.hypot(nx, ny, nz);
+        const lv = Math.sqrt(nx * nx + ny * ny + nz * nz);
         if (lv > 1e-12) { nx /= lv; ny /= lv; nz /= lv; } else { nx = 0; ny = 0; nz = 1; }
       }
-      outIndex[r] = count++;
-      outP.push(P[3 * v], P[3 * v + 1], P[3 * v + 2]);
-      outN.push(nx, ny, nz);
-      if (first[v] < 0) first[v] = outIndex[r]; else { mergeFrom.push(outIndex[r]); mergeTo.push(first[v]); }
+      const o = count++;
+      outIndex[r] = o;
+      outP[3 * o] = P[3 * v]; outP[3 * o + 1] = P[3 * v + 1]; outP[3 * o + 2] = P[3 * v + 2];
+      outN[3 * o] = nx; outN[3 * o + 1] = ny; outN[3 * o + 2] = nz;
+      if (first[v] < 0) first[v] = o; else { mF[nm] = o; mT[nm] = first[v]; nm++; }
     }
     outI[k] = outIndex[r];
   }
-  return { positions: Float32Array.from(outP), normals: Float32Array.from(outN), indices: outI,
-    mergeFrom: Uint32Array.from(mergeFrom), mergeTo: Uint32Array.from(mergeTo) };
+  return { positions: outP.slice(0, 3 * count), normals: outN.slice(0, 3 * count), indices: outI,
+    mergeFrom: mF.slice(0, nm), mergeTo: mT.slice(0, nm) };
 }
 
 /** Area-weighted vertex normals (fallback when the kernel gave none). */

@@ -8,7 +8,7 @@
 // greatest diameter (the classical rule; kept between D/3 and D/2), i.e. axis spacing s = 1.5 D. Pedestal dies are
 // 1.8 D square; the rail and plinth mouldings return round the pedestals at the same heights.
 
-import { mat, revolve, loft, box, union, part, instances, extrudeProfileX, bezier } from '../kernel.js';
+import { mat, revolve, loft, box, union, part, instances, extrudeProfileX, bezier, memo } from '../kernel.js';
 import { Prof } from '../profiles.js';
 import { urnParts } from './finial.js';
 import { effective as periodFields } from './balustrade-style.js';
@@ -318,6 +318,9 @@ function replicate(parts, mats) {
 
 function urnHeight(d) { return 1.8 * d.Wd; }
 
+/** A memoised solid is evaluated once, inside its build (Manifold's booleans are lazy). */
+const forced = (m) => { m.numTri(); return m; };
+
 /** meta.rigid for the deformation engine (deform.js): true = the part's instances follow a deformation rigidly (carved
  *  or assembled pieces stay true), false = warped with the shape (continuous members bend). A tag a part already
  *  carries (set where it is made) is kept. */
@@ -342,7 +345,9 @@ function buildParts(spec) {
   const halfCount = d.half ? 2 * bays.filter((b) => !b.open).length : 0;
   const { segs, q } = segsFor(spec.detail, N + halfCount, 90);
   const hBal = d.hb + 2 * OV, zBal = d.hp - OV;
-  const bal = balusterSolid(d.kind, hBal, d.Db, segs, q);
+  // the turned baluster and the urns depend on their own few numbers, not on the run's length: memoised per kernel
+  // (a length step or a card edit rebuilds only the rails), handed out as derived handles the caller owns and may delete
+  const bal = memo(`balustrade|baluster|${d.kind}|${hBal}|${d.Db}|${segs}|${q}`, () => forced(balusterSolid(d.kind, hBal, d.Db, segs, q))).translate([0, 0, 0]);
   const parts = [];
   // rails and plinths per bay, sunk 2 mm into the pedestals; equal bays share one mesh
   const inset = peds.length ? 0.002 : 0;
@@ -380,7 +385,10 @@ function buildParts(spec) {
   if (peds.length) {
     parts.push(part('pedestal', 'stone', pedestal(d), instances(peds.map((x) => mat.T(x, 0, 0)))));
     if (spec.urns) {
-      const urn = urnParts(urnHeight(d), { handles: false, knob: 'bud', detail: spec.detail });
+      const H = urnHeight(d);
+      const urn = memo(`balustrade|urn|${H}|${spec.detail}`, () => urnParts(H, { handles: false, knob: 'bud', detail: spec.detail })
+        .map((p) => ({ ...p, manifold: forced(p.manifold) })))
+        .map((p) => ({ ...p, manifold: p.manifold.translate([0, 0, 0]), meta: p.meta && { ...p.meta } }));
       const ends = [peds[0], peds[peds.length - 1]].map((x) => mat.T(x, 0, d.H - OV));
       parts.push(...replicate(urn, ends).map((p) => ({ ...p, name: `urn-${p.name}` })));
     }

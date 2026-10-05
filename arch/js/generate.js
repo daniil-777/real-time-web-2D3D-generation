@@ -20,7 +20,8 @@ const cache = {};
 export function family(element) {
   const f = Object.hasOwn(FAMILY, element) ? FAMILY[element] : null;   // own keys: "constructor" is no element
   if (!f) return Promise.reject(new Error(`no generator for "${element}"`));
-  return (cache[f] ||= import(`./gen/${f}.js`));
+  // a failed fetch (a network blip) must not stay cached as a rejected promise: drop it so the next build retries
+  return (cache[f] ||= import(`./gen/${f}.js`).catch((e) => { delete cache[f]; throw e; }));
 }
 
 const now = () => (globalThis.performance ? performance.now() : Date.now());

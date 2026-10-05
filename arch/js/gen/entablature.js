@@ -19,7 +19,7 @@
 // - Mutules (Vitruvius IV.3): one over every triglyph and every metope, with 3 x 6 guttae.
 
 import { ORDERS, DEFAULT_D, entablatureDims } from '../orders.js';
-import { K, mat, instances, box, union, part, crossSection, extrudeProfileX, bezier, arc, placeParts } from '../kernel.js';
+import { K, mat, instances, box, union, part, crossSection, extrudeProfileX, bezier, arc, placeParts, memo } from '../kernel.js';
 import { Prof } from '../profiles.js';
 import { acanthusLeaf, rosette, spiral } from '../ornament.js';
 import { socle, urnParts } from './finial.js';
@@ -404,7 +404,19 @@ function mutuleSolid(w, l, t, hg, segs) {
  * top z = h). Larger scroll at the back, smaller under the front, an S-curved soffit between; spiral channels on the
  * cheeks, a cap moulding round the top and (separately) an acanthus leaf under the soffit.
  */
-export function modillionSolids({ w, l, h, cap, capP }, detail) {
+export function modillionSolids(dims, detail) {
+  // a modillion's size follows the module, not the run's length: memoised per kernel by its exact dimensions (a cornice
+  // length step or a window edit no longer re-simplifies it), handed out as derived handles the caller owns
+  const { w, l, h, cap, capP } = dims;
+  const u = memo(`entablature|modillion|${detail}|${w}|${l}|${h}|${cap}|${capP}`, () => {
+    const r = modillionSolidsRaw(dims, detail);
+    r.solid.numTri(); if (r.leaf) r.leaf.numTri();
+    return r;
+  });
+  return { solid: u.solid.translate([0, 0, 0]), leaf: u.leaf ? u.leaf.translate([0, 0, 0]) : null };
+}
+
+function modillionSolidsRaw({ w, l, h, cap, capP }, detail) {
   const { Manifold } = K();
   const hb = h - cap, rb = 0.42 * hb, rf = 0.3 * hb, n = detail === 'low' ? 8 : 16;
   const cf = [l - rf, hb - rf];

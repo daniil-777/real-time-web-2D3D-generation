@@ -269,6 +269,20 @@ await t('broken pediments carry an urn on a pedestal in the gap', async () => {
     assert.ok(names.includes('pedestal') && names.includes('urn-body') && names.includes('urn-knob'), JSON.stringify(spec));
   }
 });
+await t('memoised modillions: derived handles, safe to delete, same geometry', async () => {
+  for (const spec of [{ element: 'cornice', order: 'corinthian' }, { element: 'window' }]) {
+    const a = await generate(spec), volA = a.parts.map((p) => p.manifold.volume());
+    const b = await generate(spec);
+    for (const p of a.parts) p.manifold.delete();
+    const c = await generate(spec.element === 'cornice' ? { ...spec, length: 4.4 } : { ...spec, width: 1.4 });
+    b.parts.forEach((p, i) => {
+      assert.notEqual(p.manifold, a.parts[i].manifold, `${spec.element} ${p.name}: own handle`);
+      assert.equal(p.manifold.volume(), volA[i], `${spec.element} ${p.name}: same geometry after the first build was freed`);
+    });
+    assert.ok(c.parts.every((p) => p.manifold.status() === 'NoError'), `${spec.element}: a later build after the free`);
+    assert.ok(c.parts.some((p) => /modillion|console/.test(p.name)), `${spec.element}: has modillions or consoles`);
+  }
+});
 await t('triangular pediment pitch is 22.5 deg (Serlio)', async () => {
   const r = await generate({ element: 'pediment', order: 'tuscan', width: 6 });
   const rk = r.parts.find((q) => q.name === 'raking-cornice').manifold.boundingBox();

@@ -68,4 +68,20 @@ t('partsBBox honours instances', () => {
   const moved = placeParts([p], mat.T(0, 0, 3));
   near(partsBBox(moved).min[2], 3, 1e-9, 'placed');
 });
+// generate.family (audit C3): a rejected import() is dropped from the cache, so the next build retries the fetch
+{
+  const { family, FAMILY } = await import('../js/generate.js');
+  FAMILY.__missing = '__missing';
+  try {
+    const p1 = family('__missing');
+    await assert.rejects(p1);
+    const p2 = family('__missing');
+    assert.notEqual(p2, p1, 'a rejected import must not stay cached');
+    await assert.rejects(p2);
+    const a = family('column');
+    assert.equal(family('column'), a, 'a good import stays cached');
+    await a;
+  } finally { delete FAMILY.__missing; }
+  n++; console.log('ok family(): a rejected import is not cached');
+}
 console.log(`${n} kernel tests passed`);

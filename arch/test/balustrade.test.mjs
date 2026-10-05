@@ -171,6 +171,25 @@ for (const c of cases) {
   await check(c, (r, errs) => { hon(r, errs); if (sp) sp(r, errs); });
 }
 
+// memoised baluster and urns (kernel.memo): every build hands out its own derived handles, so deleting one build's
+// parts (as the worker does) leaves the cache and the other builds intact, with the same geometry
+{
+  const spec = { element: 'balustrade', urns: true, length: 5 };
+  const a = await generate(spec), volA = a.parts.map((p) => p.manifold.volume());
+  const b = await generate(spec);
+  for (const p of a.parts) p.manifold.delete();
+  const c = await generate({ ...spec, length: 5.6 });
+  try {
+    assert.deepEqual(b.parts.map((p) => p.name), a.parts.map((p) => p.name));
+    b.parts.forEach((p, i) => {
+      assert.notEqual(p.manifold, a.parts[i].manifold, `${p.name}: a build's own handle`);
+      assert.equal(p.manifold.volume(), volA[i], `${p.name}: same geometry after the first build was freed`);
+    });
+    assert.ok(c.parts.every((p) => p.manifold.status() === 'NoError' && p.manifold.volume() > 0), 'a later build after the free');
+    console.log('memoised baluster and urns: derived handles, safe to delete: ok');
+  } catch (e) { fails++; console.log('FAIL memoised baluster and urns:', e.message); }
+}
+
 const w = [0, 1, 2, 3, 4].map((i) => Math.max(...rows.map((r) => r[i].length)));
 console.log(['spec'.padEnd(w[0]), 'ms'.padStart(w[1]), 'tris'.padStart(w[2]), 'size (m)'.padEnd(w[3]), 'counts'.padEnd(w[4]), 'result'].join('  '));
 for (const r of rows) console.log([r[0].padEnd(w[0]), r[1].padStart(w[1]), r[2].padStart(w[2]), r[3].padEnd(w[3]), r[4].padEnd(w[4]), r[5]].join('  '));

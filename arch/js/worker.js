@@ -272,8 +272,13 @@ async function base(m) {
     for (let t = 0; t < q.nt; t++) k += Math.max(1, Math.ceil(q.tri[2 * t] * s), q.tri[2 * t + 1] * s2);
     return k * q.n;
   };
+  // rigid (instanced, never refined) and empty parts are a fixed cost: the budget is for what refinement makes, so the
+  // warped parts keep at least a third of it however heavy the ornament (a Corinthian portico's 1.6 M rigid triangles
+  // used to leave nothing and its entablature previewed as straight chords; audit C1). total() still counts everything
+  // from 0 and BUDGET is 1.2 M exactly whenever the floor is not hit, so those cases refine as before.
+  const fixed = plan.reduce((acc, q) => acc + (q.rigid || q.empty ? q.nt * q.n : 0), 0);
   const total = (l) => plan.reduce((acc, q) => acc + predict(q, l), 0);
-  const BUDGET = 1.2e6;
+  const BUDGET = Math.max(1.2e6, fixed + 0.4e6);
   let ell = L / 40;
   if (total(ell) > BUDGET) {
     let lo = ell, hi = Math.max(L, ...plan.map((q) => q.emax * q.sc));
@@ -356,7 +361,11 @@ async function drawing(m) {
   try {
     gen = { ...(await family(el)) };
     if (OPENING_FAMILIES.has(el) && !gen.archGeom) gen.archGeom = (await family('arch')).archGeom;
-  } catch (e) { gen = null; }
+  } catch (e) {
+    // the sheet is still drawn, without the family's dimension chains (drawing.js notes that on the sheet)
+    console.warn(`drawing: the ${el} family did not load (${e && e.message}); dimensions from the model only`);
+    gen = null;
+  }
   const sheet = D.makeSheet({ meshes: last.meshes, spec: last.spec, deform: last.deform, gen, meta: m.meta || {} });
   const transfer = [];
   for (const g of sheet.groups) transfer.push(g.pts.buffer, g.starts.buffer);

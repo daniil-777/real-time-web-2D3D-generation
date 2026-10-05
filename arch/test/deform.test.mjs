@@ -251,13 +251,55 @@ await t('taper keeps height and footprint (obelisk, columns, pilaster, spire, fi
   }
   return 'height error: ' + notes.join(', ');
 });
+await t('polar3 into an out object and placeRigid are bit-identical to the allocating path', async () => {
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 - 0.5; };
+  const out = { R: new Float64Array(9), s: new Float64Array(3) };
+  const cases = [Float64Array.of(1, 0, 0, 0, 1, 0, 0, 0, 1), Float64Array.of(0, 0, 0, 0, 0, 0, 0, 0, 0), Float64Array.of(1, 2, 3, 2, 4, 6, 3, 6, 9),
+    Float64Array.of(-1, 0, 0, 0, 1, 0, 0, 0, 1), Float64Array.of(2, 0, 0, 0, 2, 0, 0, 0, 2)];
+  for (let i = 0; i < 300; i++) cases.push(Float64Array.from({ length: 9 }, rnd));
+  for (const A of cases) {
+    const a = polar3(A), b = polar3(A, out);
+    assert.equal(b, out);
+    for (let k = 0; k < 9; k++) assert.ok(Object.is(a.R[k], out.R[k]), `R[${k}]`);
+    for (let k = 0; k < 3; k++) assert.ok(Object.is(a.s[k], out.s[k]), `s[${k}]`);
+  }
+  // deformParts' rigid instances come from placeRigid: the same matrices as the closed formula with the allocating polar3
+  const g = await generate({ element: 'balustrade', length: 4 });
+  const ops = [{ type: 'bend', axis: 'x', angle: 120 }];
+  const r = deformParts(g.parts, ops, { bbox: g.bbox });
+  const D = makeDeformer(r.ops, g.bbox), bal = named(g.parts, 'baluster')[0], bb = bal.manifold.boundingBox();
+  const cl = [0, 1, 2].map((k) => (bb.min[k] + bb.max[k]) / 2), got = named(r.parts, 'baluster')[0].transforms;
+  for (let i = 0; i < bal.transforms.length / 16; i++) {
+    const M = bal.transforms.subarray(16 * i, 16 * i + 16), c = mat.apply(M, cl), fc = D.point(c), J = D.jacobian(c);
+    const { R, s } = polar3(J), k = Math.abs(s[1]) > 0 && Math.abs(Math.abs(s[1]) - 1) >= 1e-6 ? Math.abs(s[1]) : 1;
+    const A = R.map((x) => x * k), Ml = [M[0], M[4], M[8], M[1], M[5], M[9], M[2], M[6], M[10]], tm = [M[12] - c[0], M[13] - c[1], M[14] - c[2]];
+    for (let row = 0; row < 3; row++) {
+      for (let col = 0; col < 3; col++) assert.ok(got[16 * i + col * 4 + row] === A[3 * row] * Ml[col] + A[3 * row + 1] * Ml[3 + col] + A[3 * row + 2] * Ml[6 + col], `instance ${i} linear part`);
+      const tz = fc[row] + A[3 * row] * tm[0] + A[3 * row + 1] * tm[1] + A[3 * row + 2] * tm[2] + (row === 2 ? r.stats.ground : 0);
+      near(got[16 * i + 12 + row], tz, 1e-12, `instance ${i} translation`);
+    }
+  }
+  return `${cases.length} matrices, ${bal.transforms.length / 16} balusters`;
+});
+await t('a bent Corinthian portico is refined: rigid ornament is outside the refinement budget (audit C1)', async () => {
+  const g = await generate({ element: 'portico', order: 'corinthian' });
+  const r = deformParts(g.parts, [{ type: 'bend', axis: 'z', angle: 120 }], { bbox: g.bbox });
+  assert.ok(r.stats.edge > 0, `refinement edge ${r.stats.edge}`);
+  assert.ok(r.stats.refined > 0, 'pieces refined');
+  assert.ok(r.stats.tris < 2.5e6, `${r.stats.tris} triangles`);
+  for (const p of r.parts) p.manifold !== named(g.parts, p.name)[0]?.manifold && p.manifold.delete();
+  return `edge ${r.stats.edge.toFixed(3)} m, ${(r.stats.tris / 1e6).toFixed(2)} M triangles`;
+});
 await t('meta.rigid tags override the size rule', async () => {
   // the generators now tag their parts (rigid.test.mjs); this test is about the engine's fallback, so strip the tags
   const bare = (parts) => parts.map((p) => { const meta = { ...p.meta }; delete meta.rigid; return { ...p, meta }; });
   const g = await generate({ element: 'balustrade', length: 3 });
   g.parts = bare(g.parts);
-  const untagged = deformParts(g.parts, [{ type: 'bend', axis: 'x', angle: 90 }]);
+  const untagged = deformParts(g.parts, [{ type: 'bend', axis: 'x', angle: 90 }], { rigidRatio: 0.2 });
   assert.ok(untagged.stats.warped.includes('baluster'), 'untagged balusters of a 3 m run are warped at rigidRatio 0.2');
+  // the default is the page's RIGID_RATIO (0.25, audit C11): there the same balusters (22 % of the diagonal) are rigid
+  assert.ok(deformParts(g.parts, [{ type: 'bend', axis: 'x', angle: 90 }]).stats.rigid.includes('baluster'), 'default rigidRatio = RIGID_RATIO');
   const tag = (parts, name, rigid) => parts.map((p) => (p.name === name ? { ...p, meta: { ...p.meta, rigid } } : p));
   const tagged = deformParts(tag(g.parts, 'baluster', true), [{ type: 'bend', axis: 'x', angle: 90 }]);
   assert.ok(tagged.stats.rigid.includes('baluster'));

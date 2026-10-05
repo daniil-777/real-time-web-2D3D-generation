@@ -324,6 +324,22 @@ try {
       ok(/\bbase: attic\b/.test(svg) && /\bflutes: 24\b/.test(svg) && !/\bfrieze:/.test(svg) && !/\bcornice:/.test(svg), 'column spec block: base and flutes, no frieze or cornice');
     }
   }
+  // audit C7: a family whose dimensions throw still gets a sheet, with a warning and a note, never a silent loss
+  {
+    const r = await built({ element: 'column', order: 'doric', height: 3 });
+    if (r) {
+      const gen = { ...(await family('column')), dimsFor() { throw new Error('dimsFor changed'); } };
+      const warn = console.warn, said = [];
+      console.warn = (...a) => said.push(a.join(' '));
+      let sheet;
+      try { sheet = D.makeSheet({ meshes: meshesOf(r.parts, r.spec), spec: r.spec, gen, meta: { date: '2026-10-05' } }); } finally { console.warn = warn; }
+      const svg = D.toSVG(sheet);
+      ok(sheet.warnings.some((w) => /dimensions unavailable: dimsFor changed/.test(w)) && said.some((w) => /dimsFor changed/.test(w))
+        && /Dimensions unavailable/.test(svg) && !/Lower diameter D/.test(svg), 'failing dimensions: warned, noted on the sheet, no key table');
+      const good = await sheetFor({ element: 'column', order: 'doric', height: 3 });
+      ok(good && good.sheet.warnings.length === 0, 'a sheet with its dimensions has no warnings');
+    }
+  }
   {
     const s = await sheetFor({ element: 'entablature', order: 'doric', length: 2 });
     if (s) { const svg = D.toSVG(s.sheet); ok(/\bfrieze: triglyph\b/.test(svg) && /\bcornice: mutules\b/.test(svg) && !/\bbase:/.test(svg) && !/\bflutes:/.test(svg), 'entablature spec block: frieze and cornice, no base or flutes'); }
