@@ -112,6 +112,32 @@ const ms = rows.filter((x) => x.r).map((x) => x.r.total).sort((a, b) => a - b);
 const tr = rows.filter((x) => x.r).map((x) => x.r.tris).sort((a, b) => a - b);
 console.log(`\n${rows.length} builds, ${rows.length - fails} passed, ${fails} failed; ms median ${ms[ms.length >> 1].toFixed(0)} max ${ms[ms.length - 1].toFixed(0)}; tris median ${tr[tr.length >> 1]} max ${tr[tr.length - 1]}`);
 
+// hollow shells (oculus) are true annuli at their base: no membrane closing the underside (the eye must be open)
+const ringCases = [];
+for (const domeType of ['hemisphere', 'segmental', 'ribbed']) for (const drum of [true, false]) for (const lantern of [false, true]) for (const diameter of [0.3, 8, 43])
+  ringCases.push({ element: 'dome', domeType, drum, lantern, oculus: true, diameter });
+let rFails = 0;
+console.log(`\nshell section: ${ringCases.length} oculus domes must be open annuli at the springing`);
+for (const [i, spec] of ringCases.entries()) {
+  if (i % 12 === 0) await initKernel();
+  const r = await generate(spec);
+  const shell = r.parts.find((p) => p.name === 'dome-shell').manifold;
+  const z0 = shell.boundingBox().min[2], msg = [];
+  for (const dz of [0.0015 * Math.min(1, spec.diameter / 8) + 1e-5, 0.01 * spec.diameter / 8]) {
+    const cs = shell.slice(z0 + dz), polys = cs.toPolygons();
+    const radii = polys.map((poly) => Math.max(...poly.map(([x, y]) => Math.hypot(x, y)))).sort((a, b) => b - a);
+    const ro = radii[0], ri = radii[1] ?? 0, annulus = Math.PI * (ro * ro - ri * ri), A = cs.area();
+    // the hole is the inner springing radius (≈ 0.9 of the outer), not the eye, and the area is that annulus's
+    if (polys.length !== 2 || ri < 0.85 * ro || Math.abs(A - annulus) > 0.02 * annulus) msg.push(`z0+${dz.toFixed(4)}: ${polys.length} contours ri/ro ${(ri / ro).toFixed(3)} area ${A.toFixed(4)} vs ${annulus.toFixed(4)}`);
+  }
+  const ok = !msg.length;
+  if (!ok) rFails++;
+  console.log(pad('dome', 7), pad(Object.entries(spec).filter(([k]) => k !== 'element').map(([k, v]) => `${k}=${v}`).join(' '), 58), ok ? ' ok' : ' FAIL ' + msg.join('; '));
+  const seen = new Set(); for (const p of r.parts) if (!seen.has(p.manifold)) { seen.add(p.manifold); p.manifold.delete(); }
+}
+console.log(`shell section: ${ringCases.length - rFails}/${ringCases.length} open annuli`);
+if (process.env.DOME_SECTION_ONLY) process.exit(fails || rFails ? 1 : 0);
+
 // printability: every element unions into ONE solid (all part instances, internal voids and sub-mm³ noise ignored)
 const solidCases = [];
 for (const domeType of domeTypes) for (const drum of [true, false]) for (const lantern of [true, false]) for (const oculus of [false, true])
@@ -134,4 +160,4 @@ for (const [i, spec] of solidCases.entries()) {
   const seen = new Set(); for (const p of r.parts) if (!seen.has(p.manifold)) { seen.add(p.manifold); p.manifold.delete(); }
 }
 console.log(`printability: ${solidCases.length - sFails}/${solidCases.length} one solid`);
-if (fails || sFails) process.exit(1);
+if (fails || sFails || rFails) process.exit(1);

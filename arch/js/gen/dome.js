@@ -189,14 +189,19 @@ function offsetIn(c, t) {
 /** Revolve the shell: solid to the axis, or hollow (thickness t) with an eye of radius `eye`. A short skirt (2 EPS)
  *  continues the springing downward into whatever carries the shell, so the two fuse into one solid. */
 function shellSolid(c, segs, { eye = 0, t = 0 } = {}) {
-  const sink = 2 * EPS, z0 = c[0][1] - sink;
+  const sink = 2 * EPS;
   if (!eye) {
-    const l = c[c.length - 1];
+    const l = c[c.length - 1], z0 = c[0][1] - sink;
     return revolve([[0, z0], [c[0][0], z0], ...c, ...(l[0] > 0 ? [[0, l[1]]] : [])], segs);
   }
   const outer = clipR(c, eye);
   const inner = clipR(offsetIn(c, t).filter((p) => p[0] > 0), eye - 0.25 * t);
-  return revolve([[outer[0][0], z0], ...outer, ...inner.reverse(), [inner[0][0], z0]], segs);
+  // a true annulus at the base: both faces run straight down to one level below the lower of the two springing points
+  // (the inward offset of a sloping springing starts lower than the outer one); the inner springing point is read
+  // before reversing, and the shared array is never reversed in place
+  const innerSpring = inner[0], innerDown = inner.slice().reverse();
+  const z0 = Math.min(outer[0][1], innerSpring[1]) - sink;
+  return revolve([[outer[0][0], z0], ...outer, ...innerDown, [innerSpring[0], z0]], segs);
 }
 
 // ================================================================================================ the orders (lite)
