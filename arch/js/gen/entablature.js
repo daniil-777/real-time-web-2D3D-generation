@@ -1314,6 +1314,13 @@ export function roleFor(material) {
   return material === 'wood' ? 'wood' : ['copper', 'lead', 'zinc', 'bronze', 'gold'].includes(material) ? 'metal' : 'stone';
 }
 
+/** Carved and repeated ornament (dentils, modillions and their leaves, mutules, regulae, triglyphs, eggs, darts, beads,
+ *  reels, leaves, rosettes, consoles, keystones, label stops, acroteria urns) follows a deformation rigidly; the runs
+ *  (architrave, frieze, cornice, raking cornice, tympanum, mouldings, hood moulds, sills, plinths, pedestals, spandrels,
+ *  imposts) bend with the shape. A tag a part already carries is kept. */
+const RIGID = /^(bead|console|console-leaf|dentil|keystone|label-stop|leaf|lesbian-dart|lesbian-leaf|modillion|modillion-leaf|mutule|ovolo-dart|ovolo-egg|egg|dart|reel|regula|rosette|triglyph|urn-.*)$/;
+export const tagRigid = (parts) => parts.map((p) => (typeof p.meta?.rigid === 'boolean' ? p : { ...p, meta: { ...p.meta, rigid: RIGID.test(p.name) } }));
+
 export function build(spec) {
   let parts;
   switch (spec.element) {
@@ -1325,6 +1332,7 @@ export function build(spec) {
     default: parts = entablatureParts(entSpecPlan(spec));
   }
   const role = roleFor(spec.material);
+  parts = tagRigid(parts);
   return role === 'stone' ? parts : parts.map((p) => ({ ...p, role }));
 }
 

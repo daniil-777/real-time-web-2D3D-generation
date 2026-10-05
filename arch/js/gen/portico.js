@@ -13,7 +13,7 @@ import { ORDERS, columnDims } from '../orders.js';
 import { normalize } from '../spec.js';
 import { build as buildColumn } from './column.js';
 import { mat, instances, box, union, part, placeParts, partTris, partsBBox } from '../kernel.js';
-import { entablaturePlan, entablatureParts, pedimentPlan, pedimentParts, porticoKinds, roleFor } from './entablature.js';
+import { entablaturePlan, entablatureParts, pedimentPlan, pedimentParts, porticoKinds, roleFor, tagRigid } from './entablature.js';
 
 export const ELEMENTS = ['portico'];
 
@@ -81,18 +81,18 @@ export function build(spec) {
       const g = i * TREAD, z1 = (pp.steps - i) * RISER, z0 = z1 - RISER - (i < pp.steps - 1 ? EPS : 0);
       blocks.push(box(-pp.Xs - g, -(pp.Xs - pp.axes[pp.n - 1]) - g, Math.max(0, z0), pp.Xs + g, pp.yb, z1));
     }
-    parts.push(part('stylobate', 'stone', union(blocks)));
+    parts.push(part('stylobate', 'stone', union(blocks), null, { rigid: false }));   // the platform is one continuous member
   }
   // columns: built once by the column family, placed as instances
   const col = pp.col;
   for (const p of col) {
     const local = p.transforms ? Array.from({ length: p.transforms.length / 16 }, (_, i) => p.transforms.subarray(16 * i, 16 * i + 16)) : [mat.I()];
     const xf = pp.axes.flatMap((x) => local.map((m) => mat.mul(mat.T(x, 0, pp.zcol), m)));
-    parts.push(part(p.name, p.role, p.manifold, instances(xf), p.meta));
+    parts.push(part(p.name, p.role, p.manifold, instances(xf), { ...p.meta, rigid: true }));   // every part of a placed column is rigid
   }
   // entablature (with its cornice when there is no pediment) and the pediment on the frieze
-  parts.push(...placeParts(entablatureParts(pp.ent), mat.T(0, pp.yf, pp.zc)));
-  if (pp.ped) parts.push(...placeParts(pedimentParts(pp.ped), mat.T(0, pp.yf, pp.zp)));
+  parts.push(...placeParts(tagRigid(entablatureParts(pp.ent)), mat.T(0, pp.yf, pp.zc)));
+  if (pp.ped) parts.push(...placeParts(tagRigid(pedimentParts(pp.ped)), mat.T(0, pp.yf, pp.zp)));
   const role = roleFor(spec.material), fitted = fitBudget(parts, TRI_BUDGET, pp.D);
   return role === 'stone' ? fitted : fitted.map((p) => ({ ...p, role }));
 }

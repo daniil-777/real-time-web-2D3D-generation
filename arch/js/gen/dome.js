@@ -1365,7 +1365,17 @@ function decoSpire(S, parts, role) {
 
 // ================================================================================================ build / expected
 
+/** Instanced columns and pilasters (drum, stage, lantern), dentils, balusters, crockets, lucarnes, windows and their
+ *  surrounds, glazing bars, louvres, slates and shingles, finials, capstones, crown bosses, fins and lights are separate
+ *  pieces: rigid. Shells, ribs, drum and lantern bodies, podium, attics, entablatures, bands, rings, tiers, the spire's
+ *  faces and needle, seams and balustrade runs are continuous: they bend. */
+const RIGID = /^((lantern-)?col-.*|(drum|stage|lantern)-pilaster|dentil|baluster|crocket|crown-boss|capstone|deco-light|fin|finial.*|glazing-bar|lantern-glass|louvre.*|(dome-)?lucarne.*|opening-surround|window-surround|window-glass|slate|shingle)$/;
+
 export function build(spec) {
+  return buildParts(spec).map((p) => (typeof p.meta?.rigid === 'boolean' ? p : { ...p, meta: { ...p.meta, rigid: RIGID.test(p.name) } }));
+}
+
+function buildParts(spec) {
   setScale(spec);
   if (spec.element === 'spire') return spireParts(spirePlan(spec), spec);
   const P = domePlan(spec);

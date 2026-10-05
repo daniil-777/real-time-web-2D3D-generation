@@ -809,7 +809,8 @@ function ridgeParts(D, G, mats) {
         xf.push(frame(F.side, F.up, V.mul(F.t, F.len), V.add(l.P0, V.mul(F.up, F.off))));
       }
     }
-    out.push(part(kind, role, piece, instances(xf), { material }));
+    // clay ridge / hip pieces are separate tiles (rigid); a roll or boards is one continuous member (bends)
+    out.push(part(kind, role, piece, instances(xf), { material, rigid: style === 'piece' && !low }));
     // where two hips meet the ridge: a domed cap (Walmkappe) over the three-way joint
     if (kind === 'ridge' && (D.type === 'hip' || D.type === 'mansard') && style !== 'boards') {
       const { Manifold } = K();
@@ -817,7 +818,7 @@ function ridgeParts(D, G, mats) {
       const rad = style === 'piece' ? sec.top - sec.hc : C.R.rr, cz = style === 'piece' ? sec.hc : sec.top - C.R.rr;
       const cap = Manifold.sphere(rad, segsFor(D.detail, 24, 16, 12));
       const at = (P) => mat.T(P[0], P[1], P[2] + F.off + cz);
-      out.push(part('ridge-cap', role, cap, instances(lines.flatMap((l) => [at(l.P0), at(l.P1)])), { material }));
+      out.push(part('ridge-cap', role, cap, instances(lines.flatMap((l) => [at(l.P0), at(l.P1)])), { material, rigid: true }));
     }
     // end discs closing the open ends of a clay ridge at the verges, and the foot of each hip
     if (style === 'piece' && !low && (kind === 'ridge' ? D.type === 'gable' || D.type === 'gambrel' : true)) {
@@ -827,7 +828,7 @@ function ridgeParts(D, G, mats) {
         ex.push(frame(F.side, F.up, F.t, base));
         if (kind === 'ridge') ex.push(frame(F.side, F.up, F.t, V.add(base, V.mul(F.t, F.len - 0.012 * C.kt))));
       }
-      out.push(part(`${kind}-end`, role, disc, instances(ex), { material }));
+      out.push(part(`${kind}-end`, role, disc, instances(ex), { material, rigid: true }));
     }
   }
   return out;
@@ -1165,7 +1166,19 @@ function snowGuards(D, G, mats) {
 
 // ------------------------------------------------------------------------------------------------ assembly
 
+/** Covering units (tiles, slates, shingles, pantiles, pans and their clipped edge pieces), dormers, gutter brackets,
+ *  downpipes, snow guards and finials are separate pieces: rigid. The deck, cornice, fascia, barges, gable walls, gutter,
+ *  capping, curb and the seams (which run the whole slope) are continuous: they bend. Ridge and hip pieces are tagged
+ *  where they are made. */
+const RIGID = /^((tile|pantile|pan|slate|shingle)(-course|-cut)?|dormer.*|downpipe|finial|gutter-bracket(-end)?|snow-guard(-bracket)?)$/;
+
 export function build(spec) {
+  return tagRigid(buildParts(spec));
+}
+
+const tagRigid = (parts) => parts.map((p) => (typeof p.meta?.rigid === 'boolean' ? p : { ...p, meta: { ...p.meta, rigid: RIGID.test(p.name) } }));
+
+function buildParts(spec) {
   const D = dims(spec);
   const G = geometry(D);
   const mats = materials(spec, D.cover);

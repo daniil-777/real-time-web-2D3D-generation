@@ -504,7 +504,24 @@ function obeliskParts(spec, R) {
 
 // ------------------------------------------------------------------------------------------------ assembly
 
+/** meta.rigid for the deformation engine (deform.js): true = the part's instances follow a deformation rigidly (carved
+ *  or assembled pieces stay true), false = warped with the shape (continuous members bend). A tag a part already
+ *  carries (set where it is made) is kept. */
+const tagRigid = (parts, rigid) => parts.map((p) => (typeof p.meta?.rigid === 'boolean' ? p : { ...p, meta: { ...p.meta, rigid: rigid(p) } }));
+
+/** The repeated ornament (pineapple scales, the crown leaves, urn handles, the obelisk's four balls) is rigid. As an
+ *  element of its own a finial, urn or obelisk is one continuous body (socle, stem, fruit, bowl, shaft, ...): it warps
+ *  with the shape, which is also what keeps a taper's height exact (a whole finial moved as one rigid piece would shrink
+ *  with the taper). Where a finial or an urn stands on another element (roof, dome, balustrade, entablature) its part
+ *  is tagged rigid by that family. */
+const RIGID = new Set(['scale', 'crown-outer', 'crown-inner', 'handle']);
+
 export function build(spec) {
+  const obelisk = spec.element === 'obelisk';
+  return tagRigid(buildParts(spec), (p) => RIGID.has(p.name) || (obelisk && p.name === 'ball'));
+}
+
+function buildParts(spec) {
   const R = resolution(spec.detail), H = spec.height;
   if (spec.element === 'obelisk') return obeliskParts(spec, R);
   if (spec.element === 'urn') {

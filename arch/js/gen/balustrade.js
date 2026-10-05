@@ -308,7 +308,19 @@ function replicate(parts, mats) {
 
 function urnHeight(d) { return 1.8 * d.Wd; }
 
+/** meta.rigid for the deformation engine (deform.js): true = the part's instances follow a deformation rigidly (carved
+ *  or assembled pieces stay true), false = warped with the shape (continuous members bend). A tag a part already
+ *  carries (set where it is made) is kept. */
+const tagRigid = (parts, rigid) => parts.map((p) => (typeof p.meta?.rigid === 'boolean' ? p : { ...p, meta: { ...p.meta, rigid: rigid(p) } }));
+
+/** Balusters (and half-balusters) and urns are turned pieces: rigid; pedestals, plinths and rails bend. */
+const RIGID = /^(baluster|half-baluster|urn-)/;
+
 export function build(spec) {
+  return tagRigid(buildParts(spec), (p) => RIGID.test(p.name));
+}
+
+function buildParts(spec) {
   if (spec.element === 'baluster') {
     const kind = BALUSTERS.includes(spec.baluster) ? spec.baluster : 'vase', h = spec.height;
     const D = kind === 'bar' ? 0.063 * h : D_OF[kind] * h;

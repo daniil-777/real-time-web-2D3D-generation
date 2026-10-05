@@ -252,7 +252,10 @@ await t('taper keeps height and footprint (obelisk, columns, pilaster, spire, fi
   return 'height error: ' + notes.join(', ');
 });
 await t('meta.rigid tags override the size rule', async () => {
+  // the generators now tag their parts (rigid.test.mjs); this test is about the engine's fallback, so strip the tags
+  const bare = (parts) => parts.map((p) => { const meta = { ...p.meta }; delete meta.rigid; return { ...p, meta }; });
   const g = await generate({ element: 'balustrade', length: 3 });
+  g.parts = bare(g.parts);
   const untagged = deformParts(g.parts, [{ type: 'bend', axis: 'x', angle: 90 }]);
   assert.ok(untagged.stats.warped.includes('baluster'), 'untagged balusters of a 3 m run are warped at rigidRatio 0.2');
   const tag = (parts, name, rigid) => parts.map((p) => (p.name === name ? { ...p, meta: { ...p.meta, rigid } } : p));
@@ -260,6 +263,7 @@ await t('meta.rigid tags override the size rule', async () => {
   assert.ok(tagged.stats.rigid.includes('baluster'));
   assert.equal(named(tagged.parts, 'baluster')[0].manifold, named(g.parts, 'baluster')[0].manifold);
   const g6 = await generate({ element: 'balustrade', length: 6 });
+  g6.parts = bare(g6.parts);
   assert.ok(deformParts(g6.parts, [{ type: 'bend', axis: 'x', angle: 90 }]).stats.rigid.includes('pedestal'), '6 m: pedestals rigid by size');
   assert.ok(deformParts(tag(g6.parts, 'pedestal', false), [{ type: 'bend', axis: 'x', angle: 90 }]).stats.warped.includes('pedestal'), 'tag false warps');
   const knob = part('knob', 'stone', W.Manifold.sphere(0.2, 24).translate([0, 0, 1.8]), null, { rigid: true });

@@ -921,7 +921,7 @@ function engagedColumns(L) {
     const xf = [];
     for (const q of places) for (const m of own) xf.push(mat.mul(q, m));
     // a derived handle per build: the caller owns (and may delete) it, the memoised column stays intact
-    return { ...p, meta: { ...p.meta }, name: `column-${p.name}`, manifold: p.manifold.translate([0, 0, 0]), transforms: instances(xf) };
+    return { ...p, meta: { ...p.meta, rigid: true }, name: `column-${p.name}`, manifold: p.manifold.translate([0, 0, 0]), transforms: instances(xf) };
   });
 }
 
@@ -997,7 +997,7 @@ function columnParts(L) {
     const xf = [];
     for (const x of xs) for (const m of own) xf.push(mat.mul(mat.T(x, 0, 0), mat.S(f), m));
     // a derived handle per build: the caller owns (and may delete) it, the memoised column stays intact
-    return { ...p, meta: { ...p.meta }, name: `column-${p.name}`, manifold: p.manifold.translate([0, 0, 0]), transforms: instances(xf) };
+    return { ...p, meta: { ...p.meta, rigid: true }, name: `column-${p.name}`, manifold: p.manifold.translate([0, 0, 0]), transforms: instances(xf) };
   });
   // dosseret: a block of entablature (architrave fascia, frieze, small cornice) as in Brunelleschi's loggia
   const D = L.D, a = L.P / 2, t = L.T / 2 + 0.03 * D, h = L.hDos, n = L.detail === 'high' ? 8 : 4;
@@ -1150,7 +1150,17 @@ function tondoParts(L) {
 
 const stepFor = (detail) => (detail === 'low' ? 7.5 : detail === 'medium' ? 4 : 2.5);   // degrees per facet
 
+/** Voussoirs, keystones (and their carving), springers, rosettes, tondi, dentils, modillions and triglyphs are single
+ *  pieces: rigid; the wall, cornice, entablature, hood moulds, imposts, dosserets and pier bases are continuous: they
+ *  bend. The columns (every part) are tagged where they are placed. */
+const RIGID = /^(voussoir|voussoir-haunch|voussoir-alt|keystone|key|key-leaf|key-scroll|springer|rose|tondo|dentil|modillion|triglyph)$/;
+
 export function build(spec) {
+  const parts = buildParts(spec);
+  return parts.map((p) => (typeof p.meta?.rigid === 'boolean' ? p : { ...p, meta: { ...p.meta, rigid: RIGID.test(p.name) } }));
+}
+
+function buildParts(spec) {
   const L = layout(spec);
   L.step = stepFor(L.detail);
   L.section = ringSection(L);

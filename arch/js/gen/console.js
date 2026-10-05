@@ -161,6 +161,11 @@ function faceLeaf({ C, s0, s1, w, th, base, uMax, Dp, nu, nv }) {
   return thickSurface(f, nu, nv, (u, v) => th * (0.45 + 0.55 * (1 - (2 * u - 1) ** 2)) * (1 - 0.45 * v));
 }
 
+/** meta.rigid for the deformation engine (deform.js): true = the part's instances follow a deformation rigidly (carved
+ *  or assembled pieces stay true), false = warped with the shape (continuous members bend). A tag a part already
+ *  carries (set where it is made) is kept. */
+const tagRigid = (parts, rigid) => parts.map((p) => (typeof p.meta?.rigid === 'boolean' ? p : { ...p, meta: { ...p.meta, rigid: rigid(p) } }));
+
 export function build(spec) {
   const g = design(spec), { Dp, Wv, Wb } = g;
   const parts = [];
@@ -202,7 +207,9 @@ export function build(spec) {
     // (at absurd proportions where the leaf would leave the requested box, the console is left plain)
     if (bb.min[1] >= -Dp / 2 && bb.max[1] <= Dp / 2 && bb.min[2] >= 0 && bb.max[2] <= g.Hb) parts.push(part('leaf', 'stone', leaf));
   }
-  return parts;
+  // the carved leaf follows a deformation rigidly; the body and the cap are continuous and warp (a console placed by an
+  // arch or an entablature is tagged rigid, whole, by that family)
+  return tagRigid(parts, (p) => p.name === 'leaf');
 }
 
 /** What the generator promises: the requested width, depth (wall to the cap's front) and height. */

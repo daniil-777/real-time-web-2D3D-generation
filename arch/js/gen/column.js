@@ -480,6 +480,9 @@ function pilasterParts(spec, d) {
  * (order, element, flutes, base, pedestal, entasis, detail) and scaled: changing only the height or diameter costs a
  * scale, not a rebuild. Scaled handles share the cached geometry; deleting them leaves the cache intact.
  */
+// carved ornament follows a deformation rigidly; shaft, base, abacus, bell, echinus, astragal and pedestal bend with the shape
+const RIGID = new Set(['caulicolus', 'dart', 'egg', 'fleuron', 'leaf', 'leaf-lower', 'leaf-upper', 'volute']);
+
 export function build(spec) {
   const D = dimsFor(spec).D;
   const shape = { ...spec, height: undefined, diameter: 1, material: undefined, style: undefined, seed: undefined, given: undefined };
@@ -491,7 +494,7 @@ export function build(spec) {
   });
   const S = mat.S(D), Si = mat.S(1 / D);
   return unit.map((p) => ({
-    ...p, meta: { ...p.meta }, manifold: p.manifold.scale(D),
+    ...p, meta: { ...p.meta, rigid: RIGID.has(p.name) }, manifold: p.manifold.scale(D),
     transforms: p.transforms ? instances(Array.from({ length: p.transforms.length / 16 }, (_, i) =>
       mat.mul(S, p.transforms.subarray(16 * i, 16 * i + 16), Si))) : null,
   }));
