@@ -336,6 +336,30 @@ check('captions carry one DE/FR/IT line with the same facts', () => {
   }
   return seen.size >= 2 ? '' : 'only one foreign language over 12 seeds';
 });
+// a ?spec= link is JSON a stranger may write: inherited names (constructor, toString, __proto__...) are no fields, no
+// order, no element; nothing reaches the spec (the drawing's spec block lists it) and no prototype changes
+check('normalize() keeps only own SCHEMA fields of a crafted spec', () => {
+  const crafted = JSON.parse('{"element":"column","constructor":"\\u0001x","toString":"y","valueOf":2,"hasOwnProperty":"z","__proto__":{"polluted":1},"isPrototypeOf":"w"}');
+  const { spec, warnings } = normalize(crafted);
+  const bad = ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__', 'isPrototypeOf'].filter((k) => Object.hasOwn(spec, k));
+  if (bad.length) return `own keys ${bad.join(', ')} in ${JSON.stringify(spec)}`;
+  if (spec.given.length) return `given ${JSON.stringify(spec.given)}`;
+  if (Object.getPrototypeOf(spec) !== Object.prototype || ({}).polluted !== undefined) return 'a prototype changed';
+  if (warnings.length) return `warnings ${JSON.stringify(warnings)}`;
+  for (const order of ['constructor', 'toString', '__proto__']) {
+    const n = normalize({ element: 'column', order });
+    if (n.spec.order !== 'ionic' || !n.warnings.some((w) => w.includes('unknown order'))) return `order "${order}" → ${n.spec.order} ${JSON.stringify(n.warnings)}`;
+  }
+  const e = normalize({ element: 'constructor' });
+  return e.spec.element === 'column' && e.warnings.length ? '' : `element "constructor" → ${e.spec.element}`;
+});
+{
+  const { family } = await import('../js/generate.js');
+  for (const el of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+    const r = await family(el).then(() => 'resolved', (e) => e.message);
+    check(`family("${el}") rejects`, () => (/no generator/.test(r) ? '' : r));
+  }
+}
 // robustness: never throws, always answers quickly
 check('robust on garbage and long input', () => {
   const junk = ['', ' ', '!!!', '0', '-', "'", '"', '°', 'Ø', 'x', '1 x', 'x 2', '3-', '--3 m', '1e9 m', '9999999999999 balusters', '1.2.3.4 m', '1,2,3', 'ü', 'ßßß', '🙂 column',

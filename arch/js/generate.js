@@ -18,7 +18,7 @@ export const FAMILY = {
 
 const cache = {};
 export function family(element) {
-  const f = FAMILY[element];
+  const f = Object.hasOwn(FAMILY, element) ? FAMILY[element] : null;   // own keys: "constructor" is no element
   if (!f) return Promise.reject(new Error(`no generator for "${element}"`));
   return (cache[f] ||= import(`./gen/${f}.js`));
 }

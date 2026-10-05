@@ -1508,7 +1508,10 @@ function moduleBar(D, x, y, w, f, M, fm) {
 
 // ------------------------------------------------------------------------------------------------ writers
 
-const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// XML 1.0 has no place for C0 controls (but tab, line feed, carriage return), U+FFFE / U+FFFF or a lone surrogate: they
+// are dropped, so no text (a prompt, a title from a crafted link) can make the SVG malformed
+const XML_BAD = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+const esc = (s) => String(s).replace(XML_BAD, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const r2 = (v) => Math.round(v * 100) / 100;
 const pairs = (p) => { const o = []; for (let i = 0; i < p.length; i += 2) o.push(`${r2(p[i])},${r2(p[i + 1])}`); return o.join(' '); };
 function pathD(P, S, close = false) {

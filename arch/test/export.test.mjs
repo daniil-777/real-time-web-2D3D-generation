@@ -322,6 +322,21 @@ try {
       ok(svg.includes('1:20') && svg.includes('ARCH STUDIO') && svg.includes('Ø 0.30'), 'scale, title block and the lower diameter written');
     }
   }
+  // a crafted link: inherited names never reach the spec block, and no text (title, interpretation, a field value) can
+  // put a character into the SVG that XML 1.0 forbids (C0 controls, U+FFFE/FFFF, lone surrogates); a pair survives
+  {
+    const crafted = JSON.parse('{"element":"pedestal","order":"tuscan","constructor":"\\u0001","toString":"\\u0002","__proto__":{"x":1}}');
+    const s = await sheetFor(crafted);
+    if (s) {
+      const bad = 'bad\u0000\u0001\u0008\u000B\u000C\u001F￾￿\uD800x\uDC00y\uDBFF';
+      const sheet = { ...s.sheet, title: `title ${bad}`, number: `no ${bad}`,
+        items: [...s.sheet.items, { t: 'text', x: 10, y: 10, str: `${bad} 🏛 tab\tnl\n`, size: 2, weight: 400, anchor: 'start' }] };
+      const svg = D.toSVG(sheet);
+      const XML_BAD = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+      ok(!XML_BAD.test(svg) && svg.includes('badxy 🏛 tab\tnl\n'), 'SVG text: XML-invalid characters dropped, a surrogate pair kept');
+      ok(!/constructor|toString|__proto__/.test(D.toSVG(s.sheet)) && !Object.hasOwn(s.spec, 'constructor'), 'inherited names of a crafted spec reach neither the spec nor the sheet');
+    }
+  }
   // arches: span, rise and springing measured on the model agree with the arch family's construction
   for (const [spec, want] of [
     [{ element: 'arch' }, { span: 2.4, rise: 1.2, springing: 3.6 }],

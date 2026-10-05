@@ -102,7 +102,8 @@ export function normalize(input) {
   const given = strip(input), defaults = { ...DEFAULTS[element] };
   for (const [count, dims] of Object.entries(DEFAULT_YIELDS[element] || {})) if (given[count] !== undefined) for (const d of dims) delete defaults[d];
   const spec = { ...defaults, ...given, element };
-  if (spec.order && !ORDERS[spec.order]) { warnings.push(`unknown order "${spec.order}"`); spec.order = DEFAULTS[element].order || 'tuscan'; }
+  // own keys only: a request's "constructor" or "toString" is not an order (nor a field, see strip())
+  if (spec.order && !Object.hasOwn(ORDERS, spec.order)) { warnings.push(`unknown order "${spec.order}"`); spec.order = DEFAULTS[element].order || 'tuscan'; }
   const o = ORDERS[spec.order || 'tuscan'];
   if (['column', 'pilaster', 'capital', 'base', 'pedestal', 'portico', 'arcade', 'entablature', 'cornice'].includes(element)) {
     if (spec.base === undefined) spec.base = o.base === 'attic' || o.base === 'tuscan' || o.base === 'none' ? o.base : 'attic';
@@ -111,7 +112,7 @@ export function normalize(input) {
     if (spec.cornice === undefined) spec.cornice = o.cornice === 'gorge' ? 'plain' : o.cornice;
   }
   for (const [k, v] of Object.entries(spec)) {
-    const s = SCHEMA[k];
+    const s = Object.hasOwn(SCHEMA, k) ? SCHEMA[k] : null;
     if (!s || v === undefined || v === null) continue;
     if (s.type === 'number' || s.type === 'int') {
       let x = Number(v);
@@ -134,8 +135,9 @@ export function normalize(input) {
   return { spec, warnings };
 }
 
+/** The request's own SCHEMA fields (an inherited name - constructor, toString, __proto__ from a ?spec= link - is none). */
 function strip(o) {
   const out = {};
-  for (const [k, v] of Object.entries(o || {})) if (v !== undefined && v !== null && k in SCHEMA) out[k] = v;
+  for (const [k, v] of Object.entries(o || {})) if (v !== undefined && v !== null && Object.hasOwn(SCHEMA, k)) out[k] = v;
   return out;
 }
