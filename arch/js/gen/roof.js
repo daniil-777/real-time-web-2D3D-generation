@@ -135,6 +135,7 @@ export function dims(spec) {
     rg: 0.07 * k, gt: 0.004 * k, rb: 0.011 * k, tcap: 0.004 * k,
   };
   D.gw = 2 * D.rg + 2 * D.rb - 1.5 * D.gt;            // gutter projection in front of the fascia
+  D.ov = Math.min(0.0015, 0.015 * k);                  // how far a member reaches into the one that carries it
   D.coverMat = materials(spec, D.cover).covering;
   let { lo, up } = pitches(spec, type);
   levels(D, lo, up);
@@ -203,6 +204,9 @@ function covering(D) {
   C.lift = D.cover === 'seam' ? 0 : D.cover === 'pantiles' ? C.t : (C.t * C.L) / C.g;
   C.alpha = D.cover === 'seam' ? 0 : Math.asin(Math.min(0.3, C.lift / C.L));
   C.hT = D.cover === 'seam' ? C.t + C.sh : D.cover === 'pantiles' ? C.lift + C.t + C.A : C.lift + C.t;
+  // printability: every covering piece is seated this far INTO the deck (its lowest point; 1 mm at any real size,
+  // 40 % of the piece's thickness on a model) so a union of the parts is one solid; nothing visible moves by more
+  C.seat = Math.min(0.001, 0.4 * C.t);
   // the eave course reaches about a third into the gutter, never past it (its top edge leans out by hT·sin pitch)
   C.proj = clamp((D.tf + 0.4 * D.gw - C.hT * Math.sin(D.pe)) / Math.cos(D.pe), -0.3 * C.L, C.proj);
   // ridge / hip covering (half-round clay pieces, metal roll on a saddle, or two oak boards)
@@ -512,17 +516,82 @@ function earClip(ids, xy, out) {
   out.push(ids[idx[0]], ids[idx[1]], ids[idx[2]]);
 }
 
+/** Point in a convex polygon (counter-clockwise uv), at least `margin` inside every edge. */
+function inPoly(uv, u, v, margin = 0) {
+  for (let i = 0; i < uv.length; i++) {
+    const p = uv[i], q = uv[(i + 1) % uv.length], l = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+    if (((q[0] - p[0]) * (v - p[1]) - (q[1] - p[1]) * (u - p[0])) / l < margin - 1e-9) return false;
+  }
+  return true;
+}
+
+/** A tile nail for a cut piece that lost its head (its lowest part) to the cut and so rests on, not in, the roof
+ *  (Swiss practice: every cut tile at a hip or ridge is fixed mechanically). The nail is set through the piece's largest
+ *  underside facet that lies over the deck, from the middle of the piece's material down to 2 seats into the deck.
+ *  Returns a frame for a unit cylinder (radius 1, z 0…1) or null when no facet lies over the deck. */
+function nailFor(P, T, face, seat, rn) {
+  const { n, e, s, O } = face;
+  const at = (i) => [P[3 * i], P[3 * i + 1], P[3 * i + 2]];
+  let best = null, bestA = 0;
+  for (let t = 0; t < T.length; t += 3) {
+    const a = at(T[t]), b = at(T[t + 1]), c = at(T[t + 2]);
+    const cr = V.cross(V.sub(b, a), V.sub(c, a)), A = V.len(cr);
+    if (A < 1e-12 || V.dot(cr, n) / A > -0.5) continue;              // underside facets only
+    const cen = V.mul(V.add(V.add(a, b), c), 1 / 3), d = V.sub(cen, O);
+    if (!inPoly(face.uv, V.dot(d, e), V.dot(d, s), 3 * seat) || A <= bestA) continue;
+    best = cen; bestA = A;
+  }
+  if (!best) return null;
+  // the piece's material along the normal through that point: first two crossings of a ray from below
+  const o = V.sub(best, V.mul(n, 1)), hits = [];
+  for (let t = 0; t < T.length; t += 3) {
+    const a = at(T[t]), b = at(T[t + 1]), c = at(T[t + 2]);
+    const e1 = V.sub(b, a), e2 = V.sub(c, a), pv = V.cross(n, e2), det = V.dot(e1, pv);
+    if (Math.abs(det) < 1e-14) continue;
+    const tv = V.sub(o, a), uu = V.dot(tv, pv) / det;
+    if (uu < -1e-9 || uu > 1 + 1e-9) continue;
+    const qv = V.cross(tv, e1), vv = V.dot(n, qv) / det;
+    if (vv < -1e-9 || uu + vv > 1 + 1e-9) continue;
+    hits.push(V.dot(e2, qv) / det);
+  }
+  hits.sort((x, y) => x - y);
+  if (hits.length < 2) return null;
+  const top = V.add(o, V.mul(n, (hits[0] + hits[1]) / 2));
+  const h = V.dot(V.sub(top, O), n) + 2 * seat;                         // down to 2 seats below the deck's surface
+  return frame(V.mul(e, rn), V.mul(s, rn), V.mul(n, h), V.sub(top, V.mul(n, h)));
+}
+
 /** Cut copies of a base piece (each cut is unique, so they cannot be instances): the base mesh is transformed and
- *  clipped in JS, all cut pieces become one mesh and one Manifold (no boolean union; ~30× faster than trimming each
- *  copy with Manifold). Falls back to Manifold's trimByPlane if the mesh does not validate. */
+ *  clipped in JS and the pieces become meshes without any boolean (~30× faster than trimming each copy with
+ *  Manifold). Pieces are sorted into four layers by course and column parity: lapped and side-lapping neighbours overlap
+ *  (an eave course under the first, pantile rolls, seam pans under their seams), and a boolean on one mesh whose own
+ *  pieces overlap is unreliable, so no layer holds two pieces that overlap. A piece whose lowest point does not reach
+ *  into the deck gets a nail (see nailFor). Falls back to Manifold's trimByPlane if a layer does not validate. */
 class CutSink {
-  constructor() { this.items = []; this.meshes = new Map(); this.fallbacks = 0; }
-  add(base, M, planes) { this.items.push([base, M, planes]); }
+  // eps: every cut is set this far back from its plane, so mitred neighbours (two faces at a hip, front and back at a
+  // ridge) never touch face to face — exact contact inside one layer mesh is what spoils a boolean on it
+  constructor(seat = 0, rn = 0.0015, eps = 1e-5) { this.items = []; this.meshes = new Map(); this.fallbacks = 0; this.seat = seat; this.rn = rn; this.eps = eps; this.nails = []; }
+  add(base, M, planes, face, layer = 0) { this.items.push([base, M, planes, face, layer & 3]); }
+  /** Is the piece seated? A seated piece reaches a seat deep into the roof along a stretch of its lower edge (two
+   *  such points at least 5 seats apart), well inside the deck (not out over the gutter, not on a hip line): then the
+   *  overlap is a real wedge, not a corner touching. */
+  anchored(P, face) {
+    const { n, e, s, O } = face, lim = -this.seat + 1e-7, q = [];
+    for (let i = 0; i < P.length; i += 3) {
+      const d = [P[i] - O[0], P[i + 1] - O[1], P[i + 2] - O[2]];
+      if (V.dot(d, n) <= lim && inPoly(face.uv, V.dot(d, e), V.dot(d, s), 3 * this.seat)) q.push([P[i], P[i + 1], P[i + 2]]);
+    }
+    for (let i = 0; i < q.length; i++) for (let j = i + 1; j < q.length; j++) if (V.len(V.sub(q[i], q[j])) >= 5 * this.seat) return true;
+    return false;
+  }
+  /** → { layers: Manifold[] (one per non-empty layer), nails: frames } */
   manifold() {
-    if (!this.items.length) return null;
+    const res = { layers: [], nails: this.nails };
+    if (!this.items.length) return res;
     const { Manifold, Mesh } = K();
-    const pos = [], tri = [];
-    for (const [base, m, planes] of this.items) {
+    const L = [0, 1, 2, 3].map(() => ({ pos: [], tri: [], items: [] }));
+    for (const it of this.items) {
+      const [base, m, planes, face, layer] = it;
       let src = this.meshes.get(base);
       if (!src) { const g = base.getMesh(); src = { V: g.vertProperties, T: Array.from(g.triVerts), np: g.numProp }; this.meshes.set(base, src); }
       const nv = src.V.length / src.np, P = new Array(nv * 3);
@@ -533,44 +602,48 @@ class CutSink {
         P[3 * i + 2] = m[2] * x + m[6] * y + m[10] * z + m[14];
       }
       let mesh = { P, T: src.T };
-      for (const pl of planes) { mesh = clipMesh(mesh.P, mesh.T, pl.N, pl.d); if (!mesh) break; }
+      for (const pl of planes) { mesh = clipMesh(mesh.P, mesh.T, pl.N, pl.d + this.eps); if (!mesh) break; }
       if (!mesh || mesh.T.length < 12) continue;
-      const o = pos.length / 3;
-      for (const v of mesh.P) pos.push(v);
-      for (const t of mesh.T) tri.push(t + o);
-    }
-    const items = this.items;
-    this.items = [];
-    if (!tri.length) return null;
-    let why = '';
-    try {
-      const m = Manifold.ofMesh(new Mesh({ numProp: 3, vertProperties: Float32Array.from(pos), triVerts: Uint32Array.from(tri) }));
-      if (m.status() === 'NoError' && !m.isEmpty()) {
-        // long thin pieces (standing-seam pans) can keep µm slivers where a cut grazes an edge; they would spoil the
-        // smooth normals of the large faces next to them. Manifold's simplify removes them (≈ 1 ms on small meshes).
-        if (m.numTri() > 8000) return m;
-        const sm = m.simplify(1e-4);
-        if (sm.status() === 'NoError' && !sm.isEmpty()) { m.delete(); return sm; }
-        sm.delete();
-        return m;
+      if (face && this.seat && !this.anchored(mesh.P, face)) {
+        const nail = nailFor(mesh.P, mesh.T, face, this.seat, this.rn);
+        if (!nail) continue;                             // nothing of it lies over the roof: a sliver in the air, dropped
+        this.nails.push(nail);
       }
-      why = `ofMesh status ${m.status()}`;
-      m.delete();
-    } catch (e) { why = String(e && e.message || e); }
-    // fallback: trim every piece with Manifold (≈ 30× slower) — counted on the part, warned with ARCH_DEBUG set
-    this.fallbacks = items.length;
-    const env = globalThis.process?.env || {};
-    if (env.ARCH_DEBUG || globalThis.ARCH_DEBUG) console.warn(`roof: JS clip mesh rejected (${why}); trimming ${items.length} pieces with Manifold`);
-    const list = [];
-    for (const [base, M, planes] of items) {
-      let m = base.transform(M);
-      for (const pl of planes) { const t = m.trimByPlane(pl.N, pl.d); m.delete(); m = t; }
-      if (m.isEmpty()) m.delete(); else list.push(m);
+      const l = L[layer], o = l.pos.length / 3;
+      for (const v of mesh.P) l.pos.push(v);
+      for (const t of mesh.T) l.tri.push(t + o);
+      l.items.push(it);
     }
-    if (!list.length) return null;
-    const out = Manifold.compose ? Manifold.compose(list) : Manifold.union(list);
-    for (const m of list) m.delete();
-    return out;
+    this.items = [];
+    for (const l of L) {
+      if (!l.tri.length) continue;
+      let why = '';
+      try {
+        const m = Manifold.ofMesh(new Mesh({ numProp: 3, vertProperties: Float32Array.from(l.pos), triVerts: Uint32Array.from(l.tri) }));
+        if (m.status() === 'NoError' && !m.isEmpty()) {
+          // long thin pieces (standing-seam pans) can keep µm slivers where a cut grazes an edge; they would spoil the
+          // smooth normals of the large faces next to them. Manifold's simplify removes them (≈ 1 ms on small meshes).
+          if (m.numTri() > 8000) { res.layers.push(m); continue; }
+          const sm = m.simplify(1e-4);
+          if (sm.status() === 'NoError' && !sm.isEmpty()) { m.delete(); res.layers.push(sm); } else { sm.delete(); res.layers.push(m); }
+          continue;
+        }
+        why = `ofMesh status ${m.status()}`;
+        m.delete();
+      } catch (e) { why = String(e && e.message || e); }
+      // fallback: trim every piece of the layer with Manifold (≈ 30× slower) — counted on the part, warned with ARCH_DEBUG
+      this.fallbacks += l.items.length;
+      const env = globalThis.process?.env || {};
+      if (env.ARCH_DEBUG || globalThis.ARCH_DEBUG) console.warn(`roof: JS clip mesh rejected (${why}); trimming ${l.items.length} pieces with Manifold`);
+      const list = [];
+      for (const [base, M, planes] of l.items) {
+        let m = base.transform(M);
+        for (const pl of planes) { const t = m.trimByPlane(pl.N, pl.d + this.eps); m.delete(); m = t; }
+        if (m.isEmpty()) m.delete(); else list.push(m);
+      }
+      if (list.length) { res.layers.push(Manifold.compose ? Manifold.compose(list) : Manifold.union(list)); for (const m of list) m.delete(); }
+    }
+    return res;
   }
 }
 
@@ -615,7 +688,8 @@ function coverPiece(D) {
       // S pantile: wide water channel, roll on the right that laps over the next tile's left edge
       const P = C.P, A = C.A, x0 = -C.w / 2;
       const key = [[0, 0.30], [0.08, 0.12], [0.24, 0.0], [0.42, 0.04], [0.58, 0.30], [0.72, 0.82], [0.82, 1.0], [0.9, 0.9], [0.96, 0.62], [1.0, 0.5]];
-      const curve = catmull(key.map(([x, h]) => [x0 + x * P, h * A]), segsFor(d, 2, 2, 1));
+      // (the spline may not dip below the trough: the underside's lowest line is what is seated in the deck)
+      const curve = catmull(key.map(([x, h]) => [x0 + x * P, h * A]), segsFor(d, 2, 2, 1)).map(([x, h]) => [x, Math.max(0, h)]);
       const top = [], bot = [];
       for (let i = 0; i < curve.length; i++) {
         const p = curve[i], q = curve[Math.min(curve.length - 1, i + 1)], r = curve[Math.max(0, i - 1)];
@@ -642,31 +716,33 @@ function coverFace(D, f, base, rnd, out) {
   const vTop = Math.max(...f.uv.map((q) => q[1]));
   const v0 = eaveEdge ? -C.proj : 0;
   const extra = D.cover === 'pantiles' && !low ? C.P - C.w : 0;   // an S pantile's roll laps onto its right neighbour
-  const place = (u, v, w, opt) => {
+  // layer of a cut piece: course parity × column parity (the eave course counts as course -1)
+  const place = (u, v, w, opt, layer = 0) => {
     if (inHole(f, u - w / 2, u + w / 2, v)) return;
     const ua = u - w / 2, ub = u + w / 2 + extra;
     const rect = [[ua, v], [ub, v], [ub, v + C.L], [ua, v + C.L]];
     const planes = classify(f, rect);
     if (!planes) return;
     const M = onFace(f, u, v, opt);
-    if (planes.length) out.cut.add(base, M, planes); else out.whole.push(M);
+    if (planes.length) out.cut.add(base, M, planes, f, layer); else out.whole.push(M);
   };
   for (let i = 0; ; i++) {
     const vt = v0 + i * C.g;
     if (vt > vTop - 0.08 * C.g) break;
     const [uLo, uHi] = bandU(f.uv, vt, vt + C.L);
     if (!(uHi - uLo > 1e-6)) continue;
-    const opt = { alpha: C.alpha, lift: C.lift };
-    if (low) { place((uLo + uHi) / 2, vt, uHi - uLo, { ...opt, sx: uHi - uLo }); continue; }
+    const opt = { alpha: C.alpha, lift: C.lift - C.seat };
+    if (low) { place((uLo + uHi) / 2, vt, uHi - uLo, { ...opt, sx: uHi - uLo }, 2 * (i & 1)); continue; }
     if (D.cover === 'shingles') {
       // random widths, butts slightly irregular; the eave course doubled
-      const courses = i === 0 && eaveEdge && C.eave ? [[0, 0, 0.5], [C.alpha, C.lift, 0]] : [[C.alpha, C.lift, 0]];
+      const courses = i === 0 && eaveEdge && C.eave ? [[0, -C.seat, 0.5], [C.alpha, C.lift - C.seat, 0]] : [[C.alpha, C.lift - C.seat, 0]];
       for (const [al, li, sh] of courses) {
-        let u = uLo - rnd() * C.wMax - sh * C.w;
+        let u = uLo - rnd() * C.wMax - sh * C.w, j = 0;
+        const ci = sh ? -1 : i;
         while (u < uHi) {
           const w = C.wMin + (C.wMax - C.wMin) * rnd();
           const dv = (rnd() - 0.5) * 0.25 * C.t * 3;
-          place(u + w / 2, vt + dv, w, { alpha: al, lift: li, sx: w - C.gap, spin: (rnd() - 0.5) * 0.02 });
+          place(u + w / 2, vt + dv, w, { alpha: al, lift: li, sx: w - C.gap, spin: (rnd() - 0.5) * 0.02 }, 2 * (ci & 1) + (j++ & 1));
           u += w;
         }
       }
@@ -677,11 +753,13 @@ function coverFace(D, f, base, rnd, out) {
     const jit = D.cover === 'slate';
     for (let j = j0; j <= j1; j++) {
       const sp = jit ? (rnd() - 0.5) * 0.012 : 0, du = jit ? (rnd() - 0.5) * 0.004 * C.kt : 0;
-      place(j * C.w + off + du, vt, C.w, { ...opt, spin: sp });
+      place(j * C.w + off + du, vt, C.w, { ...opt, spin: sp }, 2 * (i & 1) + (j & 1));
     }
     if (i === 0 && eaveEdge && C.eave) {
       // eave course under the first course, joints broken by half a tile, lying flat on the deck
-      for (let j = j0; j <= j1 + 1; j++) place(j * C.w + C.w / 2 - off, vt, C.w, {});
+      // (2 mm short, so its head clears the second course's tail instead of touching it)
+      const sy = (C.L - 2 * C.seat) / C.L;
+      for (let j = j0; j <= j1 + 1; j++) place(j * C.w + C.w / 2 - off, vt, C.w, { lift: -C.seat, sy }, 2 + (j & 1));
     }
   }
 }
@@ -690,7 +768,8 @@ function coverFace(D, f, base, rnd, out) {
 function seamFace(D, f, out) {
   const C = D.C;
   const eaveEdge = f.edges.some((ed) => ed.kind === 'eave');
-  const v0 = eaveEdge ? -C.proj : 0;
+  // above a mansard / gambrel break a flat pan starts 3 seats up, so its seated underside stays clear of the pans below
+  const v0 = eaveEdge ? -C.proj : 3 * C.seat;
   const us = f.uv.map((q) => q[0]), uMin = Math.min(...us), uMax = Math.max(...us);
   const j0 = Math.floor(uMin / C.w) - 1, j1 = Math.ceil(uMax / C.w) + 1;
   for (let j = j0; j <= j1; j++) {
@@ -703,13 +782,13 @@ function seamFace(D, f, out) {
     const rect = [[u - C.w / 2, v0], [u + C.w / 2, v0], [u + C.w / 2, vHi], [u - C.w / 2, vHi]];
     const planes = classify(f, rect);
     if (!planes) continue;
-    const M = onFace(f, u, v0, { sy: len });
-    if (planes.length) out.cut.add(out.pan, M, planes); else out.whole.push(M);
+    const M = onFace(f, u, v0, { sy: len, lift: -C.seat });
+    if (planes.length) out.cut.add(out.pan, M, planes, f, j & 1); else out.whole.push(M);
     // the seam on the right edge of this pan
     const us2 = u + C.w / 2;
     if (us2 > uMin + 0.02 * C.w && us2 < uMax - 0.02 * C.w) {
       const top = topV(f.uv, us2);
-      if (top - v0 > 1e-3) out.seams.push(onFace(f, us2, v0, { sy: top - v0 }));
+      if (top - v0 > 1e-3) out.seams.push(onFace(f, us2, v0, { sy: top - v0, lift: -C.seat }));
     }
   }
 }
@@ -774,6 +853,15 @@ function hipStart(D, l, F, sec) {
   return Math.min(d0, 0.5 * F.len);
 }
 
+/** Ridge batten (Firstlatte) under a ridge / hip / curb covering, as roofers fix it: a 4 cm batten from inside the deck
+ *  up into the covering (to yTop in the line's section frame), so the covering is carried, not floating. Hidden under
+ *  the covering; one unit box per line, scaled. Matrices are collected in G.battens. */
+function batten(D, G, l, F, yTop) {
+  const wb = 0.04 * D.C.kt, y0 = -F.off - (wb / 2) * Math.tan(Math.min(1.3, F.th + 0.2)) - 2 * D.ov;
+  (G.battens ||= []).push(frame(V.mul(F.side, wb), V.mul(F.up, yTop - y0), V.mul(F.t, F.len),
+    V.add(l.P0, V.add(V.mul(F.up, F.off + y0), V.mul(F.side, 0)))));
+}
+
 function ridgeParts(D, G, mats) {
   const C = D.C, out = [];
   const style = C.ridge, low = D.detail === 'low';
@@ -786,6 +874,10 @@ function ridgeParts(D, G, mats) {
     const F0 = lineFrame(lines[0], C.hT);
     const sec = ridgeSection(style, F0.th, C, segs);
     const xf = [], ends = [];
+    // how high the batten reaches into this covering: into the middle of a clay shell at its narrow (tapered, lowest)
+    // end, so it never shows between the pieces; to a roll's axis; half into the boards
+    const taper = style === 'piece' && !low ? 1 - C.R.fr / (C.R.le + C.R.tr) : 1;
+    const yTop = style === 'piece' ? sec.hc + (sec.top - C.R.tr / 2 - sec.hc) * taper : style === 'roll' ? sec.top - C.R.rr : sec.top / 2;
     let piece;
     if (style === 'piece' && !low) {
       const R = C.R, st = 1 - R.fr / (R.le + R.tr);
@@ -799,6 +891,7 @@ function ridgeParts(D, G, mats) {
         const step = n > 1 ? (F.len - R.Lr) / (n - 1) : 0, sz = n === 1 ? Math.min(1, F.len / R.Lr) : 1;
         const base = V.add(l.P0, V.mul(F.up, F.off));
         for (let i = 0; i < n; i++) xf.push(frame(F.side, F.up, V.mul(F.t, sz), V.add(base, V.mul(F.t, i * step))));
+        batten(D, G, l, F, yTop);
         if (kind === 'ridge' || kind === 'hip' || kind === 'hip-lower') ends.push({ F, base });
       }
     } else {
@@ -807,6 +900,7 @@ function ridgeParts(D, G, mats) {
         const F = lineFrame(l, C.hT);
         if (kind !== 'ridge') { const d0 = hipStart(D, l, F, sec); F.len -= d0; l = { ...l, P0: V.add(l.P0, V.mul(F.t, d0)) }; }
         xf.push(frame(F.side, F.up, V.mul(F.t, F.len), V.add(l.P0, V.mul(F.up, F.off))));
+        batten(D, G, l, F, yTop);
       }
     }
     // clay ridge / hip pieces are separate tiles (rigid); a roll or boards is one continuous member (bends)
@@ -826,7 +920,9 @@ function ridgeParts(D, G, mats) {
       const ex = [];
       for (const { F, base } of ends) {
         ex.push(frame(F.side, F.up, F.t, base));
-        if (kind === 'ridge') ex.push(frame(F.side, F.up, F.t, V.add(base, V.mul(F.t, F.len - 0.012 * C.kt))));
+        // the far end closes the last piece's narrow (tapered) end: the disc takes the same taper about the arc's centre
+        const st = 1 - C.R.fr / (C.R.le + C.R.tr);
+        if (kind === 'ridge') ex.push(frame(V.mul(F.side, st), V.mul(F.up, st), F.t, V.add(V.add(base, V.mul(F.t, F.len - 0.012 * C.kt)), V.mul(F.up, (1 - st) * sec.hc))));
       }
       out.push(part(`${kind}-end`, role, disc, instances(ex), { material, rigid: true }));
     }
@@ -852,7 +948,7 @@ function deckAndWalls(D, G, mats) {
   const deck = outer.subtract(inner);
   inner.delete();
   // the wall head under the deck: gable walls at the verges, the high wall of a shed; hidden under hipped roofs
-  const ov = Math.min(0.001, 0.01 * D.k);
+  const ov = D.ov;
   // (fills the wedge over the cornice up to the soffit; a knee wall stands on the wall line, the cornice a ledge)
   const e = D.knee ? 0 : D.pc;
   const xi = D.hipped ? D.a + e : D.a, yLo = D.b + e, yHi = D.type === 'shed' ? D.b : D.b + e;
@@ -878,7 +974,8 @@ function shedCapping(D) {
   const { B, B1, zE, tf, tcap, k } = D, C = D.C, tl = Math.tan(D.pe), sec = 1 / Math.cos(D.pe);
   const zt = (y) => zE + (y + B) * tl + C.hT * sec;
   const Lf = 0.16 * k, drop = 0.09 * k, y2 = B1 + tf, y3 = y2 + tcap;
-  return [[B1 - Lf, zt(B1 - Lf)], [y2, zt(y2)], [y2, D.zR - drop], [y3, D.zR - drop], [y3, zt(y3) + tcap * sec], [B1 - Lf, zt(B1 - Lf) + tcap * sec]];
+  const yi = y2 - D.ov;                                 // the down-stand is clipped ov into the fascia
+  return [[B1 - Lf, zt(B1 - Lf)], [yi, zt(yi)], [yi, D.zR - drop], [y3, D.zR - drop], [y3, zt(y3) + tcap * sec], [B1 - Lf, zt(B1 - Lf) + tcap * sec]];
 }
 
 function eaveParts(D, G, mats) {
@@ -888,12 +985,12 @@ function eaveParts(D, G, mats) {
   const fz0 = zE - tv - 0.012 * k;                   // the fascia just covers the plumb cut (drip below the soffit)
   const boards = [];
   if (D.hipped) {
-    boards.push(box(-(Ax + tf), -(B + tf), fz0, Ax + tf, -B, zE), box(-(Ax + tf), B, fz0, Ax + tf, B + tf, zE));
-    boards.push(box(Ax, -B - ov, fz0, Ax + tf, B + ov, zE), box(-(Ax + tf), -B - ov, fz0, -Ax, B + ov, zE));
+    boards.push(box(-(Ax + tf), -(B + tf), fz0, Ax + tf, -B + ov, zE), box(-(Ax + tf), B - ov, fz0, Ax + tf, B + tf, zE));
+    boards.push(box(Ax - ov, -B - ov, fz0, Ax + tf, B + ov, zE), box(-(Ax + tf), -B - ov, fz0, -Ax + ov, B + ov, zE));
   } else {
-    boards.push(box(-xo, -(B + tf), fz0, xo, -B, zE));
-    if (D.type === 'shed') boards.push(box(-xo, B1, zR - tv - 0.012 * k, xo, B1 + tf, zR));
-    else boards.push(box(-xo, B, fz0, xo, B + tf, zE));
+    boards.push(box(-xo, -(B + tf), fz0, xo, -B + ov, zE));
+    if (D.type === 'shed') boards.push(box(-xo, B1 - ov, zR - tv - 0.012 * k, xo, B1 + tf, zR));
+    else boards.push(box(-xo, B - ov, fz0, xo, B + tf, zE));
   }
   out.push(part('fascia', 'wood', union(boards), null, { material: mats.wood }));
   // barge boards along the verges, covering the deck's end
@@ -902,8 +999,8 @@ function eaveParts(D, G, mats) {
     const h = tv + db;
     const poly = [...vl, ...vl.map(([y, z]) => [y, z - h]).reverse()];
     const bargeRole = D.cover === 'seam' ? 'roof' : 'wood';
-    const board = extrudeProfileX(poly, tb, false);
-    out.push(part('barge', bargeRole, board, instances([mat.T(Ax, 0, 0), mat.T(-Ax - tb, 0, 0)]),
+    const board = extrudeProfileX(poly, tb + ov, false);    // its inner ov sits in the deck's end
+    out.push(part('barge', bargeRole, board, instances([mat.T(Ax - ov, 0, 0), mat.T(-Ax - tb, 0, 0)]),
       { material: bargeRole === 'roof' ? mats.covering : mats.wood }));
   }
   if (D.type === 'shed') {
@@ -921,19 +1018,22 @@ function gutters(D, G, mats) {
   const zG = zE - 0.02 * k;                            // top line of the gutter, just under the eave course
   const arc = (r, a0, a1, n, cx = rg) => Array.from({ length: n + 1 }, (_, i) => { const a = a0 + ((a1 - a0) * i) / n; return [cx + r * Math.cos(a), r * Math.sin(a)]; });
   // cross-sections in (u outward from the fascia face, w up from the gutter's top line)
+  const ov = D.ov;
   const trough = [...arc(rg, Math.PI, TAU, segs), ...arc(rg - gt, TAU, Math.PI, segs)];
+  // the gutter's back edge stands up a little and is hooked ov into the fascia (it is carried by it)
+  const flange = [[-ov, -0.015 * k], [gt, -0.015 * k], [gt, 0.02 * k], [-ov, 0.02 * k]];
   const bc = [2 * rg + rb - 1.5 * gt, 0.25 * rb];
   const bead = Array.from({ length: 12 }, (_, i) => [bc[0] + rb * Math.cos((i * TAU) / 12), bc[1] + rb * Math.sin((i * TAU) / 12)]);
   const half = arc(rg, Math.PI, TAU, segs);
   const ts = 0.004 * k, bw = 0.025 * k;
-  const strap = [...arc(rg + ts, Math.PI, TAU, segs), ...arc(rg - 0.0005 * k, TAU, Math.PI, segs)];
+  const strap = [...arc(rg + ts, Math.PI, TAU, segs), ...arc(rg - ov, TAU, Math.PI, segs)];
   const tab = [[-ts, 0], [0.0005 * k, 0], [0.0005 * k, 0.06 * k], [-ts, 0.06 * k]];
   // (u, w) -> (y, z) in front of a fascia face at y = -yF; reversed to stay counter-clockwise after the mirror
   const toYZ = (poly, yF) => poly.map(([u, w]) => [-(yF + u), zG + w]).reverse();
   /** A run along X in front of the fascia face y = -yF, from x = -h to h; mitred at the corners (xc, -yF) of a
    *  hipped roof's gutter ring, or closed by end caps at a verge. */
   const run = (yF, h, xc) => {
-    let g = union([extrudeProfileX(toYZ(trough, yF), 2 * h), extrudeProfileX(toYZ(bead, yF), 2 * h)]);
+    let g = union([extrudeProfileX(toYZ(trough, yF), 2 * h), extrudeProfileX(toYZ(bead, yF), 2 * h), extrudeProfileX(toYZ(flange, yF), 2 * h)]);
     if (xc !== undefined) {
       const s = Math.SQRT1_2, d = -s * xc + s * yF;      // exact mitre: the four runs meet face to face
       g = g.trimByPlane([-s, -s, 0], d).trimByPlane([s, -s, 0], d);
@@ -1015,6 +1115,7 @@ function extraParts(D, G, mats) {
       const c0 = V.add(l.P0, V.mul(F.up, F.off + 0.35 * r));
       const extra = D.type === 'mansard' ? r : 0;
       const cyl = Manifold.cylinder(F.len + 2 * extra, r, r, segsFor(D.detail, 20, 14, 8)).transform(frame(F.side, F.up, F.t, V.sub(c0, V.mul(F.t, extra))));
+      batten(D, G, l, F, 0.35 * r);                    // up to the roll's axis
       pieces.push(cyl);
       if (D.type === 'mansard') pieces.push(Manifold.sphere(r, segsFor(D.detail, 20, 12, 8)).translate(c0));
     }
@@ -1023,13 +1124,17 @@ function extraParts(D, G, mats) {
     out.push(part('curb', 'metal', curb, null, { material: mats.metal }));
   }
   if (D.finialH) {
-    const f = finialPiece(D.finialH, segs);
     const xf = [];
-    if (D.apex) xf.push(mat.T(0, 0, D.zApex - 0.02 * D.k));
+    let z;
+    if (D.apex) { z = D.zApex - 0.02 * D.k; xf.push(mat.T(0, 0, z)); }
     else {
-      const pr = D.up * DEG, z = D.zR + D.C.hT / Math.cos(pr) + ridgeSection(D.C.ridge, pr, D.C, 16).top * 0.5;
+      const pr = D.up * DEG;
+      z = D.zR + D.C.hT / Math.cos(pr) + ridgeSection(D.C.ridge, pr, D.C, 16).top * 0.5;
       xf.push(mat.T(-D.R, 0, z), mat.T(D.R, 0, z));
     }
+    // the finial's spindle runs down through the ridge covering into the deck (where it is fixed)
+    const H = D.finialH, depth = z - (D.zR - 2 * D.ov);
+    const f = union([finialPiece(H, segs), K().Manifold.cylinder(depth + 0.06 * H, 0.02 * H, 0.02 * H, 12).translate([0, 0, -depth])]);
     out.push(part('finial', 'metal', f, instances(xf), { material: mats.finial }));
   }
   return out;
@@ -1119,13 +1224,15 @@ function dormerParts(D, layout, mats) {
     .translate([0, yf - 0.03 * kd, 0]);
   // casement: frame, central meeting stiles, two glazing bars per leaf; glass behind
   const yg = yf + 0.09 * kd, fw = 0.045 * kd, bw = 0.022 * kd;
+  // the frame is set ov into the stone reveals, the glass ov into the frame (each piece carried by the next)
+  const o = D.ov;
   const bars = [
-    box(-ww / 2, yg - 0.03 * kd, zo0, -ww / 2 + fw, yg, zo1), box(ww / 2 - fw, yg - 0.03 * kd, zo0, ww / 2, yg, zo1),
-    box(-ww / 2, yg - 0.03 * kd, zo0, ww / 2, yg, zo0 + fw), box(-ww / 2, yg - 0.03 * kd, zo1 - fw, ww / 2, yg, zo1),
+    box(-ww / 2 - o, yg - 0.03 * kd, zo0 - o, -ww / 2 + fw, yg, zo1 + o), box(ww / 2 - fw, yg - 0.03 * kd, zo0 - o, ww / 2 + o, yg, zo1 + o),
+    box(-ww / 2 - o, yg - 0.03 * kd, zo0 - o, ww / 2 + o, yg, zo0 + fw), box(-ww / 2 - o, yg - 0.03 * kd, zo1 - fw, ww / 2 + o, yg, zo1 + o),
     box(-fw * 0.8, yg - 0.035 * kd, zo0, fw * 0.8, yg, zo1),
   ];
   for (const t of [1 / 3, 2 / 3]) { const z = zo0 + (zo1 - zo0) * t; bars.push(box(-ww / 2, yg - 0.025 * kd, z - bw / 2, ww / 2, yg, z + bw / 2)); }
-  const glass = box(-ww / 2, yg, zo0, ww / 2, yg + 0.006 * kd, zo1);
+  const glass = box(-ww / 2 - o, yg - o, zo0 - o, ww / 2 + o, yg + 0.006 * kd, zo1 + o);
   return [
     part('dormer', 'stone', stone, I, { material: mats.cornice }),
     part('dormer-roof', 'roof', roofM, I, { material: mats.covering }),
@@ -1143,7 +1250,10 @@ function snowGuards(D, G, mats) {
   const { Manifold } = K(), C = D.C, k = Math.min(1, C.kt);
   const r = 0.015 * k, base = C.hT - 0.004 * k, h1 = base + 0.05 * k, h2 = base + 0.11 * k;
   const tube = Manifold.cylinder(1, r, r, 12);
-  const plate = extrudeXY([[-0.06 * k, 0], [0.05 * k, 0], [0.03 * k, 0.14 * k], [-0.01 * k, 0.14 * k]], 0.008 * k).translate([0, base - 0.004 * k, -0.004 * k]);
+  // forged plate, screwed to the rafter under the tiles: its foot reaches into the deck
+  const y0 = base - 0.004 * k, yb = -2 * D.ov, yt = y0 + 0.14 * k, dy = y0 - yb;   // the plate's edges carried down
+  const plate = extrudeXY([[-0.06 * k - (0.05 / 0.14) * dy, yb], [0.05 * k + (0.02 / 0.14) * dy, yb], [0.03 * k, yt], [-0.01 * k, yt]], 0.008 * k)
+    .translate([0, 0, -0.004 * k]);
   const holes = [h1, h2].map((h) => Manifold.cylinder(0.02 * k, r * 0.9, r * 0.9, 10).translate([0, h, -0.01 * k]));
   const bracket = plate.subtract(union(holes));
   const tubes = [], brs = [];
@@ -1170,7 +1280,7 @@ function snowGuards(D, G, mats) {
  *  downpipes, snow guards and finials are separate pieces: rigid. The deck, cornice, fascia, barges, gable walls, gutter,
  *  capping, curb and the seams (which run the whole slope) are continuous: they bend. Ridge and hip pieces are tagged
  *  where they are made. */
-const RIGID = /^((tile|pantile|pan|slate|shingle)(-course|-cut)?|dormer.*|downpipe|finial|gutter-bracket(-end)?|snow-guard(-bracket)?)$/;
+const RIGID = /^((tile|pantile|pan|slate|shingle)(-course|-cut(-[bcd])?|-nail)?|dormer.*|downpipe|finial|gutter-bracket(-end)?|snow-guard(-bracket)?)$/;
 
 export function build(spec) {
   return tagRigid(buildParts(spec));
@@ -1192,28 +1302,34 @@ function buildParts(spec) {
   const turn = D.type === 'shed' ? null : mat.Rz(Math.PI);
   const both = (list) => (turn ? [...list, ...list.map((m) => mat.mul(turn, m))] : list);
   const cutXf = turn ? instances([mat.I(), turn]) : null;
+  /** the cut-piece layers (`<name>-cut`, `-cut-b` … `-cut-d`) and the nails fixing pieces that lost their head */
+  const cutParts = (nm, role, sink, mats) => {
+    const { layers, nails } = sink.manifold(), out = [];
+    layers.forEach((m, i) => out.push(part(`${nm}-cut${i ? '-' + 'bcd'[i - 1] : ''}`, role, m, cutXf, { material: mats.covering, clipFallbacks: sink.fallbacks })));
+    if (nails.length) out.push(part(`${nm}-nail`, 'metal', K().Manifold.cylinder(1, 1, 1, 8), instances(both(nails)), { material: mats.metal }));
+    return out;
+  };
   if (D.cover === 'seam') {
     const pan = box(-(C.w - C.sw) / 2 - 0.002 * C.kt, 0, 0, (C.w - C.sw) / 2 + 0.002 * C.kt, 1, C.t);
     const r = C.sw / 2, seamPoly = [[-r, 0], [r, 0], [r, C.sh - r]];
     for (let i = 1; i < 8; i++) { const a = (Math.PI * i) / 8; seamPoly.push([r * Math.cos(a), C.sh - r + r * Math.sin(a)]); }
     seamPoly.push([-r, C.sh - r]);
     const seam = extrudeXZ(seamPoly, 1);
-    const out = { whole: [], seams: [], cut: new CutSink(), pan };
+    const out = { whole: [], seams: [], cut: new CutSink(C.seat, 0.0015 * Math.min(1, C.kt), 1e-5 * Math.max(1, D.long / 10)), pan };
     for (const f of half) seamFace(D, f, out);
     parts.push(part('pan', 'roof', pan, instances(both(out.whole)), { material: mats.covering }));
-    const cut = out.cut.manifold();
-    if (cut) parts.push(part('pan-cut', 'roof', cut, cutXf, { material: mats.covering, clipFallbacks: out.cut.fallbacks }));
+    parts.push(...cutParts('pan', 'roof', out.cut, mats));
     parts.push(part('seam', 'roof', seam, instances(both(out.seams)), { material: mats.covering }));
   } else {
     const base = coverPiece(D);
-    const out = { whole: [], cut: new CutSink() };
+    const out = { whole: [], cut: new CutSink(C.seat, 0.0015 * Math.min(1, C.kt), 1e-5 * Math.max(1, D.long / 10)) };
     for (const f of half) coverFace(D, f, base, rnd, out);
     const role = mats.coverRole;
     parts.push(part(D.detail === 'low' ? `${name}-course` : name, role, base, instances(both(out.whole)), { material: mats.covering }));
-    const cut = out.cut.manifold();
-    if (cut) parts.push(part(`${name}-cut`, role, cut, cutXf, { material: mats.covering, clipFallbacks: out.cut.fallbacks }));
+    parts.push(...cutParts(name, role, out.cut, mats));
   }
   parts.push(...ridgeParts(D, G, mats), ...extraParts(D, G, mats), ...dormerParts(D, dormers, mats), ...snowGuards(D, G, mats));
+  if (G.battens && G.battens.length) parts.push(part('batten', 'wood', box(-0.5, 0, 0, 0.5, 1, 1), instances(G.battens), { material: mats.wood }));
   const kept = parts.filter((p) => !p.transforms || p.transforms.length);
   return D.swap ? placeParts(kept, mat.Rz(Math.PI / 2)) : kept;
 }

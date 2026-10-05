@@ -3,8 +3,11 @@
 // material → covering inference, height → pitch solving, given overhangs, dormers on / off. Each build:
 // - all parts NoError with positive volume; lowest point z = 0; bbox = expected() within tol; counts exact;
 // - every single (non-instanced) part lies inside the promised (L + 2o) × (W + 2o) × z box (± 1 mm);
-// - every covering piece lies ON the deck: each vertex 0…(a tile's height) above the deck's top surface, the surface
-//   taken from the built deck mesh itself (no floating tiles, none sunk into the roof);
+// - printability: every covering piece is SEATED in the roof (its lowest point 1 mm…one piece-thickness below the deck
+//   surface, the surface taken from the built deck mesh), or — a cut piece that lost its head — nailed into the deck;
+//   no piece floats higher than a lapped tile; every member reaches ≥ 1 mm into what carries it (real intersections:
+//   fascia → deck, gutter → fascia, ridge tiles → ridge batten → deck, finial → deck, …); and a real union of every
+//   part instance of seven small roofs is ONE solid (arch/test/solid.mjs);
 // - independent of dims(): the pitches measured on the built deck equal the pitches the spec asks for (brief's table:
 //   gable / hip / pyramid 35°, shed 15°, mansard 70/30, gambrel 60/25; a given pitch replaces the lower slope when
 //   ≥ 45° and the upper when < 45° on mansard / gambrel), and the ridge rise measured on the deck = half-span × tan(pitch);
@@ -15,6 +18,7 @@ import { generate } from '../js/generate.js';
 import { SCHEMA, MATERIALS } from '../js/spec.js';
 import { mat, partsBBox, instanceCount } from '../js/kernel.js';
 import { dims } from '../js/gen/roof.js';
+import { solids } from './solid.mjs';
 
 await initKernel();
 
@@ -77,31 +81,105 @@ function aboveDeck(planes, p) {
   for (const q of planes) { const z = (q.d - q.n[0] * p[0] - q.n[1] * p[1]) / q.n[2]; if (z < bz) { bz = z; best = q; } }
   return (p[2] - bz) * best.n[2];
 }
-const COVER_PART = /^(tile|slate|shingle|pantile|pan|seam)(-cut|-course|-course-cut)?$/;
+const WHOLE_PART = /^(tile|slate|shingle|pantile|pan|seam)(-course)?$/;   // instanced covering pieces
+const CUT_PART = /^(tile|slate|shingle|pantile|pan)-cut(-[bcd])?$/;           // layers of cut pieces
+const NAIL_PART = /^(tile|slate|shingle|pantile|pan)-nail$/;
 
+/** Printability, part 1: every covering piece is SEATED in the roof. An instanced piece's lowest point lies between
+ *  the seat (1 mm; 40 % of the piece's thickness on a model) and one piece-thickness below the deck surface. A cut
+ *  piece (hip, ridge, verge) either is seated the same way or is carried by a nail whose foot is in the deck; no piece
+ *  floats higher than a lapped tile's height. */
 function coveringOnDeck(r, D) {
   const { planes } = deckPlanes(r.parts);
-  // a lapped piece rises at most its lift + thickness (+ an S pantile's wave, a seam's height) above the battens
-  const hMax = 1.05 * D.C.hT + 0.001;
-  let n = 0, lo = Infinity, hi = -Infinity;
+  const C = D.C, seat = Math.min(0.001, 0.4 * C.t) * 0.999, deep = C.t + 1e-4;
+  const hMax = 1.05 * C.hT + 0.001;
+  const heights = (V, np, nv, M) => {
+    let lo = Infinity, hi = -Infinity;
+    for (let j = 0; j < nv; j++) {
+      let q = [V[j * np], V[j * np + 1], V[j * np + 2]];
+      if (M) q = mat.apply(M, q);
+      const h = aboveDeck(planes, q);
+      if (h < lo) lo = h; if (h > hi) hi = h;
+    }
+    return [lo, hi];
+  };
+  let n = 0, LO = Infinity, HI = -Infinity, loose = 0, cutCopies = 1;
   for (const p of r.parts) {
-    if (!COVER_PART.test(p.name)) continue;
-    const g = p.manifold.getMesh(), V = g.vertProperties, np = g.numProp, nv = V.length / np;
+    const whole = WHOLE_PART.test(p.name), cut = CUT_PART.test(p.name);
+    if (!whole && !cut) continue;
     const k = instanceCount(p);
-    for (let i = 0; i < k; i++) {
-      const M = p.transforms ? p.transforms.subarray(16 * i, 16 * i + 16) : null;
-      for (let j = 0; j < nv; j++) {
-        let q = [V[j * np], V[j * np + 1], V[j * np + 2]];
-        if (M) q = mat.apply(M, q);
-        const h = aboveDeck(planes, q);
-        lo = Math.min(lo, h); hi = Math.max(hi, h); n++;
+    if (whole) {
+      const g = p.manifold.getMesh(), np = g.numProp, nv = g.vertProperties.length / np;
+      for (let i = 0; i < k; i++) {
+        const [lo, hi] = heights(g.vertProperties, np, nv, p.transforms ? p.transforms.subarray(16 * i, 16 * i + 16) : null);
+        assert.ok(lo <= -seat && lo >= -deep, `${p.name} #${i}: lowest point ${(lo * 1000).toFixed(2)} mm, not seated ${(seat * 1000).toFixed(2)}…${(deep * 1000).toFixed(1)} mm deep`);
+        assert.ok(hi < hMax, `${p.name} #${i} floats ${(hi * 1000).toFixed(0)} mm above the deck`);
+        LO = Math.min(LO, lo); HI = Math.max(HI, hi); n++;
+      }
+    } else {
+      cutCopies = k;
+      const M = p.transforms ? p.transforms.subarray(0, 16) : null;      // the copies are turned twins
+      for (const c of p.manifold.decompose()) {
+        const g = c.getMesh(), np = g.numProp, nv = g.vertProperties.length / np;
+        const [lo, hi] = heights(g.vertProperties, np, nv, M);
+        assert.ok(lo >= -deep, `${p.name}: a cut piece sinks ${(-lo * 1000).toFixed(1)} mm`);
+        assert.ok(hi < hMax, `${p.name}: a cut piece floats ${(hi * 1000).toFixed(0)} mm above the deck`);
+        if (lo > -seat) loose++;
+        LO = Math.min(LO, lo); HI = Math.max(HI, hi); n++;
+        c.delete();
       }
     }
   }
   assert.ok(n > 0, 'no covering found');
-  assert.ok(lo > -0.0015, `a covering piece sinks ${(-lo * 1000).toFixed(1)} mm into the deck`);
-  assert.ok(hi < hMax, `a covering piece floats ${(hi * 1000).toFixed(0)} mm above the deck (max ${(hMax * 1000).toFixed(0)})`);
-  return { lo, hi };
+  // every cut piece that is not seated has its nail, and every nail's foot is in the deck, its head above it
+  const nails = r.parts.find((p) => NAIL_PART.test(p.name));
+  const nNails = nails ? instanceCount(nails) / cutCopies : 0;
+  assert.ok(loose <= nNails, `${loose} cut pieces neither seated nor nailed (${nNails} nails)`);
+  if (nails) for (let i = 0; i < instanceCount(nails); i++) {
+    const m = nails.transforms.subarray(16 * i, 16 * i + 16);
+    const foot = mat.apply(m, [0, 0, 0]), head = mat.apply(m, [0, 0, 1]);
+    assert.ok(aboveDeck(planes, foot) <= -seat && aboveDeck(planes, head) > 0, `nail #${i} does not reach from the piece into the deck`);
+  }
+  return { lo: LO, hi: HI, loose };
+}
+
+/** Printability, part 2: every member reaches into what carries it (a real intersection, ≥ 0.9 × the overlap the
+ *  generator promises, measured as the thinnest extent of the shared volume) for up to three of its instances. */
+const CARRIER = {
+  fascia: ['deck'], barge: ['deck'], gutter: ['fascia'], 'gutter-bracket': ['gutter'], 'gutter-bracket-end': ['gutter'],
+  downpipe: ['gutter'], capping: ['fascia'], gable: ['cornice'], 'wall-head': ['cornice'], deck: ['gable', 'wall-head'],
+  ridge: ['batten'], hip: ['batten'], 'hip-lower': ['batten'], batten: ['deck'], 'ridge-end': ['ridge'], 'hip-end': ['hip'],
+  'hip-lower-end': ['hip-lower'], 'ridge-cap': ['ridge'], curb: ['batten'], finial: ['deck'], 'snow-guard': ['snow-guard-bracket'],
+  'snow-guard-bracket': ['deck'], dormer: ['deck'], 'dormer-roof': ['dormer'], 'dormer-sash': ['dormer'], 'dormer-glass': ['dormer-sash'],
+};
+function carried(r, D) {
+  const inst = (p, i) => (p.transforms ? p.manifold.transform(Array.from(p.transforms.subarray(16 * i, 16 * i + 16))) : p.manifold);
+  const meet = (a, b) => a.max[0] >= b.min[0] && b.max[0] >= a.min[0] && a.max[1] >= b.min[1] && b.max[1] >= a.min[1] && a.max[2] >= b.min[2] && b.max[2] >= a.min[2];
+  // ≥ 1 mm (0.9 mm measured) on any roof of real size; a model under 1 m span (its gutter wall 0.05 mm thick) only has
+  // to overlap at all
+  const need = D.short >= 1 ? 0.9 * Math.min(0.001, D.ov) : 1e-7;
+  let checked = 0;
+  for (const p of r.parts) {
+    const names = CARRIER[p.name];
+    if (!names) continue;
+    const carriers = r.parts.filter((q) => names.includes(q.name));
+    assert.ok(carriers.length, `${p.name}: its carrier (${names}) is missing`);
+    const k = instanceCount(p), pick = [...new Set([0, Math.floor(k / 2), k - 1])];
+    for (const i of pick) {
+      const a = inst(p, i), ab = a.boundingBox();
+      let best = 0;
+      for (const q of carriers) for (let j = 0; j < instanceCount(q); j++) {
+        const b = inst(q, j);
+        if (!meet(ab, b.boundingBox())) continue;
+        const x = a.intersect(b);
+        if (!x.isEmpty()) { const bb = x.boundingBox(); best = Math.max(best, Math.min(bb.max[0] - bb.min[0], bb.max[1] - bb.min[1], bb.max[2] - bb.min[2])); }
+        if (best >= need) break;
+      }
+      assert.ok(best >= need, `${p.name} #${i} reaches only ${(best * 1000).toFixed(2)} mm into ${names}`);
+      checked++;
+    }
+  }
+  return checked;
 }
 
 function pitchesOnDeck(r, c) {
@@ -140,6 +218,9 @@ function eaveTop(parts) {
   }
   return z;
 }
+
+// carrier intersections cost a few booleans per part: run them on the builds of ordinary size (not the 80 × 120 m ones)
+const CARRIED_CHECK = (c) => !(c.width >= 30 || c.length >= 60);
 
 // ---------------------------------------------------------------------------------------------- run
 
@@ -181,6 +262,7 @@ for (const c of cases) {
       assert.equal(p ? instanceCount(p) : 0, n, `count ${name}`);
     }
     const cov = coveringOnDeck(r, D);
+    const held = CARRIED_CHECK(c) ? carried(r, D) : 0;
     const pitch = pitchesOnDeck(r, c);
     if (c.height) assert.ok(Math.abs(r.size[2] - c.height) / c.height < 0.005 || D.lo <= 5.001 || D.lo >= 74.999 || D.up <= 5.001,
       `height ${r.size[2]} vs asked ${c.height}`);
@@ -192,13 +274,13 @@ for (const c of cases) {
     worstMs = Math.max(worstMs, r.ms); worstTris = Math.max(worstTris, r.tris);
     const pieces = r.parts.reduce((s, p) => s + instanceCount(p), 0);
     rows.push(['ok', label, r.size.map((x) => x.toFixed(2)).join('×'), `${r.ms.toFixed(0)} ms`, `${(r.tris / 1000).toFixed(0)}k tris`,
-      `${pieces} pcs`, `pitch ${pitch.join('/')}°`, `on deck ${(cov.lo * 1000).toFixed(1)}…${(cov.hi * 1000).toFixed(0)} mm`]);
+      `${pieces} pcs`, `pitch ${pitch.join('/')}°`, `on deck ${(cov.lo * 1000).toFixed(1)}…${(cov.hi * 1000).toFixed(0)} mm`, `${cov.loose} nailed`, held ? `${held} carried` : '']);
   } catch (err) {
     fail++;
     rows.push(['FAIL', label, String(err.message || err).slice(0, 160)]);
   }
 }
-const w = [4, 50, 22, 8, 12, 10, 18, 20];
+const w = [4, 50, 22, 8, 12, 10, 18, 22, 10, 10];
 for (const r of rows) console.log(r.map((x, i) => String(x).padEnd(w[i] || 0)).join(' '));
 console.log(`${rows.length - fail}/${rows.length} roof builds pass · slowest ${worstMs.toFixed(0)} ms · most ${(worstTris / 1e6).toFixed(2)} M triangles`);
 
@@ -239,4 +321,20 @@ assert.equal(await matOf({}, 'gutter'), 'copper');
 assert.equal(R({ roofType: 'gable', overhang: 1.2 }).o, 1.2);
 assert.ok(R({ roofType: 'gable', overhang: 1.2, pitch: 25 }).knee, 'a long overhang on a low pitch raises a knee wall');
 console.log('pitch / overhang / covering / material rules ok');
+
+// printability, part 3: a real union of every part instance is ONE solid (small roofs: a full union of thousands of
+// tiles is too heavy for the WASM heap)
+const SOLID = [
+  { roofType: 'gable', width: 3, length: 4, detail: 'low' },
+  { roofType: 'hip', width: 3, length: 4 }, { roofType: 'pyramid', width: 3, length: 4, covering: 'slate' },
+  { roofType: 'mansard', width: 3, length: 4, covering: 'slate', dormers: true }, { roofType: 'gambrel', width: 3, length: 4, covering: 'pantiles' },
+  { roofType: 'shed', width: 3, length: 4, covering: 'seam' }, { roofType: 'gable', width: 3, length: 4, covering: 'shingles', dormers: true, pitch: 45 },
+];
+for (const c of SOLID) {
+  const r = await generate({ element: 'roof', ...c }), t0 = performance.now();
+  const so = solids(r.parts);
+  const label = Object.entries(c).map(([k, v]) => `${k}=${v}`).join(' ');
+  if (so.length !== 1) { fail++; console.log(`FAIL one solid: ${label} → ${so.length} solids`, so.slice(1, 4).map((x) => x.bbox.min.map((v) => v.toFixed(2)).join(','))); }
+  else console.log(`one solid: ${label} (${r.parts.reduce((a, p) => a + instanceCount(p), 0)} pieces, ${(performance.now() - t0).toFixed(0)} ms)`);
+}
 if (fail) process.exit(1);
