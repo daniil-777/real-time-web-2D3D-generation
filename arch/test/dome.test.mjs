@@ -7,6 +7,7 @@ import { initKernel } from './node-kernel.mjs';
 import { generate } from '../js/generate.js';
 import { SCHEMA, MATERIALS } from '../js/spec.js';
 import { ORDER_KEYS } from '../js/orders.js';
+import { solids } from './solid.mjs';
 
 await initKernel();
 
@@ -70,7 +71,9 @@ let fails = 0;
 const pad = (s, n) => String(s).padEnd(n), lpad = (s, n) => String(s).padStart(n);
 console.log(pad('element', 7), pad('case', 58), lpad('ms', 6), lpad('tris', 9), lpad('size x×y×z (m)', 26), lpad('expected', 26), ' result');
 const now = () => performance.now();
+let built = 0;
 for (const c of cases) {
+  if (++built % 40 === 0) await initKernel();     // a fresh WASM heap now and then (build intermediates are not freed)
   let r, err = null;
   try {
     const t0 = now();
@@ -108,4 +111,27 @@ for (const c of cases) {
 const ms = rows.filter((x) => x.r).map((x) => x.r.total).sort((a, b) => a - b);
 const tr = rows.filter((x) => x.r).map((x) => x.r.tris).sort((a, b) => a - b);
 console.log(`\n${rows.length} builds, ${rows.length - fails} passed, ${fails} failed; ms median ${ms[ms.length >> 1].toFixed(0)} max ${ms[ms.length - 1].toFixed(0)}; tris median ${tr[tr.length >> 1]} max ${tr[tr.length - 1]}`);
-if (fails) process.exit(1);
+
+// printability: every element unions into ONE solid (all part instances, internal voids and sub-mm³ noise ignored)
+const solidCases = [];
+for (const domeType of domeTypes) for (const drum of [true, false]) for (const lantern of [true, false]) for (const oculus of [false, true])
+  solidCases.push({ element: 'dome', domeType, drum, lantern, oculus });
+for (const domeType of domeTypes) for (const drum of [true, false]) for (const lantern of [true, false])
+  solidCases.push({ element: 'cupola', domeType, drum, lantern });
+for (const style of ['neoclassical', 'byzantine']) for (const drum of [true, false]) solidCases.push({ element: 'dome', style, drum });
+for (const spireType of spireTypes) for (const material of ['slate', 'copper', 'limestone', 'wood']) for (const style of [undefined, 'art-deco'])
+  solidCases.push({ element: 'spire', spireType, material, style });
+for (const detail of ['low', 'medium']) { solidCases.push({ element: 'dome', detail }, { element: 'cupola', detail, lantern: true }, { element: 'spire', detail }); }
+let sFails = 0;
+console.log(`\nprintability: ${solidCases.length} specs must each be one solid`);
+for (const [i, spec] of solidCases.entries()) {
+  if (i % 10 === 0) await initKernel();
+  const r = await generate(spec);
+  const t0 = now(), n = solids(r.parts).length, ms = now() - t0;
+  const ok = n === 1;
+  if (!ok) sFails++;
+  console.log(pad(spec.element, 7), pad(Object.entries(spec).filter(([k, v]) => k !== 'element' && v !== undefined).map(([k, v]) => `${k}=${v}`).join(' '), 58), lpad(ms.toFixed(0), 6), lpad(`${n} solid${n > 1 ? 's' : ''}`, 10), ok ? ' ok' : ' FAIL');
+  const seen = new Set(); for (const p of r.parts) if (!seen.has(p.manifold)) { seen.add(p.manifold); p.manifold.delete(); }
+}
+console.log(`printability: ${solidCases.length - sFails}/${solidCases.length} one solid`);
+if (fails || sFails) process.exit(1);

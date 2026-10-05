@@ -186,15 +186,17 @@ function offsetIn(c, t) {
   });
 }
 
-/** Revolve the shell: solid to the axis, or hollow (thickness t) with an eye of radius `eye`. */
+/** Revolve the shell: solid to the axis, or hollow (thickness t) with an eye of radius `eye`. A short skirt (2 EPS)
+ *  continues the springing downward into whatever carries the shell, so the two fuse into one solid. */
 function shellSolid(c, segs, { eye = 0, t = 0 } = {}) {
+  const sink = 2 * EPS, z0 = c[0][1] - sink;
   if (!eye) {
     const l = c[c.length - 1];
-    return revolve([[0, c[0][1]], ...c, ...(l[0] > 0 ? [[0, l[1]]] : [])], segs);
+    return revolve([[0, z0], [c[0][0], z0], ...c, ...(l[0] > 0 ? [[0, l[1]]] : [])], segs);
   }
   const outer = clipR(c, eye);
   const inner = clipR(offsetIn(c, t).filter((p) => p[0] > 0), eye - 0.25 * t);
-  return revolve([...outer, ...inner.reverse()], segs);
+  return revolve([[outer[0][0], z0], ...outer, ...inner.reverse(), [inner[0][0], z0]], segs);
 }
 
 // ================================================================================================ the orders (lite)
@@ -254,10 +256,11 @@ function liteVolute(r0, depth, side) {
  * times): Tuscan/Doric echinus and abacus, Ionic volutes, Corinthian bell with two rows of acanthus (only the leaves
  * that stand clear of the wall), corner helices and a concave abacus. Heights from Vignola (orders.js).
  */
-function liteColumn(order, Hc, segs, lod = 1) {
+function liteColumn(order, Hc, segs, lod = 1, free = false) {
   const key = ORDERS[order] && ORDERS[order].classical ? order : 'tuscan';
   const o = ORDERS[key];
   const d = columnDims(key, { height: Hc }), D = d.D, R = D / 2, rt = d.top / 2;
+  const e = Math.min(EPS, 0.004 * D);                      // joints inside the column, relative to its own size
   const sg = lod > 1 ? 40 : 28, parts = [];
   if (d.base > 0) {
     const H = d.base, plH = H / 3, half = o.base === 'tuscan' ? 0.66 * D : 0.67 * D;
@@ -267,24 +270,25 @@ function liteColumn(order, Hc, segs, lod = 1) {
     else p = new Prof(0.605 * D).torus(0.125 * D, 1, 10).out(-0.035 * D).fillet(0.018 * D).scotia(0.085 * D, 0.045 * D, 0.012 * D, 8)
       .fillet(0.014 * D).out(-0.006 * D).torus(0.082 * D, 1, 8).out(-0.04 * D).fillet(0.018 * D).cavetto(-(R * 1.044 - R), 0.035 * D, 4);
     scaleH(p, H - plH);
-    parts.push(part('col-base', 'stone', union([box(-half, -half, 0, half, half, plH), revolve(p.toRevolve(0, plH - EPS), sg)])));
+    parts.push(part('col-base', 'stone', union([box(-half, -half, 0, half, half, plH), revolve(p.toRevolve(0, plH - e), sg)])));
   }
   const zs = Array.from({ length: 11 }, (_, i) => (i / 10) * d.shaft);
   for (const e of [0.025, 0.06].map((k) => k * D)) zs.push(e, d.shaft - e * 0.6);
   zs.sort((a, b) => a - b);
-  parts.push(part('col-shaft', 'stone', revolve([[0, 0], ...zs.map((z) => [shaftR(d, z), z]), [0, d.shaft]], sg).translate([0, 0, d.base - EPS])));
+  // the shaft overlaps the base by 2 e (touching faces would not fuse into one printable solid)
+  parts.push(part('col-shaft', 'stone', revolve([[0, 0], ...zs.map((z) => [shaftR(d, z), z]), [0, d.shaft]], sg).translate([0, 0, d.base - 3 * e])));
   const zc = d.base + d.shaft, c = d.cap;
   const astr = revolve(new Prof(rt).fillet(0.018 * D, 0.012 * D).torus(0.05 * D, 1, 8).toRevolve(0, zc - 0.068 * D), sg);
   if (key === 'tuscan' || key === 'doric' || key === 'greek-doric') {
     const p = new Prof(rt).fillet(c / 3);
     if (key !== 'tuscan') for (let i = 0; i < 3; i++) p.out(0.008 * D).fillet(0.016 * D);
     p.ovolo(0.56 * D - p.p, c * 0.3, 8);
-    parts.push(part('col-capital', 'stone', union([astr, revolve(p.toRevolve(0, zc - EPS), sg),
-      box(-0.6 * D, -0.6 * D, zc + p.h - 2 * EPS, 0.6 * D, 0.6 * D, zc + c)])));
+    parts.push(part('col-capital', 'stone', union([astr, revolve(p.toRevolve(0, zc - e), sg),
+      box(-0.6 * D, -0.6 * D, zc + p.h - 2 * e, 0.6 * D, 0.6 * D, zc + c)])));
   } else if (key === 'ionic') {
     const A = 1.12 * D, abH = 0.065 * D, zab = zc + c - abH, r0 = 0.21 * D, xe = A / 2 - 0.85 * r0, ze = zab - 0.98 * r0, depth = 0.92 * A;
     const ech = revolve(new Prof(rt).ovolo(0.53 * D - rt, 0.13 * D, 8).fillet(0.012 * D).toRevolve(0, zab - 0.2 * D), sg);
-    const band = box(-xe, -depth / 2 * 0.985, zab - 0.5 * r0, xe, depth / 2 * 0.985, zab + EPS);
+    const band = box(-xe, -depth / 2 * 0.985, zab - 0.5 * r0, xe, depth / 2 * 0.985, zab + e);
     const vR = (lod > 2 ? voluteScroll({ r0, depth, side: 1 }) : liteVolute(r0, depth, 1)).translate([xe, 0, ze]);
     const vL = (lod > 2 ? voluteScroll({ r0, depth, side: -1 }) : liteVolute(r0, depth, -1)).translate([-xe, 0, ze]);
     const ab = new Prof(A / 2 - 0.02 * D).fillet(abH * 0.45).ovolo(0.02 * D, abH * 0.55, 4);
@@ -293,8 +297,8 @@ function liteColumn(order, Hc, segs, lod = 1) {
   } else {
     // Corinthian / Composite (Vignola: leaves 2/7 and 4/7, abacus 1/7 of the capital, which is 7/6 D high)
     const abH = c / 7, zab = zc + c - abH;
-    const bpts = [[0, zc - EPS]];
-    for (let i = 0; i <= 8; i++) { const t = i / 8; bpts.push([rt + (0.5 * D - rt) * t ** 2.2, zc - EPS + t * (zab - zc + EPS)]); }
+    const bpts = [[0, zc - e]];
+    for (let i = 0; i <= 8; i++) { const t = i / 8; bpts.push([rt + (0.5 * D - rt) * t ** 2.2, zc - e + t * (zab - zc + e)]); }
     bpts.push([0.53 * D, zab], [0.53 * D, zab + 0.02 * D], [0, zab + 0.02 * D]);
     const bell = revolve(bpts, sg);
     const half = 0.72 * D, sag = 0.11 * D, cut = 0.06 * D;
@@ -310,11 +314,13 @@ function liteColumn(order, Hc, segs, lod = 1) {
       return pts;
     };
     const ap = new Prof(-0.035 * D).cavetto(0.02 * D, abH * 0.3, 3).fillet(abH * 0.15).ovolo(0.03 * D, abH * 0.4, 3).fillet(abH * 0.15);
-    const abacus = loft(ap.pts.map(([off]) => ringAt(off)), ap.pts.map(([, h]) => zab - EPS + h));
-    const hel = helixTube(0.085 * D, 0.02 * D, 1.5, 0.024 * D, [[-0.06 * D, 0, -0.42 * c], [-0.03 * D, 0, -0.25 * c], [-0.01 * D, 0, -0.08 * c]]);
+    const abacus = loft(ap.pts.map(([off]) => ringAt(off)), ap.pts.map(([, h]) => zab - e + h));
+    // the helix stalk springs from inside the bell (local y becomes the radial direction after the -90° turn)
+    const hel = helixTube(0.085 * D, 0.02 * D, 1.5, 0.024 * D, [[-0.06 * D, -0.2 * D, -0.42 * c], [-0.03 * D, -0.1 * D, -0.25 * c], [-0.01 * D, -0.02 * D, -0.08 * c]]);
     const hels = [0, 1, 2, 3].map((k) => hel.rotate([0, 0, -90]).translate([0.6 * D, 0, zab - 0.01 * D]).rotate([0, 0, 45 + 90 * k]));
     const fl = K().Manifold.sphere(0.05 * D, 10).scale([1, 0.55, 1]);
-    const fls = [0, 1, 2, 3].map((k) => fl.translate([0, -half + sag * 0.6, zab + abH * 0.45]).rotate([0, 0, 90 * k]));
+    // fleurons sunk into the abacus face (its middle stands at half - sag - 0.015 D at this height)
+    const fls = [0, 1, 2, 3].map((k) => fl.translate([0, -(half - sag - 0.003 * D), zab + abH * 0.45]).rotate([0, 0, 90 * k]));
     parts.push(part('col-capital', 'stone', union([astr, bell, abacus, ...hels, ...fls])));
     const nu = lod > 1 ? 7 : 5, nv = lod > 1 ? 14 : 10;
     for (const r of [
@@ -325,7 +331,7 @@ function liteColumn(order, Hc, segs, lod = 1) {
       const xf = [];
       for (let k = 0; k < 8; k++) {
         const phi = r.phase + (k * TAU) / 8;
-        if (Math.sin(phi) > 0.5) continue;                       // buried in the wall behind the column
+        if (!free && Math.sin(phi) > 0.5) continue;              // buried in the wall behind an engaged column
         xf.push(mat.mul(mat.T(r.rad * Math.cos(phi), r.rad * Math.sin(phi), r.z), mat.Rz(phi + Math.PI / 2)));
       }
       parts.push(part(r.name, 'stone', leaf, instances(xf)));
@@ -767,10 +773,11 @@ function drumParts(P) {
     if (P.paired) piers.push(phi - P.pierAng, phi + P.pierAng); else piers.push(phi);
   }
   if (P.useCols) {
-    const col = liteColumn(P.order, Hc, segs, P.detail === 'high' ? 2 : 1);
+    // columns stand EPS into the podium and reach EPS into the entablature, so the drum prints as one solid
+    const col = liteColumn(P.order, Hc + 4 * EPS, segs, P.detail === 'high' ? 2 : 1, !!P.peri);
     parts.push(...replicate(col.parts, piers.map((a) => mat.mul(mat.Rz(a), mat.T(0, -P.Rc, ps - EPS)))));
   } else {
-    const pil = litePilaster(P.pilW || Dc, Hc, P.pilProj, 0.25 * Dc);
+    const pil = litePilaster(P.pilW || Dc, Hc + 2 * EPS, P.pilProj, 0.25 * Dc);
     parts.push(part('drum-pilaster', 'stone', pil, instances(piers.map((a) => mat.mul(mat.Rz(a), mat.T(0, -Rw, ps - EPS))))));
   }
   // entablature ring and (high) dentils
@@ -965,10 +972,10 @@ function lanternParts(P, spec) {
   }
   const piers = Array.from({ length: nL }, (_, i) => ((i + 0.5) * TAU) / nL);
   if (P.classical && P.detail !== 'low') {
-    const col = liteColumn(P.order, Hc, segs, 1);
+    const col = liteColumn(P.order, Hc + 4 * EPS, segs, 1, !!P.open);
     parts.push(...replicate(col.parts.map((p) => ({ ...p, name: 'lantern-' + p.name })), piers.map((a) => mat.mul(mat.Rz(a), mat.T(0, -P.rCol, zc - EPS)))));
   } else {
-    const pil = litePilaster(1.2 * P.Dcl, Hc, 0.3 * P.Dcl, 0.2 * P.Dcl);
+    const pil = litePilaster(1.2 * P.Dcl, Hc + 2 * EPS, 0.3 * P.Dcl, 0.2 * P.Dcl);
     parts.push(part('lantern-pilaster', 'stone', pil, instances(piers.map((a) => mat.mul(mat.Rz(a), mat.T(0, -P.rCore, zc - EPS))))));
   }
   const rA = P.rCol + 0.5 * P.Dcl * 0.83;
@@ -1230,7 +1237,9 @@ function spireParts(S, spec) {
         const fr = Math.abs(u) <= thw ? 1 : (hw - Math.abs(u)) / (hw - thw);
         const len = 0.97 * fr * L;                          // stops short of the apex / hip
         if (len < 0.05 * L) continue;
-        const p = [bc[0] + U[0] * u + V[0] * len / 2 + Nn[0] * 0.006 * W, bc[1] + U[1] * u + V[1] * len / 2 + Nn[1] * 0.006 * W, bc[2] + V[2] * len / 2 + Nn[2] * 0.006 * W];
+        // the seam (0.012 W tall) is sunk max(EPS, 0.002 W) into the face so it fuses with it
+        const off = 0.006 * W - Math.max(EPS, 0.002 * W);
+        const p = [bc[0] + U[0] * u + V[0] * len / 2 + Nn[0] * off, bc[1] + U[1] * u + V[1] * len / 2 + Nn[1] * off, bc[2] + V[2] * len / 2 + Nn[2] * off];
         const Rm = Float64Array.from([U[0], U[1], U[2], 0, V[0], V[1], V[2], 0, Nn[0], Nn[1], Nn[2], 0, 0, 0, 0, 1]);
         xf.push(mat.mul(mat.T(...p), Rm, mat.S(0.008 * W, len, 0.012 * W)));
       }
@@ -1256,7 +1265,8 @@ function spireParts(S, spec) {
     const leaf = union([hook, M.sphere(0.026 * q, 10).translate([0, -0.026 * q, 0.122 * q]),
       M.sphere(0.019 * q, 8).translate([0.024 * q, -0.036 * q, 0.06 * q]), M.sphere(0.019 * q, 8).translate([-0.024 * q, -0.036 * q, 0.06 * q])]);
     for (const h of hips.slice(0, S.type === 'broach' ? 8 : n)) {
-      const a = h[0], b = h[h.length - 1];
+      // the main stretch of the hip (above the bell-cast kick), where the crockets actually sit on the arris
+      const a = h[h.length - 2], b = h[h.length - 1];
       for (let k = 1; k <= nk; k++) {
         const t = 0.16 + (0.78 * (k - 1)) / nk, p = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
         const ang = Math.atan2(p[1], p[0]);
@@ -1297,8 +1307,9 @@ function spireParts(S, spec) {
       // louvre boards in the light
       const slats = [];
       const nsl = 5;
-      for (let j = 0; j < nsl; j++) slats.push(box(-ow / 2, -0.022 * lw, -0.01 * lw, ow / 2, 0.022 * lw, 0.01 * lw).rotate([40, 0, 0]).translate([0, -pr + 0.035 * lw, oz + (j + 0.6) * (oh - ow / 2) / nsl]));
-      const knop = K().Manifold.sphere(0.06 * lw, 10).translate([0, 0, lh + pitchH + rt2 + 0.04 * lw]);
+      // boards run into the reveals and touch the back of the light (one printable solid with the lucarne)
+      for (let j = 0; j < nsl; j++) slats.push(box(-ow / 2 - 0.03 * lw, -0.022 * lw, -0.01 * lw, ow / 2 + 0.03 * lw, 0.022 * lw, 0.01 * lw).rotate([40, 0, 0]).translate([0, -pr + 0.05 * lw, oz + (j + 0.6) * (oh - ow / 2) / nsl]));
+      const knop = K().Manifold.sphere(0.06 * lw, 10).translate([0, 0, lh + pitchH + 0.04 * lw]);   // sunk into the gable apex
       const nn4 = radial(4, mat.T(0, -a, tr.z), tr.ang0);
       parts.push(part(ti === 0 ? 'lucarne-louvre' : 'lucarne-upper-louvre', 'wood', union(slats), nn4));
       parts.push(part(ti === 0 ? 'lucarne-knop' : 'lucarne-upper-knop', 'metal', knop, nn4));
@@ -1338,7 +1349,9 @@ function decoSpire(S, parts, role) {
       [z, z + 0.72 * h, z + 0.72 * h, z + 0.86 * h, z + h + EPS]));
     const fw = 2 * a * Math.tan(Math.PI / nn);
     // sunburst light: a stepped triangle of dark glass on every face
-    lights.push(...Array.from({ length: nn }, (_, k) => mat.mul(mat.Rz((k * TAU) / nn), mat.T(0, -a - 0.002 * W, z + 0.12 * h), mat.S(0.42 * fw, 0.004 * W, 0.56 * h))));
+    // the light's back face is sunk EPS into the tier face (unit box spans y -0.6..0.4 of its depth d)
+    const d = 0.003 * W + EPS;
+    lights.push(...Array.from({ length: nn }, (_, k) => mat.mul(mat.Rz((k * TAU) / nn), mat.T(0, -a + EPS - 0.4 * d, z + 0.12 * h), mat.S(0.42 * fw, d, 0.56 * h))));
     // corner fins
     const rc = a / Math.cos(Math.PI / nn);
     fins.push(...Array.from({ length: nn }, (_, k) => mat.mul(mat.Rz(Math.PI / nn + (k * TAU) / nn), mat.T(0, -rc - 0.008 * W, z + 0.36 * h), mat.S(0.012 * W, 0.03 * W, 0.72 * h))));
