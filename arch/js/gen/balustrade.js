@@ -11,10 +11,9 @@
 import { mat, revolve, loft, box, union, part, instances, extrudeProfileX, bezier } from '../kernel.js';
 import { Prof } from '../profiles.js';
 import { urnParts } from './finial.js';
-import { effective } from './balustrade-style.js';
+import { effective as periodFields } from './balustrade-style.js';
 
 export const ELEMENTS = ['balustrade', 'baluster'];
-export { effective };   // generate() merges it into the spec it returns
 export const BALUSTERS = ['vase', 'double-vase', 'bottle', 'square', 'bar'];
 
 const OV = 0.001;                 // overlap of touching pieces (Manifold does not fuse touching faces)
@@ -23,7 +22,15 @@ const TRI_BUDGET = 1.1e6;         // triangles allowed for all balusters togethe
 // greatest diameter D as a fraction of the baluster's height (typical stone balusters: about 190 mm on 600 mm)
 const D_OF = { vase: 0.33, 'double-vase': 0.31, bottle: 0.31, square: 0.29 };
 const RES = { low: { segs: 32, q: 5 }, medium: { segs: 64, q: 8 }, high: { segs: 96, q: 12 } };
-const styled = (spec) => ({ ...spec, ...effective(spec) });   // the period's baluster and urns (balustrade-style.js)
+const styled = (spec) => ({ ...spec, ...periodFields(spec) });   // the period's baluster and urns (balustrade-style.js)
+
+/** What generate() merges into the spec it returns, the fields as built: the period's baluster and urns
+ *  (balustrade-style.js), and no urns where the run is too short for pedestals to carry them. */
+export function effective(spec) {
+  const e = periodFields(spec), s = { ...spec, ...e };
+  if (s.element === 'balustrade' && s.urns && !layout(s).peds.length) e.urns = false;
+  return e;
+}
 
 // ------------------------------------------------------------------------------------------------ dimensions
 
@@ -377,7 +384,7 @@ function buildParts(spec) {
       const ends = [peds[0], peds[peds.length - 1]].map((x) => mat.T(x, 0, d.H - OV));
       parts.push(...replicate(urn, ends).map((p) => ({ ...p, name: `urn-${p.name}` })));
     }
-  }
+  } else if (spec.urns) parts[0] = { ...parts[0], meta: { ...(parts[0].meta || {}), warning: 'no urns: a run this short has no pedestals to carry them' } };
   return parts;
 }
 

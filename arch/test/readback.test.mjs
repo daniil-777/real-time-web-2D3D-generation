@@ -98,6 +98,35 @@ for (const style of [undefined, ...SCHEMA.style.values]) for (const stated of [{
     if (errs.length) bfails.push(`${JSON.stringify(spec)} → ${line}: ${errs.join('; ')}`); else bpass++;
   }
 }
+// runs too short for pedestals carry no urns, stated or a period's: the built line says none, and a warning says why
+for (const spec of [{ element: 'balustrade', style: 'baroque', length: 0.8 }, { element: 'balustrade', urns: true, length: 0.8 }]) {
+  const r = await generate(spec), line = describe(r.spec);
+  bn++;
+  const urns = r.parts.some((p) => p.name.startsWith('urn-'));
+  if (urns || /\burns\b/.test(line) || !r.warnings.some((w) => /no urns/.test(w))) bfails.push(`${JSON.stringify(spec)} → ${line}: urns read/built/warned wrong`);
+  else bpass++;
+  free(r.parts);
+}
+// an exported spec rebuilds the same element: the built spec (effective fields included) fed back as a request gives
+// the same parts and volumes and the same line — a Baroque door's broken segmental pediment included (controller ruling 28)
+for (const spec of [{ element: 'door', style: 'baroque' }, { element: 'window', style: 'baroque' }, { element: 'window', style: 'gothic' },
+  { element: 'door', style: 'moorish' }, { element: 'balustrade', style: 'baroque', length: 4 }, { element: 'window', archType: 'basket' }]) {
+  const a = await generate(spec), b = await generate(Object.fromEntries(Object.entries(a.spec).filter(([k]) => k !== 'given')));
+  bn++;
+  const sig = (r) => r.parts.map((p) => `${p.name}:${p.manifold.volume().toFixed(9)}`).join(',');
+  // (the re-imported spec states pediment 'none', so its line may add "no pediment"; nothing else may differ)
+  if (sig(a) !== sig(b) || describe(a.spec) !== describe(b.spec).replace(' · no pediment', '')) bfails.push(`${JSON.stringify(spec)}: the exported spec rebuilds differently`);
+  else bpass++;
+  free(a.parts); free(b.parts);
+}
+// the German / French / Italian captions say "no pediment" only when the request did (as the English line)
+const { captions } = await import('../js/describe.js');
+for (const [spec, want] of [[{ element: 'window', style: 'gothic' }, false], [{ element: 'window', pediment: 'none' }, true]]) {
+  const r = await generate(spec), caps = captions(r.spec, 0).join(' | ');
+  bn++;
+  if (/ohne Giebel|sans fronton|senza frontone/.test(caps) !== want) bfails.push(`${JSON.stringify(spec)}: foreign captions ${caps}`); else bpass++;
+  free(r.parts);
+}
 for (const f of bfails.slice(0, 20)) console.log('FAIL', f);
 console.log(`readback balustrades: ${bpass}/${bn} pass`);
 assert.equal(bfails.length, 0, `${bfails.length} balustrade read-backs disagree with the build`);

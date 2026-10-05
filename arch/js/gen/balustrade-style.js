@@ -9,9 +9,14 @@ export const STYLE_BALUSTRADE = { renaissance: { baluster: 'double-vase' }, baro
   'art-deco': { baluster: 'square' }, modern: { baluster: 'bar' } };
 const stated = (spec, f) => (spec.given ? spec.given.includes(f) : spec[f] !== undefined && spec[f] !== null);
 
-/** The fields the style decides for a balustrade or baluster spec: baluster kind and urns, unless stated. */
+/** The fields the style decides for a balustrade or baluster spec: baluster kind and urns, unless stated. Urns are
+ *  decided once: a spec that already carries them (generate()'s, where a short run without pedestals has none) keeps
+ *  them, so applying this again to a built spec gives it back. */
 export function effective(spec) {
   const out = {}, st = Object.hasOwn(STYLE_BALUSTRADE, spec.style) ? STYLE_BALUSTRADE[spec.style] : {};
-  for (const [k, v] of Object.entries(st)) if (!stated(spec, k) && !(k === 'urns' && spec.element === 'baluster')) out[k] = v;
+  for (const [k, v] of Object.entries(st)) {
+    if (stated(spec, k) || (k === 'urns' && (spec.element === 'baluster' || spec.urns !== undefined))) continue;
+    out[k] = v;
+  }
   return out;
 }

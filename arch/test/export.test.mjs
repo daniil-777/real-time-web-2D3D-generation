@@ -350,6 +350,8 @@ try {
     [{ element: 'arcade', archType: 'horseshoe', style: 'moorish' }, { span: 2.4, rise: 2.0785 }],
     [{ element: 'arcade', order: 'corinthian' }, { span: 2.4, rise: 1.2, springing: 3.6 }],
     [{ element: 'window', archType: 'pointed', style: 'gothic' }, { span: 1.2, rise: 1.0392 }],
+    [{ element: 'window', style: 'moorish' }, { span: 1.2, rise: 1.0392 }],      // the head from the style: horseshoe
+    [{ element: 'door', style: 'romanesque' }, { span: 1.6, rise: 0.8 }],        // the head from the style: semicircular
   ]) {
     const s = await sheetFor(spec);
     if (!s) continue;

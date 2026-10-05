@@ -74,7 +74,7 @@ export const DEFAULTS = {
   moulding: { profile: 'ovolo', length: 1.2, height: 0.16, material: 'plaster' },
   pediment: { pediment: 'triangular', order: 'ionic', width: 5, material: 'limestone' },
   portico: { order: 'ionic', columns: 4, pediment: 'triangular', steps: 3, material: 'limestone' },
-  balustrade: { baluster: 'vase', length: 3, height: 0.95, urns: false, material: 'limestone' },
+  balustrade: { baluster: 'vase', length: 3, height: 0.95, material: 'limestone' },   // urns: the family decides (a period's)
   baluster: { baluster: 'vase', height: 0.7, material: 'limestone' },
   arch: { archType: 'semicircular', span: 2.4, keystone: true, supports: 'piers', order: 'tuscan', material: 'sandstone' },
   arcade: { archType: 'semicircular', span: 2.4, bays: 3, keystone: true, supports: 'piers', order: 'tuscan', material: 'sandstone' },
@@ -93,7 +93,7 @@ export const DEFAULTS = {
 /** The order-derived fields normalize() fills (base, flutes, frieze, cornice) and the elements whose build reads them;
  *  the others carry them unused, so the spec card and the drawing's spec block leave them out there. */
 export const APPLIES = {
-  base: ['column', 'pilaster', 'base', 'portico'], flutes: ['column', 'pilaster', 'portico'],
+  base: ['column', 'pilaster', 'base', 'pedestal', 'portico'], flutes: ['column', 'pilaster', 'portico'],
   frieze: ['entablature', 'portico', 'window', 'door'], cornice: ['entablature', 'cornice', 'portico', 'window', 'door'],
 };
 export const applies = (field, element) => !Object.hasOwn(APPLIES, field) || APPLIES[field].includes(element);

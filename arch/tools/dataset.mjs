@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { initKernel, ARCHKIT } from '../test/node-kernel.mjs';
 import { generate, FAMILY } from '../js/generate.js';
-import { SCHEMA, ELEMENTS, normalize } from '../js/spec.js';
+import { SCHEMA, ELEMENTS } from '../js/spec.js';
 import { ORDER_KEYS } from '../js/orders.js';
 
 const args = process.argv.slice(2), opt = (k, d) => (args.includes(k) ? args[args.indexOf(k) + 1] : d);
@@ -90,7 +90,7 @@ for (const element of only) {
       const g = await generate(raw);
       if (g.parts.some((p) => p.manifold.status() !== 'NoError')) throw new Error('not manifold');
       fs.mkdirSync(dir, { recursive: true });
-      const spec = normalize(raw).spec;
+      const spec = g.spec;   // as built: generate() merges the fields a family decides (a styled window's head, a period's balusters)
       fs.writeFileSync(path.join(dir, 'spec.json'), JSON.stringify(spec, null, 1));
       const caps = captions ? captions(spec, i) : [describe ? describe(spec) : element];
       fs.writeFileSync(path.join(dir, 'captions.json'), JSON.stringify(caps, null, 1));
@@ -106,5 +106,5 @@ for (const element of only) {
   console.log(element.padEnd(12), 'done', `(${ok} ok, ${fail} failed so far)`);
 }
 index.end();
-fs.writeFileSync(path.join(root, 'README.md'), `# ${name}\n\nProcedurally generated architectural elements from Arch Studio (exact labels; generated data, no third-party assets).\nOne folder per sample: spec.json (normalized spec, metres), captions.json (EN + DE/FR/IT), mesh.glb (Y-up, metres, watertight parts), thumb.png.\nindex.jsonl lists every sample. Generator: arch/tools/dataset.mjs (seed ${seed0}, ${per} per element).\n`);
+fs.writeFileSync(path.join(root, 'README.md'), `# ${name}\n\nProcedurally generated architectural elements from Arch Studio (exact labels; generated data, no third-party assets).\nOne folder per sample: spec.json (the spec as built, metres), captions.json (EN + DE/FR/IT), mesh.glb (Y-up, metres, watertight parts), thumb.png.\nindex.jsonl lists every sample. Generator: arch/tools/dataset.mjs (seed ${seed0}, ${per} per element).\n`);
 console.log(`dataset ${root}: ${ok} samples, ${fail} failed`);

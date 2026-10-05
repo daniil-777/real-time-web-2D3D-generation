@@ -29,7 +29,8 @@ export function surroundHead(spec) {
   const asked = stated(spec, 'pediment') && !!spec.pediment;
   let ped;
   if (arch || ['egyptian', 'deco', 'modern'].includes(tr)) ped = asked ? spec.pediment : 'none';
-  else if (tr === 'baroque') ped = asked ? spec.pediment : door ? 'broken-segmental' : 'broken';
+  // a Baroque door's broken pediment is segmental, asked for or not (so its exported spec, 'broken', rebuilds it)
+  else if (tr === 'baroque') ped = door && (!asked || spec.pediment === 'broken') ? 'broken-segmental' : asked ? spec.pediment : 'broken';
   else ped = spec.pediment ?? (door ? 'segmental' : 'triangular');   // classical: the spec's value (spec.js default)
   const flatOrder = { egyptian: 'egyptian', deco: 'art-deco', modern: 'modern' }[tr];
   const classicalBottom = tr === 'classical' || tr === 'baroque';

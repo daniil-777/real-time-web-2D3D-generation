@@ -285,7 +285,8 @@ function foreign(spec, f, lang) {
   const el = EL[lang][f.el] || f.el;
   const parts = [cap(el)];
   const tf = TYPE_FIELD[f.el], t = { ...spec, ...effective(spec) }[tf];   // a window's pediment as built
-  if (tf && t && TYPE[lang][tf][t]) parts.push(TYPE[lang][tf][t]);
+  const silent = tf === 'pediment' && t === 'none' && spec.given && !spec.given.includes('pediment');   // a style that has none
+  if (tf && t && !silent && TYPE[lang][tf][t]) parts.push(TYPE[lang][tf][t]);
   if (spec.order && ORD[lang][spec.order] && f.el !== 'base') parts.push(ORD[lang][spec.order]);
   if (f.mat) parts.push(lang === 'de' ? `aus ${MAT.de[f.mat]}` : lang === 'fr' ? `en ${MAT.fr[f.mat]}` : `in ${MAT.it[f.mat]}`);
   if (f.main && Number.isFinite(f.main.v) && DIMW[lang][f.main.field]) {
