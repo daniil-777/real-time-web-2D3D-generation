@@ -236,7 +236,7 @@ const S = {
 let edgeStash = null;             // feature edges that arrived before their build was on screen
 // the idle showcase's state (see the end of this file)
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)');
-const SC = { on: false, i: 0, timer: 0, idleT: 0, typeT: 0, engaged: false,
+const SC = { on: false, paused: false, i: 0, timer: 0, idleT: 0, typeT: 0, engaged: false,
   forced: Q.get('showcase') === '1',
   allowed: Q.get('showcase') === '1' || (!SHOT && Q.get('showcase') !== '0' && !Q.get('q') && !Q.get('spec') && !Q.get('deform')) };
 A.showcase = { running: false, index: -1, phase: '', shown: [] };
@@ -259,7 +259,7 @@ function toast(text) {
   toastT = setTimeout(() => { t.hidden = true; }, 5000);
 }
 /** Announce to screen readers (only finished builds and answers, never every typing pause). */
-const announce = (text) => { $('#sr').textContent = text; };
+const announce = (text) => { if (!SC.on) $('#sr').textContent = text; };   // the showcase speaks once, not every example
 
 const builder = new Builder((m) => { fail(m); A.busy = false; stage.classList.remove('busy'); },
   (id, list) => {
@@ -293,10 +293,19 @@ viewerReady.catch((e) => fail('3D view unavailable: ' + (e && e.message ? e.mess
 let inflight = false, queued = false, lastShown = 0, idleWaiters = [];
 /** reason 'deform': the transform panel asked (the camera stays where it is). */
 function requestBuild(reason = null) {
+  // a deformation request that asks for exactly what is being built already, or what is on screen (a release seen
+  // twice: a lost focus, then the range's change), is not built again; a preview left standing gives way to the model
+  if (reason === 'deform' && !queued && (inflight || shownKey) && buildKey() === (inflight ? inflightKey : shownKey)) {
+    if (!inflight && viewer && viewer.previewing && !dragging()) viewer.showPreview(false);
+    return;
+  }
   if (reason) S.buildReason = reason;
   if (inflight) { queued = true; return; }
   build();
 }
+/** What a build would ask the worker for now: the spec and the deformation ops. */
+function buildKey() { const smart = smartInput(), ops = deformOps(smart.free); return JSON.stringify({ spec: smart.spec, ops, rigid: ops.length ? S.x.rigid : null }); }
+let inflightKey = null, shownKey = null;
 const waitIdle = () => (inflight ? new Promise((r) => idleWaiters.push(r)) : Promise.resolve());
 
 const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== ''));
@@ -305,6 +314,7 @@ async function build() {
   inflight = true; queued = false;
   const smart = smartInput(), spec = smart.spec, ops = deformOps(smart.free), infoKey = S.element ? S.element.key : null;
   const prompt = S.prompt, parsed = S.parsed, edited = S.edited, xs = JSON.stringify(S.x), reason = S.buildReason;
+  inflightKey = JSON.stringify({ spec, ops, rigid: ops.length ? S.x.rigid : null });
   S.buildReason = null;
   A.busy = true; stage.classList.add('busy');
   try {
@@ -312,6 +322,7 @@ async function build() {
     // the worker builds while three.js and the viewer are still loading (first load): send first, then wait for both
     const line = viewer ? viewer.mode === 'line' : Q.get('mode') === 'line';
     const pending = builder.build(spec, line, deform);
+    pending.catch(() => {});              // handled below; a failed viewer must not leave it unobserved
     await viewerReady;
     const r = await pending;
     // a newer request is waiting: do not spend a frame on this one (unless nothing has been shown for a while)
@@ -321,9 +332,11 @@ async function build() {
     if (reveal) viewer.beginReveal();
     await viewer.setModel(r.meshes, r.stats, { keepCamera: reason === 'deform' && S.stats && S.stats.spec.element === r.stats.spec.element,
       keepPreview: dragging() });
-    if (reveal) viewer.reveal(1100);
+    if (reveal && SC.on) viewer.reveal(1100);
+    else if (reveal) viewer.endReveal();            // the showcase was stopped while this model was being shown
     lastShown = performance.now();
     S.shown = { id: r.id, input: spec, deform };
+    shownKey = inflightKey;
     S.stats = r.stats;
     S.element = r.stats.element;
     S.applied = smart.applied;
@@ -362,7 +375,7 @@ async function build() {
       if (viewer && !dragging()) viewer.showPreview(false);   // never leave a preview standing in for a failed bake
     }
   } finally {
-    inflight = false;
+    inflight = false; inflightKey = null;
     A.busy = false;
     if (queued) build();
     else {
@@ -381,7 +394,7 @@ function specChanged() {
 }
 
 /** Interpret a prompt and build it. Resolves when the result is on screen (or answered out of scope). */
-async function submit(text, initialX = null) {
+async function submit(text, initialX = null, { keepPanel = false } = {}) {
   text = String(text || '').trim();
   if (!text) return;
   await parserLoaded; await describeLoaded;
@@ -402,7 +415,7 @@ async function submit(text, initialX = null) {
   renderOOS(null);
   S.prompt = text; S.spec = { ...(p.spec || {}) }; S.edited = false;
   resetX(false);
-  if (initialX) { S.x = initialX; $('#xform').open = !isIdentityX(); }
+  if (initialX) { S.x = initialX; if (!keepPanel) $('#xform').open = !isIdentityX(); }
   renderRead(p.interpretation || '', p, p.warnings || [], true);
   syncURL();
   requestBuild();
@@ -847,7 +860,8 @@ function deformOps(free, info = S.element) {
  *  taper's lift and the 'auto' ranges match the bake. Without undeformed meshes yet: the shaft's box alone. */
 const DEFORM_OPTS = () => ({ rigidInstances: S.x.rigid, rigidRatio: RIGID_RATIO, scaleInstances: 'auto' });
 function partStubs(info) {
-  const meshes = (viewer && viewer.preview && viewer.preview.meshes) || (S.plainMeshes && S.plainMeshes.key === info.key && S.plainMeshes.meshes);
+  const pv = viewer && viewer.preview && viewer.preview.key === previewKey() ? viewer.preview.meshes : null;
+  const meshes = pv || (S.plainMeshes && S.plainMeshes.key === info.key && S.plainMeshes.meshes);
   if (!meshes) return info.shaftBox ? [{ name: 'shaft', manifold: { numTri: () => 1, boundingBox: () => info.shaftBox }, transforms: null }] : [];
   if (S.stubsFor && S.stubsFor.meshes === meshes) return S.stubsFor.stubs;
   const stubs = meshes.map((m) => {
@@ -1108,7 +1122,7 @@ $('#x-only').addEventListener('change', (e) => {
 /** Ask the worker for the refined undeformed element (once per element and rigid setting); until it arrives the
  *  undeformed meshes on screen stand in, when there are some. */
 function maybeBase(now = false) {
-  if (!viewer || !S.element) return;
+  if (!viewer || !S.element || (SC.on && !now)) return;   // the showcase needs no preview geometry
   const key = previewKey();
   if (viewer.hasPreview(key) && !(viewer.preview.interim && now)) return;
   if (!$('#xform').open && isIdentityX() && !now) return;
@@ -1229,7 +1243,9 @@ function endDrag() {
   if (was && JSON.stringify(S.x) !== S.builtX) { S.releaseT = performance.now(); syncURL(); requestBuild('deform'); }
   else if (was && viewer && viewer.previewing && !inflight) viewer.showPreview(false);
 }
-window.addEventListener('pointerup', () => { if (S.sliderActive) endDrag(); });
+// a release ends the drag; the range's own change event (which follows) bakes, once. Only a cancelled pointer or a lost
+// focus, which never send that change, bake here.
+window.addEventListener('pointerup', () => { S.sliderActive = false; });
 window.addEventListener('pointercancel', endDrag);
 window.addEventListener('blur', endDrag);
 $('#x-keep').addEventListener('change', (e) => { S.x.keep = e.target.checked; syncURL(); requestBuild('deform'); renderX(); });
@@ -1358,24 +1374,58 @@ function idleShowcase(ms) {
   if (!SC.allowed || SC.on || (SC.engaged && !SC.forced)) return;
   SC.idleT = setTimeout(startShowcase, ms);
 }
+// the live regions that a build updates stay quiet while the showcase runs (it would speak every 5 s, forever)
+const LIVE = ['#dims', '#xwarn'];
+function quiet(on) {
+  for (const sel of LIVE) { const el = $(sel); if (!el) continue; if (on) el.setAttribute('aria-live', 'off'); else el.removeAttribute('aria-live'); }
+  if (!on) $('#dims').setAttribute('aria-live', 'polite');
+}
 function startShowcase() {
   if (SC.on || !SC.allowed || (SC.engaged && !SC.forced) || !A.ready) return;
+  $('#sr').textContent = 'Showcase running: examples build one after another. Press any key or click to stop it.';
   SC.on = true; A.showcase.running = true;
+  quiet(true);
   document.documentElement.classList.add('showcase');
   // start after the element on screen (the default is the last example or the first)
   const cur = SHOWCASE.findIndex((e) => !e.x && e.text === S.prompt);
   SC.i = cur >= 0 ? cur + 1 : 0;
+  if (!onShow()) { SC.paused = true; A.showcase.phase = 'paused'; return; }
   nextExample();
 }
 function stopShowcase() {
   clearTimeout(SC.idleT);
   if (!SC.on) return;
-  SC.on = false; A.showcase.running = false; A.showcase.phase = '';
+  SC.on = false; SC.paused = false; A.showcase.running = false; A.showcase.phase = '';
   clearTimeout(SC.timer); clearTimeout(SC.typeT);
   document.documentElement.classList.remove('showcase');
+  quiet(false);
   $('#prompt').value = S.prompt;          // a half-typed example gives way to the request on screen
   if (viewer) { viewer.controls.autoRotate = false; viewer.endReveal(); }
   S.reveal = false;
+  $('#sr').textContent = `Showcase stopped. ${S.interpretation || ''}`;
+}
+// nobody sees it: a hidden tab, or the site's frame scrolled out of view. It waits, and goes on when it is seen again.
+let inView = true;
+const onShow = () => !document.hidden && inView;
+function pauseShowcase() {
+  if (!SC.on || SC.paused) return;
+  SC.paused = true; A.showcase.phase = 'paused';
+  clearTimeout(SC.timer); clearTimeout(SC.typeT);
+  if (viewer) viewer.controls.autoRotate = false;
+  $('#prompt').value = S.prompt;
+}
+function resumeShowcase() {
+  if (!SC.on || !SC.paused || !onShow()) return;
+  SC.paused = false;
+  SC.timer = setTimeout(nextExample, 1200);
+}
+document.addEventListener('visibilitychange', () => (document.hidden ? pauseShowcase() : resumeShowcase()));
+if (typeof IntersectionObserver !== 'undefined') {
+  // the implicit root is the top-level viewport, so this also sees the site scrolling this frame away
+  new IntersectionObserver((entries) => {
+    inView = entries[entries.length - 1].isIntersecting;
+    if (inView) resumeShowcase(); else pauseShowcase();
+  }, { threshold: 0.15 }).observe(stage);
 }
 /** Type text into the prompt box, a character at a time (at once with reduced motion). */
 function typeOut(text) {
@@ -1385,7 +1435,7 @@ function typeOut(text) {
     let n = 0;
     box.value = '';
     const step = () => {
-      if (!SC.on) return resolve();
+      if (!SC.on || SC.paused) return resolve();
       box.value = text.slice(0, ++n);
       if (n >= text.length) { box.dispatchEvent(new Event('input')); SC.typeT = setTimeout(resolve, 220); return; }
       SC.typeT = setTimeout(step, 22 + Math.random() * 26);
@@ -1393,24 +1443,26 @@ function typeOut(text) {
     SC.typeT = setTimeout(step, 120);
   });
 }
+const running = () => SC.on && !SC.paused;
 async function nextExample() {
-  if (!SC.on) return;
+  if (!running()) return;
   const t0 = performance.now(), k = SC.i++ % SHOWCASE.length, ex = SHOWCASE[k];
   A.showcase.index = k; A.showcase.phase = 'typing';
   if (viewer) viewer.controls.autoRotate = false;
   await typeOut(ex.text);
-  if (!SC.on) return;
+  if (!running()) return;
   A.showcase.phase = 'building';
   S.auto = true;
   S.reveal = !REDUCED.matches;
+  // the transform is applied as a link would apply it, but the panel stays as the visitor left it (closed)
   const x = ex.x ? { ...structuredClone(XDEF), ...ex.x } : null;
-  try { await submit(ex.text, x); } catch (e) { /* a failed example: go on */ }
-  if (!SC.on) return;
+  try { await submit(ex.text, x, { keepPanel: true }); } catch (e) { /* a failed example: go on */ }
+  if (!running()) return;
   A.showcase.phase = REDUCED.matches ? 'holding' : 'revealing';
   A.showcase.shown.push({ index: k, text: ex.label || ex.text, at: Math.round(performance.now()), ms: Math.round(performance.now() - t0) });
-  announce(`Showing ${ex.label || ex.text}.`);
+  if (A.showcase.shown.length > 40) A.showcase.shown.splice(0, A.showcase.shown.length - 40);
   if (viewer && !REDUCED.matches) { viewer.controls.autoRotate = true; viewer.controls.autoRotateSpeed = -0.55; }
-  setTimeout(() => { if (SC.on && A.showcase.index === k) A.showcase.phase = 'holding'; }, 1100);
+  setTimeout(() => { if (running() && A.showcase.index === k) A.showcase.phase = 'holding'; }, 1100);
   // the next example's generator loads while this one is on show
   const nx = SHOWCASE[SC.i % SHOWCASE.length];
   try { const el = parseFn && parseFn(nx.text).spec.element; if (el) builder.w.postMessage({ type: 'warm', element: el }); } catch (e) { /* warm-up is optional */ }
@@ -1420,7 +1472,7 @@ async function nextExample() {
 }
 // interaction stops it (capture: before the canvas or a control handles the event); a pointer that only moves delays
 // an idle start
-for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
+for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart', 'focusin']) {
   window.addEventListener(ev, (e) => {
     if (!e.isTrusted) return;
     SC.engaged = true; S.auto = false;

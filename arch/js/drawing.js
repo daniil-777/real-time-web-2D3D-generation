@@ -689,9 +689,11 @@ function elementDims(spec, gen, bbox, scale = 20) {
     } else if (el === 'spire' && spec.height) {
       out.key.push(['Height', fm(spec.height) + ' m'], ['Width at the base', fm(spec.width || bbox.max[0] - bbox.min[0]) + ' m']);
     } else if (el === 'portico' && gen && gen.porticoPlan) {
-      const pp = gen.porticoPlan(spec);
+      const pp = gen.porticoPlan(spec), e = pp.O.ent;
+      // steps, column, entablature (architrave, frieze and the horizontal cornice), pediment
+      const entTop = pp.ped ? Math.min(pp.zc + (e.arch + e.frieze + e.cornice) * pp.D, bbox.max[2] - 0.01) : null;
       const z = [0];
-      for (const v of [pp.zs, pp.zc, pp.ped ? pp.zp : null, bbox.max[2]]) if (v !== null && v - z[z.length - 1] > 1e-3) z.push(v);
+      for (const v of [pp.zs, pp.zc, entTop, bbox.max[2]]) if (v !== null && v - z[z.length - 1] > 1e-3) z.push(v);
       out.chainLeft = z;
       out.chainBottom = [bbox.min[0], ...pp.axes, bbox.max[0]];
       out.axes = pp.axes.slice();
@@ -711,8 +713,14 @@ function elementDims(spec, gen, bbox, scale = 20) {
     } else if (el === 'roof' && gen && gen.dims) {
       const D = gen.dims(spec);
       out.roof = { swap: D.swap, B: D.B, B2: D.B2, lo: D.lo, up: D.up, type: D.type };
+      // levels above the wall head (z = 0): eave, curb (mansard, gambrel), ridge, then the top (ridge tiles or finial)
+      const z = [0];
+      for (const v of [D.zE, D.zB, D.zR, bbox.max[2]]) if (Number.isFinite(v) && v - z[z.length - 1] > 0.02) z.push(v);
+      out.chainLeft = z;
       out.key.push(['Pitch', D.type === 'mansard' || D.type === 'gambrel' ? `${round1(D.lo)}° / ${round1(D.up)}°` : `${round1(D.lo)}°`],
-        ['Footprint', `${fm(D.Lx)} × ${fm(D.W)} m`]);
+        ['Footprint (wall line)', `${fm(D.Lx)} × ${fm(D.W)} m`], ['Overhang', `${fm(D.o)} m`], ['Eave', `+${fm(D.zE)} m`]);
+      if (Number.isFinite(D.zB)) out.key.push(['Curb', `+${fm(D.zB)} m`]);
+      out.key.push([D.type === 'pyramid' ? 'Apex' : D.type === 'shed' ? 'Top of the slope' : 'Ridge', `+${fm(D.zR)} m`]);
     } else if (OPENINGS.has(el)) {
       out.opening = { type: el === 'window' || el === 'door' ? spec.archType || null : archTypeOf(spec), archGeom: gen && gen.archGeom };
     }
@@ -935,6 +943,7 @@ export function makeSheet({ meshes, spec, deform = null, gen = null, meta = {}, 
   const ground = STANDING.has(spec.element);
   let dims = deformed ? { key: [] } : elementDims(spec, gen, bbox);
   const lay = layout(bbox, { side, plan }, tiersFor(dims, plan, deformed), ground, !deformed && !!dims.capital);
+  if (!deformed) dims = elementDims(spec, gen, bbox, lay.scale);   // the figures at the sheet's precision (cm at 1:50 and up)
   const { f } = lay;
   const fm = (v) => fmtM(v, lay.scale);
   const groups = [], items = [], D = new Draw(items), R = {};
@@ -970,9 +979,8 @@ export function makeSheet({ meshes, spec, deform = null, gen = null, meta = {}, 
   if (plan) {
     if (cut !== null) {
       // overhead: the outline of what lies above the cut, dashed; then the plan below the cut; then the poché
-      R.topAll = draw('top', lay.E.top, lay.place.top, f, null, { id: 'overhead', only: [3], w: PEN.fine, dash: DASHED });
+      R.topAll = draw('top', lay.E.top, lay.place.top, f, { lo: cut }, { id: 'overhead', only: [3], w: PEN.fine, dash: DASHED });
       R.top = draw('top', lay.E.top, lay.place.top, f, { hi: cut });
-      R.top.out = R.topAll.out;
       poche(D, sectionLoops(meshes, cut), R.top, lay.scale);
     } else R.top = draw('top', lay.E.top, lay.place.top, f);
   }
@@ -1117,7 +1125,7 @@ function annotate(D, R, lay, dims, { spec, deformed, plan, ground, open, cut, fm
       if (w + 2 < xb - xa) D.text((xa + xb) / 2, y - 1, str, TXT, { anchor: 'middle', halo: true });
       else D.text(xb + 3, y + 0.9, str, TXT, { anchor: 'start', halo: true });
     }
-    if (open) openingDims(D, F, open, dims, fm);
+    if (open) openingDims(D, F, open, dims, fm, (x) => extDown(F, x));
   }
   // ---------- side: overall depth
   if (S) {
@@ -1137,10 +1145,10 @@ function annotate(D, R, lay, dims, { spec, deformed, plan, ground, open, cut, fm
 }
 
 /** Bottom chain (piers and openings), springing line, and the opening's heights on its axis. */
-function openingDims(D, F, o, dims, fm) {
+function openingDims(D, F, o, dims, fm, extDown) {
   const { E, X, Y } = F;
   const xs = [o.sec[0], ...o.voids.flat(), o.sec[o.sec.length - 1]];
-  chainH(D, xs.map(X), Y(E.b0) + T0, xs.slice(1).map((x, i) => fm(x - xs[i])), null);
+  chainH(D, xs.map(X), Y(E.b0) + T0, xs.slice(1).map((x, i) => fm(x - xs[i])), xs.map(extDown));
   dims.key.push([o.voids.length > 1 ? 'Clear span (each)' : 'Clear span', fm(o.span) + ' m']);
   if (o.crown === undefined || !Number.isFinite(o.crown)) return;
   const [xa, xb] = o.voids[o.voids.length - 1];
@@ -1419,8 +1427,9 @@ function titleStrip(D, { spec, meta, lay, size, dims, deform, fm }) {
   for (const l of il) { D.text(xi, yt, l, 2.2, { color: GRAY }); yt += 3; }
   yb -= hEl;
   D.line(x0, yb - hSc, x1, yb - hSc, PEN.rule);
-  scaleBar(D, xi, yb - hSc + 5.5, wi, lay.f, lay.scale);
-  if (dims.module) moduleBar(D, xi, yb - hSc + 16, wi, lay.f, dims.module, fm);
+  scaleBar(D, xi, yb - hSc + 5.5, wi - 20, lay.f, lay.scale);
+  if (dims.module) moduleBar(D, xi, yb - hSc + 16, wi - 20, lay.f, dims.module, fm);
+  firstAngle(D, x1 - pad - 15, yb - hSc + 7.5);
   yb -= hSc;
   // issue
   D.line(x0, yb - hIss, x1, yb - hIss, PEN.rule);
@@ -1448,19 +1457,34 @@ function styleOf(spec) {
   return [o, s].filter(Boolean).join(' · ') || '—';
 }
 
-/** Graphic scale: alternating blocks over a round length in metres that fits the width. */
+/** The ISO first-angle projection symbol: a truncated cone, its end view (the circles) beside its large end. */
+function firstAngle(D, x, y) {
+  const r1 = 1.2, r2 = 2.4, L = 6;
+  D.poly([x, y - r1, x + L, y - r2, x + L, y + r2, x, y + r1], PEN.rule, true);
+  D.circle(x + L + 4 + r2, y, r2, PEN.rule);
+  D.circle(x + L + 4 + r2, y, r1, PEN.rule);
+  D.line(x - 1, y, x + L + 5 + 2 * r2 + 1, y, PEN.hair, [2, 0.6, 0.4, 0.6]);
+  D.line(x + L + 4 + r2, y - r2 - 1, x + L + 4 + r2, y + r2 + 1, PEN.hair, [2, 0.6, 0.4, 0.6]);
+}
+
+/** Graphic scale: alternating blocks over a round length in metres (1, 2 or 5 × 10^k, in fifths, quarters or fifths)
+ *  that fits the width; the figures between the ends only where they have room. */
 function scaleBar(D, x, y, w, f, scale) {
-  const NICE = [0.05, 0.1, 0.2, 0.25, 0.5, 1, 2, 2.5, 5, 10, 20, 25, 50, 100, 200, 250, 500];
-  let L = NICE[0];
-  for (const v of NICE) if (v * f <= w - 8) L = v;
-  const n = [5, 4, 2].find((q) => Math.abs(((L / q) * 1000) - Math.round((L / q) * 1000)) < 1e-6) || 5, seg = (L / n) * f, h = 1.6;
+  const NICE = [];
+  for (let e = -2; e <= 3; e++) for (const m of [1, 2, 5]) NICE.push([m * 10 ** e, m === 2 ? 4 : 5]);
+  let L = NICE[0][0], n = 5;
+  for (const [v, k] of NICE) if (v * f <= w - 6) { L = v; n = k; }
+  const seg = (L / n) * f, h = 1.6;
   D.text(x, y - 1.6, `SCALE 1:${scale}`, 1.9, { weight: 600, ls: 0.25, color: GRAY });
   for (let i = 0; i < n; i++) {
     const xa = x + i * seg;
     D.rect(xa, y, seg, h, PEN.hair);
     if (i % 2 === 0) D.fill([xa, y, xa + seg, y, xa + seg, y + h, xa, y + h]);
   }
-  for (let i = 0; i <= n; i++) D.text(x + i * seg, y + h + 3, i === n ? `${fmtNum((L * i) / n)} m` : fmtNum((L * i) / n), 1.9, { anchor: 'middle' });
+  for (let i = 0; i <= n; i++) {
+    if (i > 0 && i < n && seg < 6.5) continue;
+    D.text(x + i * seg, y + h + 3, i === n ? `${fmtNum((L * i) / n)} m` : fmtNum((L * i) / n), 1.9, { anchor: 'middle' });
+  }
 }
 const fmtNum = (v) => (Math.abs(v - Math.round(v)) < 1e-9 ? String(Math.round(v)) : String(+v.toFixed(2)));
 

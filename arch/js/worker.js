@@ -21,6 +21,11 @@ import { partMesh, featureEdges, toGLB, toOBJParts, toSTL, RIGID_RATIO, isRigidP
 import { deformParts } from './deform.js';
 
 const MANIFOLD = 'https://cdn.jsdelivr.net/npm/manifold-3d@3.5.4/manifold.js';
+const MANIFOLD_WASM = 'https://cdn.jsdelivr.net/npm/manifold-3d@3.5.4/manifold.wasm';
+// the kernel's WebAssembly (540 KB) is requested the moment this worker starts, in parallel with Manifold's JS (which
+// would otherwise ask for it only once it has loaded); a document <link rel=preload> could not serve a worker's fetch
+const wasmResponse = fetch(MANIFOLD_WASM, { credentials: 'same-origin' });
+wasmResponse.catch(() => {});
 
 // WebAssembly memory never shrinks, and generators leave temporaries behind: the page recycles this worker (a fresh
 // Manifold instance) when the heap grows large or after a number of builds. The heap is found by watching the
@@ -43,7 +48,14 @@ const boot = { start: epoch() };
 const kernel = (async () => {
   const { default: Module } = await import(MANIFOLD);
   boot.imported = epoch();
-  const wasm = await Module();
+  // compile from the early response (streaming); Emscripten's own fetch is the fallback
+  const instantiateWasm = (imports, receive) => {
+    wasmResponse.then((res) => WebAssembly.instantiateStreaming(res, imports))
+      .catch(() => fetch(MANIFOLD_WASM).then((r) => r.arrayBuffer()).then((b) => WebAssembly.instantiate(b, imports)))
+      .then((r) => receive(r.instance, r.module), (e) => post({ type: 'fatal', message: 'the CAD kernel could not load: ' + msg(e) }));
+    return {};
+  };
+  const wasm = await Module({ instantiateWasm });
   boot.instantiated = epoch();
   wasm.setup();
   setKernel(wasm);
@@ -94,7 +106,9 @@ async function element(spec) {
   if (cache && cache.key === key) return cache;
   const t0 = performance.now();
   builds++;                     // every generation counts (a throwing one leaves its temporaries too), once
-  await family((spec && spec.element) || 'column');   // the generator module (timed apart from the build)
+  // the generator module, timed apart from the build; an unknown element is left to generate(), which normalises it
+  // (a column, with a warning)
+  await family((spec && spec.element) || 'column').catch(() => {});
   const tImport = performance.now() - t0;
   const r = await generate(spec || {});
   if (!r.parts || !r.parts.length || !r.tris) {

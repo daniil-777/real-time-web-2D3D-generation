@@ -14,8 +14,6 @@
 <meta property="og:description" content="Text to exact, detailed architectural elements — columns, cornices, balustrades, arches, roofs, domes — in your browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 14h12M3 12.5h10M4 12V5M7 12V5M9 12V5M12 12V5M2.5 4.5h11L8 1.5z' fill='none' stroke='black' stroke-width='1.3'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<!-- the CAD kernel's WebAssembly (540 KB) downloads while the page parses; the build worker finds it in the HTTP cache -->
-<link rel="preload" href="https://cdn.jsdelivr.net/npm/manifold-3d@3.5.4/manifold.wasm" as="fetch" crossorigin>
 <script>
   // Start the build worker before anything else loads (it fetches and compiles the kernel meanwhile), and have it import
   // the generator of the element the page builds first: the one the link names, else this visit's default (a copper
@@ -247,7 +245,7 @@
   @media (max-width: 600px) {
     #top span:not(.sp) { display: none; }
     #dims { top: 54px; }
-    #hint { display: none; }
+    #hint, #scTag { display: none; }   /* the stage's controls fill its foot on a phone */
   }
   @media (max-width: 420px) { #dims { font-size: 12px; padding: 5px 10px; } #extra .lbl { display: none; } }
   html.embed #stage { min-height: 300px; }

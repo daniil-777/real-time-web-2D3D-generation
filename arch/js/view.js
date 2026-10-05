@@ -1414,12 +1414,13 @@ export class Viewer {
     };
     el.addEventListener('pointerup', end, { capture: true });
     el.addEventListener('pointercancel', end, { capture: true });
-    this._endDrag = end;
   }
 
-  /** End a handle drag that lost its pointer (window blur): orbiting comes back, the callback's up() is not called. */
+  /** End a handle drag that lost its pointer (window blur): the capture is released, orbiting comes back, the
+   *  callback's up() is not called. */
   cancelDrag() {
     if (!this.drag) return;
+    try { this.canvas.releasePointerCapture(this.drag.id); } catch (err) { /* already released */ }
     this.drag = null;
     this.controls.enabled = true;
   }
