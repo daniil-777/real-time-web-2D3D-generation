@@ -8,6 +8,7 @@ import { initKernel } from './node-kernel.mjs';
 import { generate } from '../js/generate.js';
 import { SCHEMA } from '../js/spec.js';
 import { ORDER_KEYS } from '../js/orders.js';
+import { solids } from './solid.mjs';
 
 await initKernel();
 const quick = process.argv.includes('--quick');
@@ -65,6 +66,8 @@ add('arch absurd values', { element: 'arch', span: -4, height: 1e6, bays: 999 })
 const SINGLE = 500, ASSEMBLY = 1500, TRIS = 2e6;
 let fails = 0, worst = { ms: 0 }, maxTris = { tris: 0 };
 const rows = [];
+// the caller owns what build() returns: free each build (WASM memory is not collected by the JS heap's pace)
+const freeAll = (r) => { const seen = new Set(); for (const p of r.parts) if (!seen.has(p.manifold)) { seen.add(p.manifold); p.manifold.delete(); } };
 for (const c of cases) {
   try {
     const r = await generate(c.spec);
@@ -90,6 +93,7 @@ for (const c of cases) {
     if (r.ms > worst.ms) worst = { ms: r.ms, name: c.name };
     if (r.tris > maxTris.tris) maxTris = { tris: r.tris, name: c.name };
     rows.push(`ok   ${c.name.padEnd(44)} ${String(Math.round(r.ms)).padStart(5)} ms ${String(r.tris).padStart(8)} tris  x ${r.size[0].toFixed(3).padStart(8)} z ${r.size[2].toFixed(3).padStart(8)}  ${Object.entries(e.counts).map(([k, n]) => `${k}:${n}`).join(' ')}`);
+    freeAll(r);
   } catch (err) {
     fails++;
     rows.push(`FAIL ${c.name.padEnd(44)} ${err.message.split('\n')[0]}`);
@@ -103,7 +107,6 @@ const OWN = [
   { element: 'arcade', order: 'corinthian', supports: 'columns' },           // lightened columns
   { element: 'arch', archType: 'horseshoe' }, { element: 'arch', material: 'brick', archType: 'pointed' },
 ];
-const freeAll = (r) => { const seen = new Set(); for (const p of r.parts) if (!seen.has(p.manifold)) { seen.add(p.manifold); p.manifold.delete(); } };
 const ownRound = async (label) => {
   for (const spec of OWN) {
     const name = `ownership ${label}: ${JSON.stringify(spec)}`;
@@ -117,11 +120,36 @@ const ownRound = async (label) => {
     } catch (err) { fails++; rows.push(`FAIL ${name} ${err.message.split('\n')[0]}`); }
   }
 };
+// Printability: every arch and arcade unions into ONE solid (columns seated in their dosserets, ring stones tenoned
+// into the wall). Every archType x supports x bays (1, 3) x order (tuscan, corinthian), plus the other treatments.
+const PRINT = [];
+for (const archType of TYPES) for (const supports of SUPPORTS) for (const bays of [1, 3]) for (const order of ['tuscan', 'corinthian']) {
+  PRINT.push({ element: bays === 1 ? 'arch' : 'arcade', archType, supports, bays, order });
+}
+for (const style of ['moorish', 'romanesque', 'gothic', 'modern', 'egyptian']) PRINT.push({ element: 'arcade', style }, { element: 'arch', style, supports: 'columns' });
+for (const archType of TYPES) PRINT.push({ element: 'arch', archType, material: 'brick' }, { element: 'arch', archType, detail: 'low' });
+PRINT.push({ element: 'arcade', order: 'doric' }, { element: 'arcade', order: 'ionic' }, { element: 'arch', span: 0.3, supports: 'columns' },
+  { element: 'arch', span: 40, archType: 'tudor' }, { element: 'arch', keystone: false, archType: 'pointed' });
+for (const spec of PRINT) {
+  const name = `one solid: ${JSON.stringify(spec)}`;
+  // the union of a Corinthian loggia (every acanthus instance expanded) needs ~1 GB of WASM heap and solid.mjs leaves
+  // its temporaries to the GC: give every check a fresh kernel instance, as a recycled browser worker would have
+  await initKernel();
+  try {
+    const r = await generate(spec);
+    const t0 = performance.now(), s = solids(r.parts);
+    assert.equal(s.length, 1, `${s.length} solids: ${s.slice(1, 4).map((c) => `${c.volume.toFixed(4)} m3 at x ${((c.bbox.min[0] + c.bbox.max[0]) / 2).toFixed(2)}`).join(', ')}`);
+    rows.push(`ok   ${name.padEnd(100)} ${String(Math.round(performance.now() - t0)).padStart(6)} ms union`);
+    freeAll(r);
+  } catch (err) { fails++; rows.push(`FAIL ${name} ${err.message.split('\n')[0]}`); }
+}
+
 await ownRound('first build, then delete');
 await ownRound('rebuild after delete');
 await initKernel();
 await ownRound('fresh kernel');
 
 console.log(rows.join('\n'));
-console.log(`\n${cases.length + 3 * OWN.length - fails}/${cases.length + 3 * OWN.length} passed; slowest ${Math.round(worst.ms)} ms (${worst.name}); most triangles ${maxTris.tris} (${maxTris.name})`);
+const total = cases.length + 3 * OWN.length + PRINT.length;
+console.log(`\n${total - fails}/${total} passed; slowest ${Math.round(worst.ms)} ms (${worst.name}); most triangles ${maxTris.tris} (${maxTris.name})`);
 if (fails) process.exit(1);

@@ -221,13 +221,31 @@ function ringSection(L) {
   if (L.brick) {
     // one rowlock ring, flush with the wall; the collar joint to the next ring is a groove on both faces
     const w = L.ringW, c = (0.01 * w) / 0.225, jd = (0.012 * w) / 0.225;     // 10 mm collar joint, 12 mm deep
-    return [[0, -t], [w - c, -t], [w - c, -t + jd], [w, -t + jd], [w, t - jd], [w - c, t - jd], [w - c, t], [0, t]];
+    return withTenon(L, [[0, -t], [w - c, -t], [w - c, -t + jd], [w, -t + jd], [w, t - jd], [w - c, t - jd], [w - c, t], [0, t]], w);
   }
-  if (tr === 'gothic' || tr === 'romanesque') return closeSym([...jambLine(L, detail), [W, -t]]);
+  if (tr === 'gothic' || tr === 'romanesque') return withTenon(L, closeSym([...jambLine(L, detail), [W, -t]]), W);
   const face = archivoltFace(L);
   const front = face.map(([h, p]) => [h, -(t + p)]);
   const back = face.slice().reverse().map(([h, p]) => [h, t + p]);
-  return dedupe([...front, ...back]);
+  return withTenon(L, dedupe([...front, ...back]), W);
+}
+
+/**
+ * A tenon on the extrados side of a ring section: a tongue `eps` deep running inside the wall's thickness, well clear
+ * of both faces and of the joints, so every ring stone overlaps the spandrel wall (or the next brick ring) instead of
+ * merely touching it - the arch prints and unions as one solid. Invisible, and no size changes.
+ */
+function withTenon(L, sec, W) {
+  const e = L.eps, half = L.T / 2 - Math.max(3 * e, 0.06 * L.T);
+  for (let i = 0; i < sec.length; i++) {
+    const a = sec[i], b = sec[(i + 1) % sec.length];
+    if (Math.abs(a[0] - W) > 1e-9 || Math.abs(b[0] - W) > 1e-9) continue;
+    if (Math.min(a[1], b[1]) > -half || Math.max(a[1], b[1]) < half) continue;
+    const s = Math.sign(b[1] - a[1]);
+    const tongue = [[W, -s * half], [W + e, -s * half], [W + e, s * half], [W, s * half]];
+    return [...sec.slice(0, i + 1), ...tongue, ...sec.slice(i + 1)];
+  }
+  return sec;
 }
 
 /**
@@ -1000,7 +1018,8 @@ function columnParts(L) {
     return { ...p, meta: { ...p.meta, rigid: true }, name: `column-${p.name}`, manifold: p.manifold.translate([0, 0, 0]), transforms: instances(xf) };
   });
   // dosseret: a block of entablature (architrave fascia, frieze, small cornice) as in Brunelleschi's loggia
-  const D = L.D, a = L.P / 2, t = L.T / 2 + 0.03 * D, h = L.hDos, n = L.detail === 'high' ? 8 : 4;
+  // it reaches eps down into the capital and eps up into the wall and the voussoirs' feet: one solid
+  const D = L.D, a = L.P / 2, t = L.T / 2 + 0.03 * D, h = L.hDos + 2 * L.eps, n = L.detail === 'high' ? 8 : 4;
   const prof = L.tr === 'classical'
     ? new Prof(-0.02 * D).fillet(0.3).fillet(0.08, 0.02 * D).fillet(0.32, -0.02 * D).ovolo(0.06 * D, 0.14, n).fillet(0.16, 0.02 * D)
     : new Prof(0).fillet(0.5).slope(0.06 * D, 0.5);
@@ -1153,7 +1172,7 @@ const stepFor = (detail) => (detail === 'low' ? 7.5 : detail === 'medium' ? 4 : 
 /** Voussoirs, keystones (and their carving), springers, rosettes, tondi, dentils, modillions and triglyphs are single
  *  pieces: rigid; the wall, cornice, entablature, hood moulds, imposts, dosserets and pier bases are continuous: they
  *  bend. The columns (every part) are tagged where they are placed. */
-const RIGID = /^(voussoir|voussoir-haunch|voussoir-alt|keystone|key|key-leaf|key-scroll|springer|rose|tondo|dentil|modillion|triglyph)$/;
+const RIGID = /^(voussoir(-haunch|-alt)?(-ring\d+)?|keystone|crown|key|key-leaf|key-scroll(-foot)?|springer|rose|tondo|dentil|modillion|triglyph)$/;
 
 export function build(spec) {
   const parts = buildParts(spec);
@@ -1165,7 +1184,7 @@ function buildParts(spec) {
   L.step = stepFor(L.detail);
   L.section = ringSection(L);
   // the key (and a horseshoe's springers) span every brick ring as one dressed stone
-  L.keySection = L.brick ? [[0, -L.T / 2], [L.W, -L.T / 2], [L.W, L.T / 2], [0, L.T / 2]] : L.section;
+  L.keySection = L.brick ? withTenon(L, [[0, -L.T / 2], [L.W, -L.T / 2], [L.W, L.T / 2], [0, L.T / 2]], L.W) : L.section;
   const parts = [...voussoirParts(L), wallPart(L), ...pierMouldings(L)];
   parts.push(...(L.archOrder ? entablatureParts(L) : [cornicePart(L)]));
   if (L.hood) parts.push(...hoodParts(L));
