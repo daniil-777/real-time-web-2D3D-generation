@@ -18,8 +18,10 @@
 //             for a round tower), axis 'z' bows the height sideways. Outside `range` the element continues rigidly
 //             (Barr's bending region); with range = [0, 1] the centre line is an exact circular arc.
 //    twist    rotation about the axis by angle * P(u) (Barr 1984);
-//    taper    cross-section scale 1 + (scale - 1) * P(u) (Barr 1984); past the range end a similar figure;
-//    shear    offset d * P(u), a lean (Barr's "skew");
+//    taper    cross-section scale 1 + (scale - 1) * P(u) (Barr 1984); past the range end a similar figure; the height
+//             and the footprint never change (the range takes back what the similar figure loses, plus a solved lift
+//             when rigid ornament at the top shrinks);
+//    shear    offset d * P(u), a lean (Barr's "skew"); d in metres (dx dy dz) or relative to the extent (rx ry rz);
 //    ffd      trivariate Bernstein free-form deformation over the padded bbox (T. W. Sederberg, S. R. Parry,
 //             "Free-Form Deformation of Solid Geometric Models", SIGGRAPH 1986). Control-point offsets come either
 //             explicitly or from pins (dragged handles) solved by arapLattice(): As-Rigid-As-Possible deformation of
@@ -29,7 +31,8 @@
 //    `ease` at interior range ends), so every op is C1 along its axis.
 //
 // 3. deformParts(parts, ops, opts) applies f to an element (Part[] from generate()):
-//    - small repeated parts (>= 2 instances, mesh bbox diagonal < 20 % of the element's) are not deformed: each
+//    - parts tagged meta.rigid by their generator, and untagged small repeated parts (>= 2 instances, mesh bbox
+//      diagonal < rigidRatio = 20 % of the element's) are not deformed: each
 //      instance M is replaced by T(f(c)) * s R_J * T(-c) * M, with c the centre of the instance's mesh, R_J the
 //      rotation of the polar decomposition J = R_J S of the Jacobian at c (balusters stay upright and true on a curved
 //      balustrade, dentils follow a curved cornice undistorted) and s = 1 (scaleInstances false), det(J)^(1/3)
@@ -56,7 +59,7 @@
 // deformParts re-grounds the result (min z restored) unless ground: false.
 
 import { K, mat, instances, instanceCount, partsBBox } from './kernel.js';
-import { SCHEMA, DEFAULTS } from './spec.js';
+import { SCHEMA, DEFAULTS, normalize } from './spec.js';
 
 const DEG = Math.PI / 180;
 const AXES = { x: 0, y: 1, z: 2 };
@@ -69,8 +72,11 @@ export const OP_SCHEMA = {
   stretch: { axis: ['x', 'y', 'z'], factor: { min: 0.1, max: 10, default: 1 }, keep: { default: [0.12, 0.88], auto: true }, ease: { min: 0, max: 0.2, default: 0.04 } },
   bend: { axis: ['x', 'y', 'z'], angle: { min: -720, max: 720, default: 0, unit: '°' }, dir: { default: 0, unit: '°' }, range: { default: [0, 1], auto: true }, ease: { default: 0.04 } },
   twist: { axis: ['x', 'y', 'z'], angle: { min: -1440, max: 1440, default: 0, unit: '°' }, range: { default: [0, 1], auto: true }, ease: { default: 0.04 } },
-  taper: { axis: ['x', 'y', 'z'], scale: { min: 0.02, max: 50, default: 1 }, range: { default: [0, 1], auto: true }, ease: { default: 0.04 } },
-  shear: { axis: ['x', 'y', 'z'], dx: { unit: 'm', default: 0 }, dy: { unit: 'm', default: 0 }, dz: { unit: 'm', default: 0 }, range: { default: [0, 1], auto: true }, ease: { default: 0.04 } },
+  taper: { axis: ['x', 'y', 'z'], scale: { min: 0.02, max: 50, default: 1 }, range: { default: [0, 1], auto: true }, ease: { default: 0.04 },
+    lift: { unit: 'm', default: 0, auto: true } },
+  shear: { axis: ['x', 'y', 'z'], dx: { unit: 'm', default: 0 }, dy: { unit: 'm', default: 0 }, dz: { unit: 'm', default: 0 },
+    rx: { unit: 'of the extent', default: 0 }, ry: { unit: 'of the extent', default: 0 }, rz: { unit: 'of the extent', default: 0 },
+    range: { default: [0, 1], auto: true }, ease: { default: 0.04 } },
   ffd: { dims: { min: 1, max: 12, default: [3, 3, 3] }, pad: { default: 0.04 }, iters: { default: 10 }, reach: { default: 3.5 }, grip: { default: 2.2 }, follow: { default: 3 } },
 };
 
@@ -215,7 +221,7 @@ function compileStretch(op, F) {
   const map = (v) => { v[ai] += L * k * win.W((v[ai] - min) / L) + shift; };
   const frameOut = { min: F.min.slice(), max: F.max.slice() };
   frameOut.min[ai] += shift; frameOut.max[ai] += grow + shift;
-  return { type: 'stretch', map, frameOut, refine: false };
+  return { type: 'stretch', axis: ai, map, frameOut, refine: false };
 }
 
 /** Unit vectors (t along the axis, n toward the centre of curvature, b = t x n) for a bend. dir (rad) turns n about t:
@@ -293,7 +299,7 @@ function compileBend(op, F) {
   const at = Math.abs(th), R = ((b - a) * L) / at;
   const depth = [0, 1, 2].reduce((acc, k) => acc + Math.abs(nv[k]) * (F.max[k] - F.min[k]), 0);
   const overlap = at >= (330 * Math.PI) / 180 || (at > Math.PI && 2 * R * Math.sin((2 * Math.PI - at) / 2) < depth);
-  return { type: 'bend', map, refine: true, angle: th, overlap };
+  return { type: 'bend', axis: ai, map, refine: true, angle: th, overlap };
 }
 
 function compileTwist(op, F) {
@@ -310,7 +316,7 @@ function compileTwist(op, F) {
     const dp = v[p] - cp, dq = v[q] - cq;
     v[p] = cp + cs * dp - sn * dq; v[q] = cq + sn * dp + cs * dq;
   };
-  return { type: 'twist', map, refine: true };
+  return { type: 'twist', axis: ai, map, refine: true };
 }
 
 function compileTaper(op, F) {
@@ -325,14 +331,20 @@ function compileTaper(op, F) {
   // Past the range end the element continues as a similar figure: the cross-section keeps the end scale and the axis
   // takes the mean scale sa = sqrt(sp sq), blended in over the end ramp (rate 1 -> sa, C1). A capital above a tapered
   // shaft is then the same capital at the shaft's new top diameter, not a narrowed one of full height.
+  // A taper keeps the element's height and footprint: the range gains back exactly the length the similar figure past
+  // it loses, (1 - sa) L E(1), plus `lift` (metres; resolveOps solves it when rigid ornament at the top would shrink
+  // below the old top), both spread over the range by P(u). The foot (scale 1, axis unchanged) never moves.
   const sa = Math.sqrt(sp * sq), db = win.db, b0 = b - db;
   const Q = (t) => t * t * t * (1 - 0.5 * t);
   const E = b < 1 - 1e-9 ? (u) => (u <= b0 ? 0 : u < b ? (db > 0 ? db * Q((u - b0) / db) : 0) : db / 2 + (u - b)) : () => 0;
+  const lift = num(op.lift, 0);
+  // the range may give up at most 90 % of its length to a negative lift (flaring tapers with growing ornament)
+  const add = Math.max((1 - sa) * L * E(1) + lift, -0.9 * win.total * L);
   const map = (v) => {
     const u = (v[ai] - min) / L, w = win.P(u);
     v[p] = cp + (1 + (sp - 1) * w) * (v[p] - cp);
     v[q] = cq + (1 + (sq - 1) * w) * (v[q] - cq);
-    v[ai] += (sa - 1) * L * E(u);
+    v[ai] += (sa - 1) * L * E(u) + add * w;
   };
   // exact frame: the scale is monotone in w, so the extremes are at the range ends; the axis map is monotone
   const frameOut = { min: F.min.slice(), max: F.max.slice() };
@@ -340,13 +352,14 @@ function compileTaper(op, F) {
     const ck = c[k], h = (F.max[k] - F.min[k]) / 2, m = Math.max(1, sk);
     frameOut.min[k] = ck - h * m; frameOut.max[k] = ck + h * m;
   }
-  frameOut.max[ai] += (sa - 1) * L * E(1);
-  return { type: 'taper', map, frameOut, refine: true };
+  frameOut.max[ai] += (sa - 1) * L * E(1) + add;
+  return { type: 'taper', axis: ai, map, frameOut, refine: true };
 }
 
 function compileShear(op, F) {
   const ai = axisOf(op, 'z'), L = F.max[ai] - F.min[ai];
-  const d = [num(op.dx, 0), num(op.dy, 0), num(op.dz, 0)];
+  // offsets in metres (dx, dy, dz) and / or relative to the extent along the axis (rx, ry, rz: 0.1 = a 10 % lean)
+  const d = [num(op.dx, 0) + num(op.rx, 0) * L, num(op.dy, 0) + num(op.ry, 0) * L, num(op.dz, 0) + num(op.rz, 0) * L];
   d[ai] = 0;
   if (!(L > 1e-9) || Math.hypot(...d) < 1e-12) return null;
   const [a, b] = range01(op.range, [0, 1]);
@@ -361,7 +374,7 @@ function compileShear(op, F) {
   const w0 = -PA, w1 = 1 - PA;
   for (let k = 0; k < 3; k++) { frameOut.min[k] += Math.min(d[k] * w0, d[k] * w1); frameOut.max[k] += Math.max(d[k] * w0, d[k] * w1); }
   // a shear is affine (no ease) or piecewise affine along its axis: straight edges along the axis stay straight
-  return { type: 'shear', map, frameOut, refine: !(a === 0 && b === 1) };
+  return { type: 'shear', axis: ai, map, frameOut, refine: !(a === 0 && b === 1) };
 }
 
 function checkDims(dims) {
@@ -449,8 +462,9 @@ function imageBox(map, F, n = 16) {
  * measured on the bbox of the shape at its input (frames[i]; exact for stretch / taper / shear, sampled otherwise), so
  * "stretch, then twist" twists the stretched height. Ops that do nothing (factor 1, angle 0, zero offsets) are dropped.
  *
- * Returns { identity, ops, frames, bbox, bboxOut, point(p), apply(v), warpBatch(verts, count), jacobian(p),
- *           curvature(), needsRefine, overlap }.
+ * Returns { identity, ops, compiled, frames, bbox, bboxOut, point(p), apply(v), warpBatch(verts, count), jacobian(p),
+ *           curvature(), needsRefine, overlap }. compiled[i]: { type, axis (0 1 2; not ffd), frame (input bbox), map,
+ *           lattice + offsets (ffd) } for the ops that do something.
  *   point([x, y, z]) -> [x', y', z'];  apply(v) moves a 3-vector in place;  warpBatch is Manifold.warpBatch's callback;
  *   jacobian(p) -> row-major 3x3 J[3 i + j] = d f_i / d x_j by central differences (h = 1e-5 of the diagonal);
  *   curvature() -> the largest directional second derivative |f(p + h d) - 2 f(p) + f(p - h d)| / h^2 on a grid
@@ -468,6 +482,7 @@ export function makeDeformer(ops, bbox) {
     const c = COMPILE[type](op, F);
     frames.push(c ? { min: F.min.slice(), max: F.max.slice() } : null);
     if (!c) continue;
+    c.frame = { min: F.min.slice(), max: F.max.slice() }; // the op's input bbox (c.axis: its axis index, 0 1 2)
     compiled.push(c);
     F = c.frameOut || imageBox(c.map, F);
   }
@@ -709,42 +724,131 @@ export function arapLattice(dims, pinned, iters = OP_SCHEMA.ffd.iters.default, o
 // ================================================================================================ 'auto' ranges
 
 /**
- * Resolve range: 'auto' (bend, twist, taper, shear) and keep: 'auto' (stretch) — the defaults — against the element:
- * when the element has a part named 'shaft' (column, pilaster, obelisk) that is long along the op's axis (at least
- * twice its other extents), the op acts on the shaft only: a twisted or tapered column keeps a square plinth and an
- * undistorted capital, a stretched column keeps its base, capital and pedestal exactly, a tapered obelisk keeps its
- * pedestal. Otherwise 'auto' means range [0, 1] / keep [0.12, 0.88]. The shaft's ends are carried through the ops
- * before this one, so "stretch, then twist" still finds the shaft. Explicit arrays pass through unchanged.
- * Returns a new op list (what deformParts uses; the UI can show the resolved zones).
+ * Resolve the defaults of ops against the element (what deformParts runs; a UI previewing the map builds its deformer
+ * from the same list, so preview and bake agree):
+ * - range: 'auto' (bend, twist, taper, shear) and keep: 'auto' (stretch): when the element has a part named 'shaft'
+ *   (column, pilaster, obelisk) that is long along the op's axis (at least twice its other extents), the op acts on
+ *   the shaft only: a twisted or tapered column keeps a square plinth and an undistorted capital, a stretched column
+ *   keeps its base, capital and pedestal exactly, a tapered obelisk keeps its pedestal. Otherwise range [0, 1] / keep
+ *   [0.12, 0.88]. The shaft's ends are carried through the ops before this one. Explicit arrays pass through.
+ * - taper lift (left out): a taper keeps the element's height. Continuous geometry keeps it by construction (see
+ *   compileTaper); rigid ornament that shrinks with the cross-section (a finial's crown, urns on a balustrade) would
+ *   still lower the top, so `lift` is solved here — the length added over the range that puts the top back exactly
+ *   where it was (secant on the measured top: continuous parts' tops through the map, rigid instances' bbox corners
+ *   through their rigid placement). opts: the same rigidInstances / rigidRatio / scaleInstances as deformParts.
  */
-export function resolveOps(ops, parts, bbox = solidBBox(parts)) {
+export function resolveOps(ops, parts, bbox = solidBBox(parts), opts = {}) {
+  const o = { ...DEFAULT_OPTS, ...opts };
   const list = Array.isArray(ops) ? ops : ops ? [ops] : [];
   const shafts = (parts || []).filter((p) => p.name === 'shaft' && p.manifold.numTri() > 0);
   const sb = shafts.length ? partsBBox(shafts) : null;
   const out = [];
   for (const op of list) {
     const type = op && (op.type || op.op), key = type === 'stretch' ? 'keep' : 'range';
-    if (!op || !COMPILE[type] || type === 'ffd' || Array.isArray(op[key])) { out.push(op); continue; }
-    const ai = AXES[op.axis ?? (type === 'bend' ? 'x' : 'z')];
-    let r = type === 'stretch' ? OP_SCHEMA.stretch.keep.default : [0, 1];
-    if (sb && ai !== undefined) {
-      const ext = [0, 1, 2].map((k) => sb.max[k] - sb.min[k]);
-      if (ext[ai] >= 2 * Math.max(...ext.filter((_, k) => k !== ai))) {
-        const prev = makeDeformer(out, bbox), F = prev.bboxOut, c = [0, 1, 2].map((k) => (sb.min[k] + sb.max[k]) / 2);
-        const e0 = c.slice(), e1 = c.slice();
-        e0[ai] = sb.min[ai]; e1[ai] = sb.max[ai];
-        const L = F.max[ai] - F.min[ai];
-        const u0 = (prev.point(e0)[ai] - F.min[ai]) / L, u1 = (prev.point(e1)[ai] - F.min[ai]) / L;
-        const a = clamp(Math.min(u0, u1), 0, 1), b = clamp(Math.max(u0, u1), 0, 1);
-        if (b - a > 0.05) r = [a, b];
+    if (!op || !COMPILE[type] || type === 'ffd') { out.push(op); continue; }
+    let res = op;
+    if (!Array.isArray(op[key])) {
+      const ai = AXES[op.axis ?? (type === 'bend' ? 'x' : 'z')];
+      let r = type === 'stretch' ? OP_SCHEMA.stretch.keep.default : [0, 1];
+      if (sb && ai !== undefined) {
+        const ext = [0, 1, 2].map((k) => sb.max[k] - sb.min[k]);
+        if (ext[ai] >= 2 * Math.max(...ext.filter((_, k) => k !== ai))) {
+          const prev = makeDeformer(out, bbox), F = prev.bboxOut, c = [0, 1, 2].map((k) => (sb.min[k] + sb.max[k]) / 2);
+          const e0 = c.slice(), e1 = c.slice();
+          e0[ai] = sb.min[ai]; e1[ai] = sb.max[ai];
+          const L = F.max[ai] - F.min[ai];
+          const u0 = (prev.point(e0)[ai] - F.min[ai]) / L, u1 = (prev.point(e1)[ai] - F.min[ai]) / L;
+          const a = clamp(Math.min(u0, u1), 0, 1), b = clamp(Math.max(u0, u1), 0, 1);
+          if (b - a > 0.05) r = [a, b];
+        }
       }
+      res = { ...op, [key]: r };
     }
-    out.push({ ...op, [key]: r });
+    if (type === 'taper' && op.lift === undefined) res = { ...res, lift: taperLift(out, res, parts || [], bbox, o) };
+    out.push(res);
   }
   return out;
 }
 
-// ================================================================================================ deforming parts
+/** The lift that keeps a taper's top where the shape's top was before it (see resolveOps). 0 when nothing rigid. */
+function taperLift(prefix, op, parts, bbox, o) {
+  const ai = AXES[op.axis ?? 'z'];
+  if (ai === undefined || o.scaleInstances === false) return 0;
+  const diag = Math.hypot(...[0, 1, 2].map((k) => bbox.max[k] - bbox.min[k]));
+  const rigid = parts.filter((p) => isRigid(p, diag, o));
+  if (!rigid.length) return 0;
+  const cont = parts.filter((p) => !rigid.includes(p) && p.manifold.numTri() > 0);
+  // what can be the top: continuous parts' top faces, rigid instances' bbox corners (with their centre)
+  const contPts = []; // a 3^3 grid on each continuous part's bbox (a taper's axis map ignores the cross coordinates)
+  for (const p of cont) {
+    const b = partsBBox([p]), g = (k, i) => b.min[k] + ((b.max[k] - b.min[k]) * i) / 2;
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) contPts.push([g(0, i), g(1, j), g(2, k)]);
+  }
+  const inst = [];
+  for (const p of rigid) {
+    const bb = p.manifold.boundingBox(), cl = [0, 1, 2].map((k) => (bb.min[k] + bb.max[k]) / 2), n = instanceCount(p);
+    for (let i = 0; i < n; i++) {
+      const M = p.transforms ? p.transforms.subarray(16 * i, 16 * i + 16) : mat.I();
+      const corners = [];
+      for (let k = 0; k < 8; k++) corners.push(mat.apply(M, [(k & 1 ? bb.max : bb.min)[0], (k & 2 ? bb.max : bb.min)[1], (k & 4 ? bb.max : bb.min)[2]]));
+      inst.push({ c: mat.apply(M, cl), corners });
+    }
+  }
+  const J = new Float64Array(9);
+  const topOf = (D, which) => {
+    let top = -Infinity;
+    for (const q of contPts) top = Math.max(top, D.point(q)[ai]);
+    for (const it of which) {
+      const fc = D.point(it.c);
+      D.jacobian(it.c, J);
+      const { R, s } = polar3(J), k = instanceScale(s, o.scaleInstances);
+      for (const w of it.corners) {
+        const d = [w[0] - it.c[0], w[1] - it.c[1], w[2] - it.c[2]];
+        top = Math.max(top, fc[ai] + k * (R[3 * ai] * d[0] + R[3 * ai + 1] * d[1] + R[3 * ai + 2] * d[2]));
+      }
+    }
+    return top;
+  };
+  const target = topOf(makeDeformer(prefix, bbox), inst);
+  const at = (lift) => topOf(makeDeformer([...prefix, { ...op, lift }], bbox), inst);
+  let l0 = 0, t0 = at(0);
+  const L = Math.max(1e-9, Math.hypot(...[0, 1, 2].map((k) => bbox.max[k] - bbox.min[k])));
+  if (Math.abs(t0 - target) < 1e-7 * L) return 0;
+  let l1 = target - t0, t1 = at(l1);
+  for (let it = 0; it < 12 && Math.abs(t1 - target) > 1e-7 * L; it++) { // secant (the top moves ~1:1 with the lift)
+    const slope = Math.abs(t1 - t0) > 1e-15 ? (t1 - t0) / (l1 - l0) : 1;
+    const l2 = l1 + (target - t1) / (slope > 1e-3 ? slope : 1);
+    l0 = l1; t0 = t1; l1 = l2; t1 = at(l1);
+  }
+  return l1;
+}
+
+const DEFAULT_OPTS = { rigidInstances: true, scaleInstances: 'auto', refine: true, maxTris: 1.5e6, rigidRatio: 0.2, ground: true };
+
+/**
+ * Does a part move rigidly? meta.rigid === true: always (its instances, or the part as one piece); meta.rigid ===
+ * false: never (it is warped). Untagged: when it has >= 2 instances and its mesh bbox diagonal (times the instance
+ * scale) is below rigidRatio of the element's diagonal. rigidInstances: false warps everything. Empty parts: never.
+ */
+function isRigid(p, diag, o) {
+  if (!o.rigidInstances || !(p.manifold.numTri() > 0)) return false;
+  const tag = p.meta && p.meta.rigid;
+  if (tag === true) return true;
+  if (tag === false) return false;
+  const n = instanceCount(p);
+  if (!p.transforms || n < 2) return false;
+  const bb = p.manifold.boundingBox(), M = p.transforms;
+  const sc = Math.max(Math.hypot(M[0], M[1], M[2]), Math.hypot(M[4], M[5], M[6]), Math.hypot(M[8], M[9], M[10]));
+  return Math.hypot(bb.max[0] - bb.min[0], bb.max[1] - bb.min[1], bb.max[2] - bb.min[2]) * sc < o.rigidRatio * diag;
+}
+
+/** Uniform scale of a rigid instance from the signed singular values of J (see the header). */
+function instanceScale(s, mode) {
+  let k = 1;
+  if (mode === 'auto') k = Math.abs(s[1]);
+  else if (mode === true || mode === 'volume') k = Math.cbrt(Math.abs(s[0] * s[1] * s[2]));
+  return !(k > 0) || !Number.isFinite(k) || Math.abs(k - 1) < 1e-6 ? 1 : k; // exactly rigid unless J really scales
+}
 
 /** partsBBox over the parts that have geometry (an empty Manifold's box is +-Infinity and would swallow the rest). */
 const solidBBox = (parts) => partsBBox(parts.filter((p) => p.manifold.numTri() > 0));
@@ -777,12 +881,17 @@ const mat3det = (M) => det3(mat3of(M));
 /**
  * Apply ops to an element's parts.
  *
- * Which parts stay rigid: a part is "small and repeated" — moved rigidly, never bent — when it has >= 2 instances
- * (transforms) and its mesh bbox diagonal (times the instance scale) is below rigidRatio (20 %) of the element's bbox
- * diagonal: balusters, dentils, eggs, leaves and volutes on a whole column, roof tiles, voussoirs, urns. Everything else
- * (single parts, parts placed once, large repeated parts such as the leaves of a capital shown on its own, or a
- * balustrade's pedestals once they pass 20 % of a short run) is warped; each instance of a warped part becomes its own
- * piece (same name, meta.instance = i). A part with no triangles passes through unchanged.
+ * Which parts stay rigid (moved rigidly, never bent):
+ * - a part tagged by its generator: meta.rigid === true always moves rigidly (each instance, or the part as one piece
+ *   when it has no transforms); meta.rigid === false is always warped. Tagging ornament is the robust way;
+ * - an untagged part: when it has >= 2 instances (transforms) and its mesh bbox diagonal (times the instance scale) is
+ *   below rigidRatio (default 0.2) of the element's bbox diagonal: balusters, dentils, eggs, leaves and volutes on a
+ *   whole column, roof tiles, voussoirs, urns. The outcome of this size rule depends on the element's size: the
+ *   balusters of a 3 m balustrade measure 22 % of its diagonal (warped at 0.2; the app passes 0.25), the leaves of a
+ *   capital shown on its own 26-37 % (warped, as a sculpt of the capital should be);
+ * - everything else (single parts, parts placed once, large repeated parts) is warped; each instance of a warped part
+ *   becomes its own piece (same name, meta.instance = i). rigidInstances: false warps everything. A part with no
+ *   triangles passes through unchanged.
  *
  * opts:
  *   rigidInstances (true)  small repeated parts move rigidly (see the header); false bakes and warps everything
@@ -794,7 +903,8 @@ const mat3det = (M) => det3(mat3of(M));
  *   ground (true)          translate the result so its lowest point is where the element's was
  *   bbox                   the element's bbox (default partsBBox(parts)) — pass the original one when re-deforming
  *   warpViaMesh (false)    force the mesh path of warpManifold (tests; it is taken automatically past a 2 GB heap)
- * Ops are first passed through resolveOps (range / keep 'auto' -> the shaft, when there is one).
+ * Ops are first passed through resolveOps(ops, parts, bbox, opts) — range / keep 'auto' -> the shaft when there is one,
+ * taper lift solved so the height is kept. A preview built on makeDeformer must use that same resolved list (same opts).
  *
  * Returns { parts, warnings, stats, deformer, ops (resolved) }.
  *   parts     rigid parts: same manifold object as the input, new transforms (meta.deform 'rigid'); warped pieces: new
@@ -811,9 +921,9 @@ const mat3det = (M) => det3(mat3of(M));
  */
 export function deformParts(parts, ops, opts = {}) {
   const t0 = now();
-  const o = { rigidInstances: true, scaleInstances: 'auto', refine: true, maxTris: 1.5e6, rigidRatio: 0.2, ground: true, ...opts };
+  const o = { ...DEFAULT_OPTS, ...opts };
   const bbox = o.bbox || solidBBox(parts);
-  const resolved = resolveOps(ops, parts, bbox);
+  const resolved = resolveOps(ops, parts, bbox, o);
   const D = makeDeformer(resolved, bbox);
   const ext = [0, 1, 2].map((k) => bbox.max[k] - bbox.min[k]), L = Math.max(...ext), diag = Math.hypot(...ext);
   const stats = { ms: 0, tris: 0, rigid: [], warped: [], edge: 0, refineCapped: false, folds: 0, samples: 0, curvature: 0, ground: 0, timing: {} };
@@ -827,13 +937,8 @@ export function deformParts(parts, ops, opts = {}) {
   const warnings = new Set();
   if (D.overlap) warnings.add('overlap');
   const plan = parts.map((p) => {
-    const n = instanceCount(p), bb = p.manifold.boundingBox();
-    const M = p.transforms ? p.transforms.subarray(0, 16) : null;
-    const sc = M ? Math.max(Math.hypot(M[0], M[1], M[2]), Math.hypot(M[4], M[5], M[6]), Math.hypot(M[8], M[9], M[10])) : 1;
-    const size = Math.hypot(bb.max[0] - bb.min[0], bb.max[1] - bb.min[1], bb.max[2] - bb.min[2]) * sc;
     const empty = !(p.manifold.numTri() > 0);
-    const rigid = !empty && !!(o.rigidInstances && p.transforms && n >= 2 && size < o.rigidRatio * diag);
-    return { p, n, bb, rigid, empty };
+    return { p, n: instanceCount(p), bb: p.manifold.boundingBox(), rigid: isRigid(p, diag, o), empty };
   });
 
   // fold samples: instance centres (rigid parts) and a stride of the warped vertices
@@ -855,15 +960,11 @@ export function deformParts(parts, ops, opts = {}) {
     const cl = [0, 1, 2].map((k) => (bb.min[k] + bb.max[k]) / 2);
     const T = new Float64Array(16 * n), J = new Float64Array(9);
     for (let i = 0; i < n; i++) {
-      const M = p.transforms.subarray(16 * i, 16 * i + 16);
+      const M = p.transforms ? p.transforms.subarray(16 * i, 16 * i + 16) : mat.I(); // a tagged part without instances
       const c = mat.apply(M, cl), fc = D.point(c);
       D.jacobian(c, J);
       foldAt(c, J);
-      const { R, s } = polar3(J);
-      let k = 1;
-      if (o.scaleInstances === 'auto') k = Math.abs(s[1]);
-      else if (o.scaleInstances === true || o.scaleInstances === 'volume') k = Math.cbrt(Math.abs(s[0] * s[1] * s[2]));
-      if (!(k > 0) || !Number.isFinite(k) || Math.abs(k - 1) < 1e-6) k = 1;   // exactly rigid unless J really scales
+      const { R, s } = polar3(J), k = instanceScale(s, o.scaleInstances);
       // M' = T(f(c)) * kR * T(-c) * M : linear part kR * M3, translation f(c) + kR (t_M - c)
       const A = R.map((x) => x * k), Ml = mat3of(M);
       const Q = T.subarray(16 * i, 16 * i + 16);
@@ -1062,8 +1163,11 @@ export function smartStretch(spec, axis, factor, size = null) {
   const el = spec.element || 'column', field = SMART[el] && SMART[el][axis];
   if (!field) return null;
   const out = { ...spec };
+  // current values from the normalised spec (DEFAULTS filled: a dome's diameter is its diameter, not the drum cornice's
+  // width in the bbox); the bbox extent only for what the generator derives itself (a column's height incl. pedestal)
+  const ns = normalize(spec).spec;
   const cur = (f) => {
-    if (out[f] !== undefined && out[f] !== null && Number.isFinite(+out[f])) return +out[f];
+    if (ns[f] !== undefined && ns[f] !== null && Number.isFinite(+ns[f])) return +ns[f];
     return size && Number.isFinite(size[AXES[axis]]) ? size[AXES[axis]] : null;
   };
   const put = (f, v) => {
@@ -1073,7 +1177,7 @@ export function smartStretch(spec, axis, factor, size = null) {
     out[f] = x;
   };
   if (field === 'columns') {
-    const c = num(out.columns, (DEFAULTS[el] && DEFAULTS[el].columns) || 4);
+    const c = num(ns.columns, (DEFAULTS[el] && DEFAULTS[el].columns) || 4);
     const want = 1 + (c - 1) * factor;
     // nearest even count; a tie goes away from the current count so the stretch is felt
     let e = 2 * Math.round(want / 2);
@@ -1084,18 +1188,18 @@ export function smartStretch(spec, axis, factor, size = null) {
   if (el === 'portico' && field === 'height') {
     // a portico's `height` is its columns' height (the order sets everything from D; the steps keep human scale), not
     // the overall height, so the bbox cannot stand in for it: scale what the spec gives, else leave it to a free stretch
-    if (Number.isFinite(+out.height) && out.height > 0) put('height', out.height * factor);
-    else if (Number.isFinite(+out.diameter) && out.diameter > 0) put('diameter', out.diameter * factor);
+    if (Number.isFinite(+ns.height) && ns.height > 0) put('height', ns.height * factor);
+    else if (Number.isFinite(+ns.diameter) && ns.diameter > 0) put('diameter', ns.diameter * factor);
     else return null;
     return out;
   }
-  if (el === 'balustrade' && field === 'length' && out.balusters) {
-    put('balusters', Math.max(1, Math.round(out.balusters * factor)));
+  if (el === 'balustrade' && field === 'length' && ns.balusters) {
+    put('balusters', Math.max(1, Math.round(ns.balusters * factor)));
     return out;
   }
   const v = cur(field);
   if (v === null) return null;
   put(field, v * factor);
-  if (el === 'arcade' && field === 'length') put('bays', Math.max(1, Math.round(num(out.bays, DEFAULTS.arcade.bays) * factor)));
+  if (el === 'arcade' && field === 'length') put('bays', Math.max(1, Math.round(num(ns.bays, DEFAULTS.arcade.bays) * factor)));
   return out;
 }

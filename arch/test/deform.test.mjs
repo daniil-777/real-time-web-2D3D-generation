@@ -207,7 +207,67 @@ await t('taper past the range end: a similar figure (Corinthian capital scaled u
   rel(ext(b, 0), 0.6 * ext(a, 0), 0.002, 'abacus width'); rel(ext(b, 2), 0.6 * ext(a, 2), 0.002, 'abacus height');
   const leaf = named(r.parts, 'leaf-upper')[0].transforms; // rigid, scaled by the median singular value
   near(Math.hypot(leaf[0], leaf[1], leaf[2]), 0.6, 0.01, 'leaf scale');
-  return 'abacus x0.6 in width and height, leaves x0.6';
+  rel(ext(partsBBox(r.parts), 2), ext(g.bbox, 2), 1e-6, 'column height kept');
+  return 'abacus x0.6 in width and height, leaves x0.6, column height kept';
+});
+// footprint: x/y extents of every vertex within 1 mm of the element's lowest point (instances included)
+const footprint = (parts) => {
+  const z0 = partsBBox(parts.filter((p) => p.manifold.numTri() > 0)).min[2], ext = [Infinity, -Infinity, Infinity, -Infinity];
+  for (const p of parts) {
+    const g = p.manifold.getMesh(), V = g.vertProperties, np = g.numProp, n = p.transforms ? p.transforms.length / 16 : 1;
+    for (let i = 0; i < n; i++) {
+      const M = p.transforms ? p.transforms.subarray(16 * i, 16 * i + 16) : null;
+      for (let v = 0; v < V.length; v += np) {
+        const q = M ? mat.apply(M, [V[v], V[v + 1], V[v + 2]]) : [V[v], V[v + 1], V[v + 2]];
+        if (q[2] > z0 + 1e-3) continue;
+        ext[0] = Math.min(ext[0], q[0]); ext[1] = Math.max(ext[1], q[0]); ext[2] = Math.min(ext[2], q[1]); ext[3] = Math.max(ext[3], q[1]);
+      }
+    }
+  }
+  return ext;
+};
+await t('taper keeps height and footprint (obelisk, columns, pilaster, spire, finial)', async () => {
+  const notes = [];
+  for (const [spec, base] of [[{ element: 'obelisk' }, 'steps'], [{ element: 'column', order: 'corinthian' }, 'base'],
+    [{ element: 'column', order: 'tuscan', pedestal: true }, 'pedestal'], [{ element: 'pilaster', order: 'ionic' }, 'base'],
+    [{ element: 'spire' }, null], [{ element: 'finial' }, null]]) {
+    const g = await generate(spec), f0 = footprint(g.parts);
+    let worst = 0;
+    for (const sc of [0.3, 0.5, 1.4]) {
+      const r = deformParts(g.parts, [{ type: 'taper', axis: 'z', scale: sc }]);
+      allOk(r.parts);
+      const bb = partsBBox(r.parts);
+      near(bb.min[2], g.bbox.min[2], 1e-9, `${spec.element} foot`);
+      rel(bb.max[2] - bb.min[2], g.size[2], 1e-4, `${spec.element} height at taper ${sc}`); // the brief asks 0.5 %
+      worst = Math.max(worst, Math.abs((bb.max[2] - bb.min[2]) / g.size[2] - 1));
+      const f1 = footprint(r.parts);
+      for (let k = 0; k < 4; k++) near(f1[k], f0[k], 1e-6, `${spec.element} footprint`);
+      if (base) { // the taper starts above the base part: it is untouched
+        const a = partsBBox(named(g.parts, base)), b = partsBBox(named(r.parts, base));
+        for (let k = 0; k < 3; k++) { near(b.min[k], a.min[k], 1e-6, base); near(b.max[k], a.max[k], 1e-6, base); }
+      }
+    }
+    notes.push(`${spec.element}${spec.order ? ' ' + spec.order : ''} ${(worst * 100).toExponential(0)} %`);
+  }
+  return 'height error: ' + notes.join(', ');
+});
+await t('meta.rigid tags override the size rule', async () => {
+  const g = await generate({ element: 'balustrade', length: 3 });
+  const untagged = deformParts(g.parts, [{ type: 'bend', axis: 'x', angle: 90 }]);
+  assert.ok(untagged.stats.warped.includes('baluster'), 'untagged balusters of a 3 m run are warped at rigidRatio 0.2');
+  const tag = (parts, name, rigid) => parts.map((p) => (p.name === name ? { ...p, meta: { ...p.meta, rigid } } : p));
+  const tagged = deformParts(tag(g.parts, 'baluster', true), [{ type: 'bend', axis: 'x', angle: 90 }]);
+  assert.ok(tagged.stats.rigid.includes('baluster'));
+  assert.equal(named(tagged.parts, 'baluster')[0].manifold, named(g.parts, 'baluster')[0].manifold);
+  const g6 = await generate({ element: 'balustrade', length: 6 });
+  assert.ok(deformParts(g6.parts, [{ type: 'bend', axis: 'x', angle: 90 }]).stats.rigid.includes('pedestal'), '6 m: pedestals rigid by size');
+  assert.ok(deformParts(tag(g6.parts, 'pedestal', false), [{ type: 'bend', axis: 'x', angle: 90 }]).stats.warped.includes('pedestal'), 'tag false warps');
+  const knob = part('knob', 'stone', W.Manifold.sphere(0.2, 24).translate([0, 0, 1.8]), null, { rigid: true });
+  const r = deformParts([part('post', 'stone', box(-0.1, -0.1, 0, 0.1, 0.1, 1.6)), knob], [{ type: 'bend', axis: 'z', angle: 40 }]);
+  const k = named(r.parts, 'knob')[0];
+  assert.equal(k.manifold, knob.manifold); assert.equal(k.transforms.length, 16); frameOrtho(k.transforms);
+  untagged.parts.filter((q) => q.meta.deform === 'warp').forEach((q) => q.manifold.delete());
+  return 'balusters rigid when tagged, pedestals warped when tagged false, a single tagged knob moves as one piece';
 });
 await t('shear z (lean): volume kept, top moved by d', () => {
   const r = deformParts([boxPart()], [{ type: 'shear', axis: 'z', dx: 0.5, dy: -0.2 }]);
@@ -215,6 +275,11 @@ await t('shear z (lean): volume kept, top moved by d', () => {
   const p = r.deformer.point([0, 0, 2]);
   near(p[0], 0.5, 1e-9, 'dx'); near(p[1], -0.2, 1e-9, 'dy');
   assert.equal(r.stats.edge, 0, 'affine: no refinement');
+  const q = makeDeformer([{ type: 'shear', axis: 'z', rx: 0.1, ry: -0.05 }], { min: [-0.5, -0.5, 0], max: [0.5, 0.5, 2] }).point([0, 0, 2]);
+  near(q[0], 0.2, 1e-12, 'relative lean x'); near(q[1], -0.1, 1e-12, 'relative lean y');
+  const D = makeDeformer([{ type: 'taper', axis: 'z', scale: 0.5 }, { type: 'bend', axis: 'x', angle: 30 }], { min: [-1, -0.5, 0], max: [1, 0.5, 2] });
+  assert.deepEqual(D.compiled.map((c) => c.axis), [2, 0]);
+  assert.deepEqual(D.compiled[0].frame, { min: [-1, -0.5, 0], max: [1, 0.5, 2] });
 });
 
 // ------------------------------------------------------------------------------------------------ FFD + ARAP
@@ -418,6 +483,9 @@ await t('smartStretch: arcade x, roof z, dome y, portico x, clamps and nulls', a
   const sr = smartStretch(r.spec, 'z', 1.2, r.size), r2 = await generate(sr);
   rel(r2.size[2], r.size[2] * 1.2, 0.005, 'roof height');
   assert.equal(smartStretch({ element: 'dome', diameter: 8 }, 'y', 1.25).diameter, 10);
+  assert.equal(smartStretch({ element: 'dome' }, 'x', 1.5, [20, 20, 12]).diameter, 12, 'the default diameter, not the bbox');
+  const cp = await generate({ element: 'column', order: 'doric', pedestal: true }), cs = smartStretch(cp.spec, 'z', 1.2, cp.size);
+  rel((await generate(cs)).size[2], cp.size[2] * 1.2, 0.005, 'column with pedestal');
   assert.equal(smartStretch({ element: 'portico', columns: 4 }, 'x', 1.5).columns, 6);
   assert.equal(smartStretch({ element: 'portico', columns: 4 }, 'z', 1.5), null);
   assert.equal(smartStretch({ element: 'obelisk', height: 100 }, 'z', 2).height, 120, 'clamped to SCHEMA');
@@ -500,6 +568,7 @@ if (PREVIEWS_ONLY) {
   await shot('twisted-column', { element: 'column', order: 'doric' }, [{ type: 'twist', axis: 'z', angle: 180 }], ['three-quarter', 'close']);
   await shot('tapered-obelisk', { element: 'obelisk' }, [{ type: 'taper', axis: 'z', scale: 0.45 }], ['three-quarter', 'front']);
   await shot('tapered-column', { element: 'column', order: 'corinthian' }, [{ type: 'taper', axis: 'z', scale: 0.6 }], ['front', 'close']);
+  await shot('tapered-finial', { element: 'finial' }, [{ type: 'taper', axis: 'z', scale: 0.5 }], ['front', 'three-quarter']);
   await shot('stretched-column', { element: 'column', order: 'corinthian', pedestal: true }, [{ type: 'stretch', axis: 'z', factor: 1.4 }], ['front', 'close']);
   await shot('lean-column', { element: 'column', order: 'tuscan' }, [{ type: 'shear', axis: 'z', dx: 0.35 }], ['front', 'three-quarter']);
   await shot('ffd-capital', { element: 'capital', order: 'corinthian' }, capFlare, ['three-quarter', 'front']);
