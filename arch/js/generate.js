@@ -38,5 +38,9 @@ export async function generate(input) {
   const size = [0, 1, 2].map((a) => bbox.max[a] - bbox.min[a]);
   // generators report limitations through part meta (meta.warning / meta.warnings)
   for (const p of parts) for (const w of [].concat(p.meta?.warning || [], p.meta?.warnings || [])) if (w && !warnings.includes(w)) warnings.push(w);
-  return { parts, bbox, size, tris, ms, spec, warnings, expected: mod.expected ? mod.expected(spec) : null };
+  // the fields as built where the family decides them (a window's pediment and head: entablature.js effective()), so
+  // every read-back (describe, the spec card, the drawing, the exports) tells the model; spec.given stays as stated
+  const eff = mod.effective ? mod.effective(spec) : null;
+  const built = eff ? { ...spec, ...eff, given: spec.given } : spec;
+  return { parts, bbox, size, tris, ms, spec: built, warnings, expected: mod.expected ? mod.expected(spec) : null };
 }

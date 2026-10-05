@@ -91,9 +91,11 @@ function facts(spec) {
       break;
     }
     case 'pediment': {
-      f.title = join(st, s.pediment && s.pediment !== 'none' ? s.pediment : null, 'pediment');
+      // pediment 'none' builds the horizontal cornice alone
+      f.title = s.pediment === 'none' ? join(st, 'cornice') : join(st, s.pediment, 'pediment');
       f.main = { field: 'width', v: s.width };
       if (o) f.items.push(o);
+      if (s.pediment === 'none') f.items.push('no pediment');
       break;
     }
     case 'portico': {
@@ -132,8 +134,11 @@ function facts(spec) {
     }
     case 'window': case 'door': {
       f.title = join(st, el, `${fmt(s.width)} × ${m(s.height)}`);
+      // the spec as built (generate() merges entablature.js effective()): the head, the pediment the style gives it
+      // ("no pediment" only when the request said so: a Gothic or Modern window simply has none), the keystone
       if (s.archType) f.items.push(`${ARCH[s.archType]} head`);
-      if (s.pediment) f.items.push(s.pediment === 'none' ? 'no pediment' : `${s.pediment} pediment`);
+      if (s.pediment && s.pediment !== 'none') f.items.push(`${s.pediment} pediment`);
+      else if (s.pediment === 'none' && (!s.given || s.given.includes('pediment'))) f.items.push('no pediment');
       if (s.keystone) f.items.push('keystone');
       break;
     }

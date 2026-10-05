@@ -346,7 +346,9 @@ async function build() {
     if (edgeStash && edgeStash.id === r.id) viewer.setEdges(edgeStash.list);
     else if (viewer.needsEdges()) builder.edges(r.id);
     edgeStash = null;
-    const interp = !edited && parsed && parsed.interpretation && !smart.changed ? parsed.interpretation : describeSpec(r.stats.spec);
+    // the line tells the model as built (the worker's spec carries what the generator decided, e.g. a Gothic window's
+    // pointed head and no pediment), not the parser's reading of the request; the parser's line stays for a fallback
+    const interp = describeFn || !parsed || !parsed.interpretation || edited || smart.changed ? describeSpec(r.stats.spec) : parsed.interpretation;
     S.interpretation = interp;
     showMsg('');
     renderRead(interp, parsed, r.stats.warnings);

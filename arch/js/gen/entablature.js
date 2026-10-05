@@ -1020,6 +1020,17 @@ function surroundKind(spec) {
     consoles: !door && classicalBottom, plinths: door && classicalBottom };
 }
 
+/** The fields a window or door is built with where the style decides them, for every read-back (generate() merges them
+ *  into the spec it returns: describe, the spec card, the drawing, the exports): the pediment ('none' over an arched or
+ *  Egyptian / Deco / Modern head unless one was asked for, 'broken' for a Baroque one, the door's broken segmental
+ *  included), the head's arch type (from the style when not stated) and the keystone. Other elements: null. */
+export function effective(spec) {
+  if (spec.element !== 'window' && spec.element !== 'door') return null;
+  const k = surroundKind(spec), out = { pediment: k.ped === 'broken-segmental' ? 'broken' : k.ped, keystone: k.keystone };
+  if (k.arch) out.archType = k.arch;
+  return out;
+}
+
 /** Frames along an elevation polyline (x, z) with the outward side on the left of travel, mitred at every vertex:
  *  the profile's first coordinate goes to -Y (projection), the second along the mitre (outward in the wall plane). */
 function elevFrames(path) {
