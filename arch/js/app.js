@@ -282,11 +282,25 @@ const builder = new Builder((m) => { fail(m); A.busy = false; stage.classList.re
 Object.defineProperty(A, 'builder', { value: builder, enumerable: false }); // tests
 Object.defineProperty(A, 'state', { value: S, enumerable: false });
 
+/** The bands of the canvas its overlays cover (CSS px from each edge): the viewer frames the element clear of them. On a
+ *  phone the rendering bar and the size pill fill the top of a low stage, the view and unit bars its foot. */
+function overlayInsets() {
+  const c = $('#c').getBoundingClientRect(), ins = { top: 0, bottom: 0, left: 0, right: 0 };
+  if (!c.height) return ins;
+  for (const el of document.querySelectorAll('#stage > .ov')) {
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) continue;                 // hidden (screenshots), or the size pill before the first build
+    if (r.top + r.bottom < c.top + c.bottom) ins.top = Math.max(ins.top, r.bottom - c.top);
+    else ins.bottom = Math.max(ins.bottom, c.bottom - r.top);
+  }
+  return ins;
+}
+
 let viewer = null;
 const viewerReady = (async () => {
   const { Viewer, VIEWS, MODES } = await import('./view.js');
   const bg = getComputedStyle(stage).backgroundColor.match(/[\d.]+/g).slice(0, 3).map((x) => +x / 255);
-  viewer = new Viewer($('#c'), { shot: SHOT, background: bg, pixelRatio: SHOT ? 2 : undefined });
+  viewer = new Viewer($('#c'), { shot: SHOT, background: bg, pixelRatio: SHOT ? 2 : undefined, insets: overlayInsets });
   Object.defineProperty(A, 'viewer', { value: viewer, enumerable: false }); // debugging and tests
   const mode = Q.get('mode'), view = Q.get('view');
   if (MODES.includes(mode)) viewer.setMode(mode);
@@ -341,6 +355,9 @@ async function build() {
     if (queued && performance.now() - lastShown < 800) return;
     const reveal = S.reveal && !dragging();
     S.reveal = false;
+    // the size pill first: framing the new element keeps it clear of the overlays, the pill among them
+    const dimsNow = !dragging();
+    if (dimsNow) renderDims(null, r.stats);
     if (reveal) viewer.beginReveal();
     await viewer.setModel(r.meshes, r.stats, { keepCamera: reason === 'deform' && S.stats && S.stats.spec.element === r.stats.spec.element,
       keepPreview: dragging() });
@@ -366,7 +383,7 @@ async function build() {
     renderRead(interp, parsed, r.stats.warnings);
     renderCard(r.stats.spec);
     renderStats(r.stats);
-    if (!dragging()) { renderDims(); renderX(); }     // a drag keeps its live estimates until its own bake lands
+    if (!dragging()) { if (!dimsNow) renderDims(); renderX(); }     // a drag keeps its live estimates until its own bake lands
     syncButtons();
     $('#c').setAttribute('aria-label', `3D view of the ${interp}. Arrow keys orbit, + and − zoom, F frames the whole element.`);
     announce(`Built: ${interp}${r.stats.deform ? ', transformed' : ''}.`);
@@ -489,9 +506,11 @@ function renderStats(st) {
   $('#stats').textContent = `${st.tris.toLocaleString('en')} triangles · ${st.parts} parts${pieces} · built in ${Math.round(st.totalMs)} ms`;
 }
 
-/** The readout: the built element's size, or (preview) an estimate while a transform is being dragged. */
-function renderDims(estimate = null) {
-  const el = $('#dims'), st = S.stats;
+/** The readout: the built element's size, or (preview) an estimate while a transform is being dragged. The estimates
+ *  change every frame: the region is not read out then (aria-live off, as during the showcase), the baked size is. */
+function renderDims(estimate = null, st = S.stats) {
+  const el = $('#dims');
+  el.setAttribute('aria-live', estimate || SC.on ? 'off' : 'polite');
   if (!st) { el.textContent = ''; return; }
   const [x, y, z] = estimate || st.size, u = S.units;
   el.innerHTML = '';

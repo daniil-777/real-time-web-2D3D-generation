@@ -76,7 +76,9 @@
 <style>
   :root {
     --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Inter, system-ui, sans-serif;
-    --text: #1d1d1f; --text-2: #515154; --text-3: #6e6e73;   /* text-3 on white 5.1:1, on the stage 4.6:1 */
+    /* text-3 (WCAG AA, >= 4.5:1): on white 5.4:1, on the stage #efefec 4.7:1, on the prompt's fill 4.7:1, on a glass pill
+       5.1:1 (the former #6e6e73 was 4.4:1 on the stage and the fill) */
+    --text: #1d1d1f; --text-2: #515154; --text-3: #6a6a6f;
     --fill: rgba(118, 118, 128, 0.12); --fill-2: rgba(118, 118, 128, 0.2); --hair: rgba(0, 0, 0, 0.08);
     --accent: #0071e3; --glass: rgba(255, 255, 255, 0.74); --warn: #b25000;
     --studio: #efefec;   /* the stage colour; the viewer reads it, so ground and page match exactly */
@@ -265,6 +267,13 @@
     #hint, #scTag { display: none; }   /* the stage's controls fill its foot on a phone */
   }
   @media (max-width: 420px) { #dims { font-size: 12px; padding: 5px 10px; } #extra .lbl { display: none; } }
+  /* the narrowest stages: the view bar and the figure + units group share the foot without overlapping (the viewer
+     frames the element between the top and foot bars: app.js overlayInsets) */
+  @media (max-width: 400px) { .seg button { padding: 7px 8px; } #extra { gap: 4px; } }
+  @media (max-width: 340px) {
+    .seg button { padding: 6px 6px; font-size: 11.5px; }
+    #views, #dims { left: 8px; } #extra, #modes { right: 8px; } #views, #extra { bottom: 8px; } #modes { top: 8px; }
+  }
   html.embed #stage { min-height: 300px; }
 
   /* screenshots: the canvas, nothing else */

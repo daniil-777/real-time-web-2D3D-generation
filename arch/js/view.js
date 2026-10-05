@@ -580,7 +580,8 @@ function makeFigure(mat) {
 // ------------------------------------------------------------------------------------------------ viewer
 
 export class Viewer {
-  /** canvas: the drawing surface; opts: { shot, background: [r,g,b] display 0..1, pixelRatio } */
+  /** canvas: the drawing surface; opts: { shot, background: [r,g,b] display 0..1, pixelRatio, insets: () => { top,
+   *  bottom, left, right } (CSS px of the canvas the page's overlays cover: framing keeps the element clear of them) } */
   constructor(canvas, opts = {}) {
     this.canvas = canvas;
     this.opts = opts;
@@ -1079,8 +1080,22 @@ export class Viewer {
     return new THREE.Box3(b.min.clone(), new THREE.Vector3(b.min.x + w, b.max.y, b.max.z));
   }
 
-  /** Perspective framing of box b seen along -dir: the projected outline (not the 3D centre) is centred and its larger
-   *  extent fills `margin` of the frame. A few fixed-point steps; the first guess bounds the corners conservatively. */
+  /** The part of the frame (NDC) a fit may fill: `margin` of it, and clear of the page's overlays (opts.insets, 8 px
+   *  of air): on a large stage the margin binds and nothing changes; on a phone the bars and the size pill would sit
+   *  on a pediment's apex or a lantern, so the element is framed smaller, between them. */
+  fitRect(margin) {
+    const w = this._w || 1, h = this._h || 1, i = (this.opts.insets && this.opts.insets()) || {}, air = 8;
+    const cut = (px, len) => (px > 0 ? (2 * (px + air)) / len : 0);
+    const r = { x0: Math.max(-margin, -1 + cut(i.left, w)), x1: Math.min(margin, 1 - cut(i.right, w)),
+      y0: Math.max(-margin, -1 + cut(i.bottom, h)), y1: Math.min(margin, 1 - cut(i.top, h)) };
+    // overlays that leave less than half the frame (a very low stage) are let overlap rather than shrink it further
+    if (r.x1 - r.x0 < margin) { r.x0 = -margin; r.x1 = margin; }
+    if (r.y1 - r.y0 < margin) { r.y0 = -margin; r.y1 = margin; }
+    return r;
+  }
+
+  /** Perspective framing of box b seen along -dir: the projected outline (not the 3D centre) is centred in the fit
+   *  rectangle (fitRect) and fills it. A few fixed-point steps; the first guess bounds the corners conservatively. */
   fitPersp(b, dir, margin = 0.84) {
     const cam = this.persp, target = b.getCenter(new THREE.Vector3());
     let d = this.fitDistance(b, target, dir, margin);
@@ -1088,6 +1103,7 @@ export class Viewer {
     for (let i = 0; i < 8; i++) corners.push(new THREE.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z));
     const tv = Math.tan((cam.fov * DEG) / 2), th = tv * cam.aspect, q = new THREE.Vector3();
     const right = new THREE.Vector3(), up = new THREE.Vector3();
+    const R = this.fitRect(margin), cx = (R.x0 + R.x1) / 2, cy = (R.y0 + R.y1) / 2;
     for (let it = 0; it < 5; it++) {
       cam.position.copy(target).addScaledVector(dir, d);
       cam.lookAt(target);
@@ -1098,10 +1114,10 @@ export class Viewer {
         q.copy(p).project(cam);
         x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y);
       }
-      const ext = Math.max((x1 - x0) / 2, (y1 - y0) / 2);
+      const ext = Math.max((x1 - x0) / (R.x1 - R.x0), (y1 - y0) / (R.y1 - R.y0));
       right.setFromMatrixColumn(cam.matrixWorld, 0); up.setFromMatrixColumn(cam.matrixWorld, 1);
-      target.addScaledVector(right, ((x0 + x1) / 2) * th * d).addScaledVector(up, ((y0 + y1) / 2) * tv * d);
-      d *= THREE.MathUtils.clamp(ext / margin, 0.5, 2);
+      target.addScaledVector(right, ((x0 + x1) / 2 - cx) * th * d).addScaledVector(up, ((y0 + y1) / 2 - cy) * tv * d);
+      d *= THREE.MathUtils.clamp(ext, 0.5, 2);
     }
     cam.position.copy(target).addScaledVector(dir, d);
     cam.lookAt(target);
@@ -1158,10 +1174,11 @@ export class Viewer {
       const p = new THREE.Vector3(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).applyMatrix4(inv);
       x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
     }
-    const aspect = this._w / this._h || 1;
-    const hh = Math.max(Math.max((y1 - y0) / 2, (x1 - x0) / 2 / aspect) * margin, 0.05);
-    // move camera and target sideways so the box is centred, then a symmetric frustum
-    const off = new THREE.Vector3((x0 + x1) / 2, (y0 + y1) / 2, 0).applyMatrix3(new THREE.Matrix3().setFromMatrix4(cam.matrixWorld));
+    const aspect = this._w / this._h || 1, R = this.fitRect(1 / margin);
+    const hh = Math.max((y1 - y0) / (R.y1 - R.y0), (x1 - x0) / (R.x1 - R.x0) / aspect, 0.05);
+    // move camera and target sideways so the box is centred in the fit rectangle, then a symmetric frustum
+    const off = new THREE.Vector3((x0 + x1) / 2 - ((R.x0 + R.x1) / 2) * hh * aspect, (y0 + y1) / 2 - ((R.y0 + R.y1) / 2) * hh, 0)
+      .applyMatrix3(new THREE.Matrix3().setFromMatrix4(cam.matrixWorld));
     cam.position.add(off);
     this.controls.target.add(off);
     this.orthoAspect(hh);

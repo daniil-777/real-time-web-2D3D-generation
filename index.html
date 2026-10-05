@@ -46,7 +46,8 @@
   .seg { position: relative; display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding: 2px; border-radius: 10px;
          background: var(--fill); isolation: isolate; }
   .seg button { position: relative; z-index: 1; border: 0; background: none; color: var(--text-2); font: 500 13px/1 var(--font);
-                letter-spacing: -0.01em; padding: 8px 18px; border-radius: 8px; cursor: pointer; transition: color .25s var(--ease); }
+                letter-spacing: -0.01em; padding: 8px 18px; border-radius: 8px; cursor: pointer; transition: color .25s var(--ease);
+                white-space: nowrap; }
   .seg button[aria-selected=true] { color: var(--text); }
   .seg button:hover { color: var(--text); }
   .knob { position: absolute; z-index: 0; top: 2px; bottom: 2px; left: 0; width: var(--kw, 0); border-radius: 8px; background: var(--surface);
@@ -123,6 +124,8 @@
     .stage-wrap, .below { padding: 0 10px; }
     .stage { height: max(600px, calc(100svh - 150px)); border-radius: 22px; }
   }
+  /* three tabs on the narrowest phones: each as wide as its label, so "3D Objects" stays on one line */
+  @media (max-width: 360px) { .seg { grid-auto-columns: auto; } .seg button { padding: 8px 8px; font-size: 12px; } }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
     html { scroll-behavior: auto; }
