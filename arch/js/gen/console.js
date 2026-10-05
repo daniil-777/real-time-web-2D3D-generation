@@ -10,7 +10,7 @@
 // cyma leaving each scroll tangentially; the scroll cheeks 0.90 W wide, the face 0.80 W, sunk ~6 mm between margins
 // of 0.12 of its width.
 
-import { K, TAU, mat, loft, union, part, bezier, crossSection, thickSurface } from '../kernel.js';
+import { K, TAU, mat, loft, union, part, bezier, crossSection, fromMesh } from '../kernel.js';
 import { Prof } from '../profiles.js';
 import { spiral, extrudeElevation } from '../ornament.js';
 
@@ -116,6 +116,41 @@ function scrollDisc({ r0, depth, side, groove, channel = 0.32, rim = 0.07 }) {
 }
 
 /**
+ * A closed shell of thickness t(u, v) around the mid-surface f(u, v), offset along a given unit direction n(u, v)
+ * (not the numerically estimated surface normal): when n is a smooth field across which f is a height field, the two
+ * sheets can never cross, so the shell is free of self-intersections. Triangulated like kernel.thickSurface; the
+ * orientation follows n (flipped when n points against du x dv).
+ */
+function shell(f, n, nu, nv, t) {
+  const G = nv + 1, cnt = (nu + 1) * G, pos = new Float32Array(cnt * 6);
+  for (let i = 0; i <= nu; i++) for (let j = 0; j <= nv; j++) {
+    const u = i / nu, v = j / nv, p = f(u, v), q = n(u, v), h = t(u, v) / 2, k = i * G + j;
+    pos.set([p[0] + h * q[0], p[1] + h * q[1], p[2] + h * q[2]], k * 3);
+    pos.set([p[0] - h * q[0], p[1] - h * q[1], p[2] - h * q[2]], (cnt + k) * 3);
+  }
+  const e = 1e-3, m = f(0.5, 0.5), du = f(0.5 + e, 0.5).map((x, a) => x - m[a]), dv = f(0.5, 0.5 + e).map((x, a) => x - m[a]);
+  const c = [du[1] * dv[2] - du[2] * dv[1], du[2] * dv[0] - du[0] * dv[2], du[0] * dv[1] - du[1] * dv[0]], q = n(0.5, 0.5);
+  const flip = c[0] * q[0] + c[1] * q[1] + c[2] * q[2] < 0;
+  const id = (i, j) => i * G + j, tri = [];
+  const T = (a, b, c2) => (flip ? tri.push(a, c2, b) : tri.push(a, b, c2));
+  for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+    const a = id(i, j), b = id(i + 1, j), c2 = id(i + 1, j + 1), d = id(i, j + 1);
+    T(a, b, c2); T(a, c2, d);
+    T(cnt + a, cnt + c2, cnt + b); T(cnt + a, cnt + d, cnt + c2);
+  }
+  const loop = [];
+  for (let i = 0; i < nu; i++) loop.push(id(i, 0));
+  for (let j = 0; j < nv; j++) loop.push(id(nu, j));
+  for (let i = nu; i > 0; i--) loop.push(id(i, nv));
+  for (let j = nv; j > 0; j--) loop.push(id(0, j));
+  for (let k = 0; k < loop.length; k++) {
+    const p = loop[k], q2 = loop[(k + 1) % loop.length];
+    T(cnt + p, cnt + q2, q2); T(cnt + p, q2, p);
+  }
+  return fromMesh(pos, Uint32Array.from(tri));
+}
+
+/**
  * The acanthus leaf of the console, carved on its face: a shell built directly on the face's contour (arc length s
  * from s0 to s1, outward normal), so it hugs the cyma and the front of the upper scroll at every point. Outline: a
  * narrow stalk springing from the lower scroll, then a broad oval blade of three pointed lobes a side (leaning toward
@@ -124,7 +159,7 @@ function scrollDisc({ r0, depth, side, groove, channel = 0.32, rim = 0.07 }) {
  * slightly hollow, the lobe edges turning out, a small hollow "eye" at each notch. `base(s)` is the face's own offset
  * there (negative inside the sunk panel). Coordinates: t along the leaf (0 stalk .. 1 tip), uu across (-1 .. 1).
  */
-function faceLeaf({ C, s0, s1, w, th, base, uMax, Dp, nu, nv }) {
+function faceLeaf({ C, s0, s1, w, wr, th, base, Dp, nu, nv }) {
   const T0 = 0.07, LOB = 3, T1 = 0.84;                 // stalk below T0, lobes T0..T1, tip lobe above
   const lobeC = Array.from({ length: LOB + 1 }, (_, k) => T0 + ((T1 - T0) * (k + 0.55)) / LOB).map((c, k) => (k === LOB ? 0.93 : c));
   const env = (t) => (t < 0.38 ? 0.3 + 0.7 * Math.sin((Math.PI / 2) * (t / 0.38)) : Math.cos((Math.PI / 2) * ((t - 0.38) / 0.62)) ** 0.85);
@@ -138,27 +173,30 @@ function faceLeaf({ C, s0, s1, w, th, base, uMax, Dp, nu, nv }) {
   };
   const relief = (uu, t) => {
     const au = Math.abs(uu);
-    let d = 0.03 * w * Math.exp(-((uu / 0.06) ** 2)) * (1 - 0.5 * t)                    // midrib
-      + 0.03 * w * uu * uu * sstep((t - T0) / 0.1)                                         // edges turning out
-      - 0.012 * w * Math.sin(Math.PI * au) * sstep((t - T0) / 0.1);                       // blade hollow between
+    let d = 0.03 * wr * Math.exp(-((uu / 0.06) ** 2)) * (1 - 0.5 * t)                    // midrib
+      + 0.03 * wr * uu * uu * sstep((t - T0) / 0.1)                                         // edges turning out
+      - 0.012 * wr * Math.sin(Math.PI * au) * sstep((t - T0) / 0.1);                       // blade hollow between
     for (const c of lobeC) {                                                               // pipes: midrib -> lobe
       const ax = 0.05, ay = c - 0.13, bx = 0.82, by = c + 0.01;
       const px = au - ax, py = t - ay, vx = bx - ax, vy = by - ay, k = Math.max(0, Math.min(1, (px * vx + py * vy) / (vx * vx + vy * vy)));
       const dist = Math.hypot(px - k * vx, (py - k * vy) * 2.2);
-      d += 0.022 * w * Math.exp(-((dist / 0.06) ** 2)) * (t > T0 ? 1 : 0);
+      d += 0.022 * wr * Math.exp(-((dist / 0.06) ** 2)) * (t > T0 ? 1 : 0);
     }
     for (let k = 1; k <= LOB; k++) {                                                       // eyes at the notches
       const tn = T0 + ((T1 - T0) * k) / LOB;
-      d -= 0.016 * w * Math.exp(-(((au - 0.7) / 0.09) ** 2 + ((t - tn) / 0.025) ** 2));
+      d -= 0.016 * wr * Math.exp(-(((au - 0.7) / 0.09) ** 2 + ((t - tn) / 0.025) ** 2));
     }
     return d * (1 - 0.6 * sstep((t - 0.72) / 0.28));                                     // the tip lies flatter
   };
+  // a height field over the face: the mid-surface and both sheets lie on the face's own normal lines, so the shell
+  // cannot fold through itself (the face's radius of curvature is far larger than the relief)
   const f = (u, v) => {
     const uu = 2 * u - 1, s = s0 + v * (s1 - s0), c = C.at(s);
     const d = base(s) + 0.1 * th + relief(uu, v);                                          // its back sunk in the stone
-    return [uu * half(v) * w, Dp / 2 - Math.min(uMax, c.u + d * c.nu), c.v + d * c.nv];
+    return [uu * half(v) * w, Dp / 2 - (c.u + d * c.nu), c.v + d * c.nv];
   };
-  return thickSurface(f, nu, nv, (u, v) => th * (0.45 + 0.55 * (1 - (2 * u - 1) ** 2)) * (1 - 0.45 * v));
+  const n = (u, v) => { const c = C.at(s0 + v * (s1 - s0)); return [0, -c.nu, c.nv]; };
+  return shell(f, n, nu, nv, (u, v) => th * (0.45 + 0.55 * (1 - (2 * u - 1) ** 2)) * (1 - 0.45 * v));
 }
 
 /** meta.rigid for the deformation engine (deform.js): true = the part's instances follow a deformation rigidly (carved
@@ -203,7 +241,8 @@ export function build(spec) {
     const s1 = Lf + 0.6 * g.r1, s0 = Math.max(0.06 * Lf, s1 - 3.2 * Wb), w = Math.min(0.94 * Wr, 0.65 * (s1 - s0));
     const th = Math.min(0.03 * w, 0.25 * g.ef);
     const nu = spec.detail === 'low' ? 16 : spec.detail === 'medium' ? 24 : 32, nv = spec.detail === 'low' ? 48 : spec.detail === 'medium' ? 72 : 96;
-    const leaf = faceLeaf({ C, s0, s1, w, th, base: (s) => -panel(s), uMax: g.Db + 0.8 * g.ef, Dp, nu, nv }), bb = leaf.boundingBox();
+    // relief scaled by the leaf's width, but never standing out more than ~0.6 of the cap's overhang
+    const leaf = faceLeaf({ C, s0, s1, w, wr: Math.min(w, 8 * g.ef), th, base: (s) => -panel(s), Dp, nu, nv }), bb = leaf.boundingBox();
     // (at absurd proportions where the leaf would leave the requested box, the console is left plain)
     if (bb.min[1] >= -Dp / 2 && bb.max[1] <= Dp / 2 && bb.min[2] >= 0 && bb.max[2] <= g.Hb) parts.push(part('leaf', 'stone', leaf));
   }

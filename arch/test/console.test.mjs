@@ -7,13 +7,15 @@ import assert from 'node:assert/strict';
 import { initKernel } from './node-kernel.mjs';
 import { generate } from '../js/generate.js';
 import { normalize, SCHEMA } from '../js/spec.js';
+import { solids } from './solid.mjs';
+import { selfIntersections } from './self-intersect.mjs';
 
 await initKernel();
 const BUDGET = 500, TRI_MAX = 2e6;
 let fails = 0;
 const rows = [];
 
-async function check(input) {
+async function check(input, deep = false) {
   const r = await generate(input);
   const errs = [], ex = r.expected, { spec } = normalize(input);
   for (const p of r.parts) {
@@ -30,6 +32,12 @@ async function check(input) {
   if (Math.abs(min[0] + max[0]) > tol) errs.push('not centred on x');
   const leaf = r.parts.some((p) => p.name === 'leaf');
   if (spec.enrichment === 'none' && leaf) errs.push('leaf despite enrichment none');
+  if (deep) {                    // one solid (leaf and scroll discs fused with the body), no self-intersecting part
+    const n = solids(r.parts).length;
+    if (n !== 1) errs.push(`${n} separate solids`);
+    // the leaf is the only part built from raw triangles (body and cap come from extrusions, lofts and booleans)
+    for (const p of r.parts.filter((q) => q.name === 'leaf')) { const x = selfIntersections(p.manifold); if (x) errs.push(`leaf self-intersects (${x} pairs)`); }
+  }
   if (r.ms > BUDGET) errs.push(`time ${Math.round(r.ms)} ms > ${BUDGET}`);
   if (r.tris > TRI_MAX) errs.push(`tris ${r.tris}`);
   if (errs.length) fails++;
@@ -65,7 +73,7 @@ const ext = { height: SCHEMA.height, depth: SCHEMA.depth, width: SCHEMA.width };
 for (const [k, s] of Object.entries(ext)) for (const v of [s.min, s.max]) cases.push({ [k]: v });
 for (const h of [SCHEMA.height.min, SCHEMA.height.max]) for (const d of [SCHEMA.depth.min, SCHEMA.depth.max])
   for (const wd of [SCHEMA.width.min, SCHEMA.width.max]) cases.push({ height: h, depth: d, width: wd });
-for (const c of cases) await check({ element: 'console', ...c });
+for (const c of cases) await check({ element: 'console', ...c }, cases.indexOf(c) < 15);   // the realistic cases: deep checks
 await similar({ element: 'console' }, ['height', 'depth', 'width'], [0.25, 40]);
 await similar({ element: 'console', height: 0.9, depth: 0.2, width: 0.22 }, ['height', 'depth', 'width'], [0.25, 40]);
 

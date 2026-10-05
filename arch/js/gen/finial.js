@@ -3,7 +3,7 @@
 // the element's height H; they follow common classical practice (the vases, finials and pedestals of the 18th-century
 // pattern books of Gibbs and Chambers; the Roman obelisks re-erected under Sixtus V by D. Fontana).
 
-import { K, TAU, mat, revolve, loft, box, union, part, instances, tube, thickSurface, extrudeXY, partsBBox, placeParts }
+import { K, TAU, mat, revolve, loft, box, union, part, instances, tube, fromMesh, extrudeXY, partsBBox, placeParts }
   from '../kernel.js';
 import { Prof } from '../profiles.js';
 
@@ -105,8 +105,45 @@ function scaleMesh(w, l, th, lift, segs) {
 }
 
 /**
+ * A closed shell of thickness t(u, v) around the mid-surface f(u, v) -> [x, y, z], offset along a given unit direction
+ * n(u, v) (not the numerically estimated surface normal): when n is a smooth field across which f is a height field,
+ * the two sheets can never cross, so the shell is free of self-intersections. Triangulated like kernel.thickSurface;
+ * the orientation follows n (flipped when n points against du x dv).
+ */
+function shell(f, n, nu, nv, t) {
+  const G = nv + 1, cnt = (nu + 1) * G, pos = new Float32Array(cnt * 6);
+  for (let i = 0; i <= nu; i++) for (let j = 0; j <= nv; j++) {
+    const u = i / nu, v = j / nv, p = f(u, v), q = n(u, v), h = t(u, v) / 2, k = i * G + j;
+    pos.set([p[0] + h * q[0], p[1] + h * q[1], p[2] + h * q[2]], k * 3);
+    pos.set([p[0] - h * q[0], p[1] - h * q[1], p[2] - h * q[2]], (cnt + k) * 3);
+  }
+  // orientation: does n agree with du x dv at the middle of the patch?
+  const e = 1e-3, m = f(0.5, 0.5), du = f(0.5 + e, 0.5).map((x, a) => x - m[a]), dv = f(0.5, 0.5 + e).map((x, a) => x - m[a]);
+  const c = [du[1] * dv[2] - du[2] * dv[1], du[2] * dv[0] - du[0] * dv[2], du[0] * dv[1] - du[1] * dv[0]], q = n(0.5, 0.5);
+  const flip = c[0] * q[0] + c[1] * q[1] + c[2] * q[2] < 0;
+  const id = (i, j) => i * G + j, tri = [];
+  const T = (a, b, c2) => (flip ? tri.push(a, c2, b) : tri.push(a, b, c2));
+  for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+    const a = id(i, j), b = id(i + 1, j), c2 = id(i + 1, j + 1), d = id(i, j + 1);
+    T(a, b, c2); T(a, c2, d);
+    T(cnt + a, cnt + c2, cnt + b); T(cnt + a, cnt + d, cnt + c2);
+  }
+  const loop = [];
+  for (let i = 0; i < nu; i++) loop.push(id(i, 0));
+  for (let j = 0; j < nv; j++) loop.push(id(nu, j));
+  for (let i = nu; i > 0; i--) loop.push(id(i, nv));
+  for (let j = nv; j > 0; j--) loop.push(id(0, j));
+  for (let k = 0; k < loop.length; k++) {
+    const p = loop[k], q2 = loop[(k + 1) % loop.length];
+    T(cnt + p, cnt + q2, q2); T(cnt + p, q2, p);
+  }
+  return fromMesh(pos, Uint32Array.from(tri));
+}
+
+/**
  * A pointed leaf blade rising along +Z and arching outward (toward -Y) by `arch` radians at its tip; its section is a
- * shallow channel. len = length along the blade, w = greatest width.
+ * shallow channel. len = length along the blade, w = greatest width. Built as a shell offset along the spine's normal
+ * (the channel is a height field over it), so the blade cannot fold through itself.
  */
 function blade({ len, w, arch = 1, lean = 0.2, t = 0, nu = 8, nv = 28 }) {
   const th = t || 0.06 * w, S = 80, sp = [[0, 0]], ang = [lean];
@@ -124,7 +161,8 @@ function blade({ len, w, arch = 1, lean = 0.2, t = 0, nu = 8, nv = 28 }) {
     const [y, z, a] = at(v), x = (2 * u - 1) * (width(v) / 2), d = 0.18 * width(v) * (2 * u - 1) ** 2;
     return [x, y - Math.cos(a) * d, z - Math.sin(a) * d];
   };
-  return thickSurface(f, nu, nv, (u, v) => th * (1 - 0.7 * v) * (0.45 + 0.55 * (1 - (2 * u - 1) ** 2)));
+  const n = (u, v) => { const a = at(v)[2]; return [0, -Math.cos(a), -Math.sin(a)]; };
+  return shell(f, n, nu, nv, (u, v) => th * (1 - 0.7 * v) * (0.45 + 0.55 * (1 - (2 * u - 1) ** 2)));
 }
 
 /** Radial instances of a motif standing on a circle of radius r at height z, each facing outward. */
@@ -417,13 +455,20 @@ export function urnParts(H, { handles = false, knob = 'bud', lobes = 16, detail 
     }
     parts.push(part('knob', 'stone', revolve([[0, kz], ...pts, [0, H]], R.segs)));
   }
-  if (handles) parts.push(part('handle', 'stone', urnHandle(H, R), instances([mat.I(), mat.Rz(Math.PI)])));
+  // the body's radius on the shoulder (the ogee above the band), for attaching the handles
+  const rBody = (z) => rn + (rw - rn) * 0.5 * (1 + Math.cos(Math.PI * Math.min(1, Math.max(0, (z - zw) / (zn - zw))) ** 0.8));
+  if (handles) parts.push(part('handle', 'stone', urnHandle(H, R, rBody), instances([mat.I(), mat.Rz(Math.PI)])));
   return parts;
 }
 
-/** A scroll handle for the urn in the XZ plane (x > 0): springs from the neck with a small outward volute, sweeps out
- *  and down in a C, and dies into the belly band with an inward curl. */
-function urnHandle(H, R) {
+/**
+ * A scroll handle for the urn in the XZ plane (x > 0): a stalk springing from inside the neck to a small outward
+ * volute, a C sweeping out and down, and an inward curl that dies into the shoulder just above the belly band. Both
+ * ends are sunk into the body (stalk ~1.5 cm, curl ~0.8 cm at H = 0.9 m), so urn and handles are one solid. The tube
+ * is thinner at its volute ends (0.011 H) than in its sweep (0.017 H), and every curl's radius is at least 1.6 times
+ * the tube's there, so the tube never folds through itself. rBody(z) is the body's radius on the shoulder.
+ */
+function urnHandle(H, R, rBody) {
   const P = (x, z) => [x * H, 0, z * H];
   const bz = (p0, p1, p2, p3, n) => Array.from({ length: n + 1 }, (_, i) => {
     const t = i / n, u = 1 - t;
@@ -433,14 +478,19 @@ function urnHandle(H, R) {
     const t = (i + 1) / n, a = a0 + t * sweep, r = r0 * (1 - shrink * t);
     return P(cx + r * Math.cos(a), cz + r * Math.sin(a));
   });
-  // top volute (outward, at the shoulder), then the C down to the band, then an inward curl
-  const topCurl = spiralAt(0.235, 0.637, 0.024, Math.PI * 1.5, -1.7 * Math.PI, 0.5, 18).reverse();
-  const arc = bz(P(0.235, 0.613), P(0.33, 0.62), P(0.35, 0.5), P(0.275, 0.455), 22);
-  const lowCurl = spiralAt(0.275, 0.485, 0.03, -Math.PI / 2, -1.5 * Math.PI, 0.5, 16);
-  const neck = bz(P(0.14, 0.6), P(0.18, 0.61), P(0.21, 0.613), P(0.235, 0.613), 8);
+  const rb = (z) => rBody(z * H) / H;
+  // top volute (outward, standing free above the shoulder), entered from its outer end
+  const topCurl = spiralAt(0.235, 0.643, 0.03, Math.PI * 1.5, -1.6 * Math.PI, 0.4, 20).reverse();
+  // the lower curl: centred just outside the shoulder, its inner half inside the body
+  const zl = 0.485, rc = 0.03, cx = rb(zl) + 0.3 * rc;
+  const arc = bz(P(0.235, 0.613), P(0.335, 0.62), P(0.35, 0.53), P(cx + rc, zl), 24);
+  const lowCurl = spiralAt(cx, zl, rc, 0, -1.5 * Math.PI, 0.35, 18);
   const path = [...topCurl, ...arc, ...lowCurl];
-  const stalk = tube(neck, (s) => H * (0.014 + 0.002 * s), Math.max(10, R.segs >> 3));
-  return union([tube(path, (s) => H * (0.017 - 0.007 * s), Math.max(12, R.segs >> 3)), stalk]);
+  const sw = Math.max(12, R.segs >> 3);
+  const main = tube(path, (s) => H * (0.011 + 0.006 * Math.sin(Math.PI * s)), sw);
+  // the stalk from inside the neck to the volute's foot
+  const z0 = 0.6, neck = bz(P(rb(z0) - 0.02, z0), P(rb(z0) + 0.03, 0.607), P(0.2, 0.613), P(0.235, 0.613), 10);
+  return union([main, tube(neck, (s) => H * (0.013 + 0.002 * s), sw)]);
 }
 
 // ------------------------------------------------------------------------------------------------ obelisk

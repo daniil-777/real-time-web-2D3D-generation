@@ -8,6 +8,8 @@ import { generate } from '../js/generate.js';
 import { normalize, SCHEMA } from '../js/spec.js';
 import { instanceCount, partsBBox } from '../js/kernel.js';
 import { FINIALS } from '../js/gen/finial.js';
+import { solids } from './solid.mjs';
+import { selfIntersections } from './self-intersect.mjs';
 
 await initKernel();
 const BUDGET = 500, TRI_MAX = 2e6;
@@ -86,6 +88,20 @@ for (const height of [...H, 12, 18]) {
 await check({ element: 'obelisk', detail: 'low' }, obeliskRules);
 await check({ element: 'obelisk', pedestal: false }, (r, errs) => { obeliskRules(r, errs); if (r.parts.some((p) => p.name === 'pedestal')) errs.push('pedestal despite pedestal: false'); });
 await check({ element: 'obelisk', style: 'egyptian', pedestal: true }, (r, errs) => { obeliskRules(r, errs); if (!r.parts.some((p) => p.name === 'pedestal')) errs.push('no pedestal despite pedestal: true'); });
+// every finial, urn and obelisk is ONE solid (handles, stems, balls and crowns sunk into what carries them), and the
+// pieces built from raw triangles (crown blades, handles: shells and tubes) do not pass through themselves
+const oneSolid = (r, errs) => {
+  const n = solids(r.parts).length;
+  if (n !== 1) errs.push(`${n} separate solids`);
+  for (const p of r.parts.filter((q) => ['crown-outer', 'crown-inner', 'handle', 'flame', 'bowl', 'scale'].includes(q.name))) {
+    const x = selfIntersections(p.manifold);
+    if (x) errs.push(`${p.name} self-intersects (${x} pairs)`);
+  }
+};
+for (const finial of FINIALS) for (const height of [undefined, 2.5]) await check({ element: 'finial', finial, height }, oneSolid);
+for (const finial of ['pineapple', 'acorn', 'flame']) await check({ element: 'finial', finial, detail: 'low' }, oneSolid);
+for (const height of [undefined, 0.5, 2.5]) for (const finial of [undefined, 'flame']) await check({ element: 'urn', height, finial }, oneSolid);
+for (const style of [undefined, 'egyptian']) await check({ element: 'obelisk', style }, oneSolid);
 for (const finial of FINIALS) await similar({ element: 'finial', finial }, ['height']);
 await similar({ element: 'urn' }, ['height']);
 await similar({ element: 'urn', finial: 'flame' }, ['height']);

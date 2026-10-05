@@ -8,6 +8,7 @@ import { generate } from '../js/generate.js';
 import { normalize, SCHEMA } from '../js/spec.js';
 import { instanceCount } from '../js/kernel.js';
 import { BALUSTERS, layout } from '../js/gen/balustrade.js';
+import { solids } from './solid.mjs';
 
 await initKernel();
 const BUDGET = 500, TRI_MAX = 2e6;
@@ -143,6 +144,11 @@ for (const baluster of BALUSTERS) await similar({ element: 'baluster', baluster 
 // a one-bay balustrade with a given count, its height scaled: the same layout k times larger (longer runs gain
 // pedestals every ~3 m, so they are not similar by design)
 for (const baluster of BALUSTERS.filter((b) => b !== 'bar')) await similar({ element: 'balustrade', baluster, balusters: 5, urns: true }, ['height'], [0.25, 1.3]);
+// a balustrade (pedestals, rails, balusters, half-balusters, urns) and a single baluster are each ONE solid
+for (const baluster of BALUSTERS) {
+  await check({ element: 'baluster', baluster }, (r, errs) => { const n = solids(r.parts).length; if (n !== 1) errs.push(`${n} solids`); });
+  await check({ element: 'balustrade', baluster, balusters: 4, urns: true }, (r, errs) => { const n = solids(r.parts).length; if (n !== 1) errs.push(`${n} solids`); });
+}
 // the heaviest legal request at full detail stays under the triangle budget (check() asserts < 2 M)
 for (const baluster of BALUSTERS) cases.push({ element: 'balustrade', baluster, balusters: SCHEMA.balusters.max, urns: true, detail: 'high' });
 for (const c of cases) {
