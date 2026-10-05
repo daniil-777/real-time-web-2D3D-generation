@@ -26,26 +26,31 @@ export function acanthusLeaf({ h, w, lobes = 4, curl = 1, lean = 0.1, wrap = 0, 
     return { y: k * (sp[i][0] * (1 - r) + sp[i + 1][0] * r), z: k * (sp[i][1] * (1 - r) + sp[i + 1][1] * r), a: ang[i] * (1 - r) + ang[i + 1] * r };
   };
   const env = (v) => (v < 0.45 ? 0.26 + 0.74 * sstep(v / 0.45) : v < 0.84 ? 1 - 0.42 * sstep((v - 0.45) / 0.39) : 0.58 * Math.sqrt(Math.max(0.02, 1 - ((v - 0.84) / 0.16) ** 2)));
-  // lobes: pointed, leaning toward the tip, separated by deep "eyes"; each lobe carries three serrated fingers
+  // lobes: pointed, leaning toward the tip, separated by narrow notches, each edged with three small pointed fingers;
+  // the stem below and the curled head above join them continuously (a width step reads as a crease). `soft` is the
+  // lobe weight for depth: smooth through the notches, so the blade has no folds there.
   const lobeAt = (v) => {
     const x = ((v - 0.1) / 0.8) * lobes;
-    if (x <= 0 || x >= lobes) return { tooth: v >= 0.9 ? 1 : 0.55, f: 0, finger: 0 };
-    const f = x - Math.floor(x), g = f ** 0.8;                       // skew: lobes lean toward the tip
-    const tooth = Math.sin(Math.PI * g) ** 1.1;
-    const finger = Math.abs(Math.sin(Math.PI * g * 3)) ** 0.6;
-    return { tooth, f, finger };
+    if (x <= 0) return { tooth: 0.55 * sstep((0.1 - v) / 0.04), finger: 0, soft: 0 };   // the stem: full width, easing into the first notch
+    if (x >= lobes) { const r = Math.min(1, (v - 0.9) / 0.035); return { tooth: Math.sin((Math.PI / 2) * r) ** 0.9, finger: 0, soft: sstep(r) }; }
+    const g = (x - Math.floor(x)) ** 0.75, s = Math.sin(Math.PI * g);  // skew: lobes lean toward the tip
+    const q = (3 * g) % 1;
+    return { tooth: s ** 0.9, finger: 1 - Math.abs(2 * q - 1), soft: s * s };
   };
   const f = (u, v) => {
     const s = spine(v), uu = 2 * u - 1, L = lobeAt(v), au = Math.abs(uu);
-    const half = (w / 2) * env(v) * (0.46 + 0.44 * L.tooth + 0.1 * L.finger * L.tooth);
-    let x = uu * half;
-    // depth along the spine normal (outward): midrib ridge, cupped blade, lobe tips turning out, raised "pipes" from the
-    // midrib to each lobe, and a shadowed hollow ("eye") at each notch
-    let d = 0.05 * w * Math.exp(-((uu / 0.07) ** 2)) * (1 - 0.6 * v)
-          + 0.12 * w * uu * uu * (0.35 + 0.65 * L.tooth)
-          + 0.05 * w * au ** 3 * L.tooth * (0.6 + 0.4 * L.finger)
-          + 0.03 * w * Math.exp(-(((au - 0.42) / 0.1) ** 2)) * L.tooth
-          - 0.025 * w * Math.exp(-(((au - 0.62) / 0.12) ** 2)) * (1 - L.tooth);
+    // the lobes are edge work: the blade's core stays smooth and only its outer part follows the lobed outline
+    const core = (w / 2) * env(v) * 0.48, edge = (w / 2) * env(v) * (0.44 * L.tooth + 0.08 * L.tooth * L.finger);
+    let x = uu * core + Math.sign(uu) * edge * au ** 3;
+    // depth along the spine normal (outward). Carved, not crumpled: the blade's cup and the pipes are constant along
+    // the leaf; only the lobes' spoon edges and the shadowed "eye" at each notch follow the lobes, smoothly. Every ridge
+    // keeps its crest radius (sigma^2 / height) above half the blade's thickness, so the shell never folds into itself:
+    // the midrib has a fixed width, not one that narrows with the stem.
+    let d = 0.05 * w * Math.exp(-((x / (0.02 * w)) ** 2)) * (1 - 0.6 * v)
+          + 0.1 * w * uu * uu
+          + 0.014 * w * Math.exp(-(((au - 0.36) / 0.12) ** 2)) * (1 - sstep((v - 0.7) / 0.2))
+          + 0.03 * w * sstep((au - 0.5) / 0.5) * L.soft
+          - 0.03 * w * Math.exp(-(((au - 0.66) / 0.1) ** 2)) * (1 - L.soft) ** 2;
     // wrap the lower blade around the bell (fades out where the leaf turns over)
     let back = 0;
     if (wrap > 0) {

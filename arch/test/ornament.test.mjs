@@ -5,6 +5,7 @@ import { initKernel } from './node-kernel.mjs';
 import { part, mat } from '../js/kernel.js';
 import { acanthusLeaf, voluteScroll, eggAndDart, rosette } from '../js/ornament.js';
 import { renderPNG, sheet } from './raster.mjs';
+import { selfIntersections } from './self-intersect.mjs';
 
 await initKernel();
 const out = process.argv[2] || '/Volumes/LaCie/morph3d/archkit/previews';
@@ -22,6 +23,12 @@ for (const [n, m] of Object.entries({ leaf, flat, vol, egg, dart, ros })) {
   const bb = m.boundingBox();
   console.log(n, 'tris', m.numTri(), 'size', bb.max.map((x, i) => +(x - bb.min[i]).toFixed(3)));
 }
+// the leaf's shell must not fold into itself where it can be avoided: ridges keep their crest radius above half the
+// blade's thickness (the remaining crossings are at the lobes' notches). The Corinthian lower leaf had 619 before.
+const lower = acanthusLeaf({ h: 0.36 * 0.42, w: 0.44 * 0.36, wrap: 0.48 * 0.36, lean: 0.16 });
+const crossings = selfIntersections(lower);
+console.log('corinthian lower leaf: self-crossing triangle pairs', crossings);
+assert.ok(crossings < 450, `leaf self-crossings ${crossings}`);
 const bb = leaf.boundingBox();
 assert.ok(Math.abs(bb.max[2] - bb.min[2] - 0.3) < 0.3 * 0.06, 'leaf height ~ h');
 const views = (parts) => ['three-quarter', 'front', 'side'].map((v) => renderPNG(parts, { size: 360, view: v }));

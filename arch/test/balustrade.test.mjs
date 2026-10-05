@@ -149,6 +149,21 @@ for (const baluster of BALUSTERS) {
   await check({ element: 'baluster', baluster }, (r, errs) => { const n = solids(r.parts).length; if (n !== 1) errs.push(`${n} solids`); });
   await check({ element: 'balustrade', baluster, balusters: 4, urns: true }, (r, errs) => { const n = solids(r.parts).length; if (n !== 1) errs.push(`${n} solids`); });
 }
+// a named period builds that period's balustrade unless the request states the baluster or urns: the styled run equals
+// the run with those fields stated (same part names, same baluster), and a stated field wins over the style
+const vol = (r, name) => r.parts.find((p) => p.name === name)?.manifold.volume();
+const names = (r) => r.parts.map((p) => p.name).join(',');
+for (const [style, implied] of [['baroque', { baluster: 'bottle', urns: true }], ['renaissance', { baluster: 'double-vase' }],
+  ['art-deco', { baluster: 'square' }], ['modern', { baluster: 'bar' }], ['neoclassical', {}]]) {
+  const styled = await check({ element: 'balustrade', length: 4, style }), plain = await generate({ element: 'balustrade', length: 4, ...implied });
+  assert.equal(names(styled), names(plain), `${style}: parts`);
+  assert.ok(Math.abs(vol(styled, 'baluster') - vol(plain, 'baluster')) < 1e-12, `${style}: baluster kind`);
+  if (implied.baluster) {
+    const stated = await generate({ element: 'balustrade', length: 4, style, baluster: 'vase', urns: false });
+    const vase = await generate({ element: 'balustrade', length: 4, baluster: 'vase' });
+    assert.ok(Math.abs(vol(stated, 'baluster') - vol(vase, 'baluster')) < 1e-12 && !names(stated).includes('urn'), `${style}: stated fields win`);
+  }
+}
 // the heaviest legal request at full detail stays under the triangle budget (check() asserts < 2 M)
 for (const baluster of BALUSTERS) cases.push({ element: 'balustrade', baluster, balusters: SCHEMA.balusters.max, urns: true, detail: 'high' });
 for (const c of cases) {
