@@ -18,7 +18,7 @@ const thumbs = args.includes('--thumbs');
 const root = path.join(ARCHKIT, 'dataset', name);
 
 await initKernel();
-const { toGLB } = await import('../js/export.js');
+const { toGLB, materialFor } = await import('../js/export.js');
 const { captions, describe } = await import('../js/describe.js').catch(() => ({}));
 const raster = thumbs ? await import('../test/raster.mjs') : null;
 
@@ -68,12 +68,13 @@ function randomSpec(element, r) {
   return s;
 }
 
-function meshesOf(parts) {
+function meshesOf(parts, spec) {
   return parts.map((p) => {
     const g = p.manifold.calculateNormals(0, 30).getMesh();
     const nv = g.vertProperties.length / g.numProp, pos = new Float32Array(nv * 3), nrm = new Float32Array(nv * 3);
     for (let i = 0; i < nv; i++) for (let c = 0; c < 3; c++) { pos[i * 3 + c] = g.vertProperties[i * g.numProp + c]; nrm[i * 3 + c] = g.vertProperties[i * g.numProp + 3 + c]; }
-    return { name: p.name, role: p.role, material: null, positions: pos, normals: nrm, indices: Uint32Array.from(g.triVerts), transforms: p.transforms };
+    // the viewer's and exporter's own material rule (part meta first, then role/spec)
+    return { name: p.name, role: p.role, material: materialFor(p.role, spec, p.meta), positions: pos, normals: nrm, indices: Uint32Array.from(g.triVerts), transforms: p.transforms };
   });
 }
 
@@ -93,11 +94,14 @@ for (const element of only) {
       fs.writeFileSync(path.join(dir, 'spec.json'), JSON.stringify(spec, null, 1));
       const caps = captions ? captions(spec, i) : [describe ? describe(spec) : element];
       fs.writeFileSync(path.join(dir, 'captions.json'), JSON.stringify(caps, null, 1));
-      fs.writeFileSync(path.join(dir, 'mesh.glb'), Buffer.from(toGLB(meshesOf(g.parts), { name: id, material: spec.material })));
+      fs.writeFileSync(path.join(dir, 'mesh.glb'), Buffer.from(toGLB(meshesOf(g.parts, spec), { name: id })));
       if (raster) fs.writeFileSync(path.join(dir, 'thumb.png'), raster.renderPNG(g.parts, { size: 256 }));
       index.write(JSON.stringify({ id, element, path: path.relative(root, dir), size: g.size.map((x) => +x.toFixed(4)), tris: g.tris, ms: Math.round(g.ms), caption: caps[0] }) + '\n');
       ok++;
-    } catch (e) { fail++; console.log(id, 'FAILED', e.message.split('\n')[0]); }
+      // the caller owns returned manifolds: free them, and start a fresh kernel now and then (Manifold's heap limit)
+      for (const p of g.parts) { try { p.manifold.delete(); } catch (e) { /* already freed */ } }
+      if (ok % 40 === 0) await initKernel();
+    } catch (e) { fail++; console.log(id, 'FAILED', e.message.split('\n')[0]); await initKernel(); }
   }
   console.log(element.padEnd(12), 'done', `(${ok} ok, ${fail} failed so far)`);
 }
