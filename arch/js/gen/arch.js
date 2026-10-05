@@ -1197,8 +1197,11 @@ function buildParts(spec) {
   dress(L, spec, parts);
   // last resort for very long Corinthian arcades: the keystones' carving goes before the budget does
   const total = parts.reduce((s, p) => s + p.manifold.numTri() * (p.transforms ? p.transforms.length / 16 : 1), 0);
-  if (total > TRI_BUDGET) return parts.filter((p) => !p.name.startsWith('key-'));
-  return parts;
+  if (total <= TRI_BUDGET) return parts;
+  // the dropped carvings' handles are this build's own (derived from the memoised ornament): freed here
+  const kept = parts.filter((p) => !p.name.startsWith('key-')), held = new Set(kept.map((p) => p.manifold));
+  for (const m of new Set(parts.filter((p) => !held.has(p.manifold)).map((p) => p.manifold))) m.delete();
+  return kept;
 }
 
 /**

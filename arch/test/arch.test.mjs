@@ -9,6 +9,7 @@ import { generate } from '../js/generate.js';
 import { SCHEMA } from '../js/spec.js';
 import { ORDER_KEYS } from '../js/orders.js';
 import { solids } from './solid.mjs';
+import { trackHandles } from './handles.mjs';
 
 await initKernel();
 const quick = process.argv.includes('--quick');
@@ -144,12 +145,35 @@ for (const spec of PRINT) {
   } catch (err) { fails++; rows.push(`FAIL ${name} ${err.message.split('\n')[0]}`); }
 }
 
+// the last resort of the triangle budget (the keystones' carvings dropped) frees the dropped carvings' handles: forced
+// here by counting every triangle ten times (no legal arcade reaches it at the real count)
+{
+  const name = 'budget last resort frees the dropped key carvings', t0 = performance.now(), wasm = await initKernel();
+  const proto = Object.getPrototypeOf(wasm.Manifold.prototype), numTri = proto.numTri;
+  const tr = trackHandles(wasm);
+  try {
+    proto.numTri = function () { return 10 * numTri.call(this); };
+    const r = await generate({ element: 'arcade', order: 'corinthian', bays: 6 });
+    proto.numTri = numTri;
+    tr.stop();
+    assert.ok(!r.parts.some((p) => p.name.startsWith('key-')), 'the key carvings were kept');
+    // the derived handles (translate by zero) that build() did not return
+    const held = new Set(r.parts.map((p) => p.manifold));
+    const dropped = tr.calls.filter((c) => c.k === 'translate' && Array.isArray(c.args[0]) && c.args[0].every((v) => v === 0) && !held.has(c.r));
+    assert.ok(dropped.length >= 3, `${dropped.length} dropped handles (expected the three carvings)`);
+    assert.ok(dropped.every((c) => c.r.isDeleted()), `${dropped.filter((c) => !c.r.isDeleted()).length} dropped handles still alive`);
+    freeAll(r);
+    rows.push(`ok   ${name.padEnd(100)} ${String(Math.round(performance.now() - t0)).padStart(6)} ms`);
+  } catch (err) { fails++; rows.push(`FAIL ${name} ${err.message.split('\n')[0]}`); }
+  finally { proto.numTri = numTri; tr.stop(); }
+}
+
 await ownRound('first build, then delete');
 await ownRound('rebuild after delete');
 await initKernel();
 await ownRound('fresh kernel');
 
 console.log(rows.join('\n'));
-const total = cases.length + 3 * OWN.length + PRINT.length;
+const total = cases.length + 3 * OWN.length + PRINT.length + 1;
 console.log(`\n${total - fails}/${total} passed; slowest ${Math.round(worst.ms)} ms (${worst.name}); most triangles ${maxTris.tris} (${maxTris.name})`);
 if (fails) process.exit(1);

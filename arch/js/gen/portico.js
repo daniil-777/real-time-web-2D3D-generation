@@ -12,12 +12,15 @@
 import { ORDERS, columnDims } from '../orders.js';
 import { normalize } from '../spec.js';
 import { build as buildColumn } from './column.js';
-import { mat, instances, box, union, part, placeParts, partTris, partsBBox } from '../kernel.js';
+import { mat, instances, box, union, part, placeParts, partTris } from '../kernel.js';
 import { entablaturePlan, entablatureParts, pedimentPlan, pedimentParts, porticoKinds, roleFor, tagRigid } from './entablature.js';
 
 export const ELEMENTS = ['portico'];
 
 const RISER = 0.16, TREAD = 0.32, EPS = 0.001, DEFAULT_PORTICO_D = 0.6, TRI_BUDGET = 1.9e6;
+// column.js seats these abaci 0.001 D into their bells: the capitals end that much below the column height (portico.test
+// checks the planned top against the built column for every order)
+const ABACUS_SEAT = { corinthian: 0.001, composite: 0.001, solomonic: 0.001, romanesque: 0.001 };
 const PLINTH = { attic: 0.67, tuscan: 0.66, none: 0.52 };   // plinth half-width in D (column.js bases)
 
 /** Everything the portico needs to know, without geometry (used by build and expected). */
@@ -54,12 +57,13 @@ export function porticoPlan(spec) {
   const cd = columnDims(order, { height: O.colD * D });
   // roof block depth behind the frieze face: `depth` when given (at least the upper diameter), else to y = 0.75 D
   const top = O.shaftTop * D, Le = (n - 1) * axis + top, yf = -top / 2, B = spec.depth ? Math.max(spec.depth, top) : 0.75 * D - yf, yb = yf + B;
-  // the columns (column.js, memoised: a scale of a cached unit build) stand 1 mm into the stylobate; the entablature
-  // sits 1 mm into the real top of the capitals and the pediment 1 mm into the frieze, so the assembly is one solid
+  // the columns (column.js, built by build(): the plan makes no geometry) stand 1 mm into the stylobate; the
+  // entablature sits 1 mm into the top of the capitals and the pediment 1 mm into the frieze, so the assembly is one
+  // solid. The capitals' top from orders.js: the column height cd.H, less the seat of an abacus sunk into its bell
   const cspec = normalize({ element: 'column', order, height: cd.H, flutes: spec.flutes, base: spec.base,
     pedestal: false, entasis: spec.entasis, material: spec.material, detail: spec.detail }).spec;
-  const col = buildColumn(cspec), colTop = partsBBox(col).max[2];
-  const zs = steps * RISER, zcol = steps > 0 ? zs - EPS : zs, zc = zcol + colTop - EPS;
+  const capTop = cd.H - (ABACUS_SEAT[order] || 0) * D;
+  const zs = steps * RISER, zcol = steps > 0 ? zs - EPS : zs, zc = zcol + capTop - EPS;
   const axes = Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * axis);
   const ent = entablaturePlan({ order, D, L: Le, B, returns: true, fk: k.fk, ck: k.ck, enrich: k.enrich, detail: k.detail,
     parts: pedKind === 'none' ? 'all' : 'lower', axes });
@@ -68,7 +72,7 @@ export function porticoPlan(spec) {
   const Xs = axes[n - 1] + hp * D;
   const width = geom(D, axis);
   const zp = zc + ent.size.z - EPS, z = ped ? zp + ped.size.z : zc + ent.size.z;
-  return { order, O, n, steps, D, axis, cd, top, Le, yf, yb, B, zs, zcol, zc, zp, col, axes, ent, ped, Xs, plat, base, k,
+  return { order, O, n, steps, D, axis, cd, top, Le, yf, yb, B, zs, zcol, zc, zp, cspec, capTop, axes, ent, ped, Xs, plat, base, k,
     size: { x: width, z } };
 }
 
@@ -83,9 +87,8 @@ export function build(spec) {
     }
     parts.push(part('stylobate', 'stone', union(blocks), null, { rigid: false }));   // the platform is one continuous member
   }
-  // columns: built once by the column family, placed as instances
-  const col = pp.col;
-  for (const p of col) {
+  // columns: built once by the column family (memoised: a scale of a cached unit build), placed as instances
+  for (const p of buildColumn(pp.cspec)) {
     const local = p.transforms ? Array.from({ length: p.transforms.length / 16 }, (_, i) => p.transforms.subarray(16 * i, 16 * i + 16)) : [mat.I()];
     const xf = pp.axes.flatMap((x) => local.map((m) => mat.mul(mat.T(x, 0, pp.zcol), m)));
     parts.push(part(p.name, p.role, p.manifold, instances(xf), { ...p.meta, rigid: true }));   // every part of a placed column is rigid
@@ -111,9 +114,12 @@ function fitBudget(parts, budget, D) {
     const order = out.map((p, i) => i).sort((a, b) => partTris(out[b]) - partTris(out[a]));
     for (const i of order) {
       if (sum <= budget || partTris(out[i]) < 0.02 * budget) break;
-      const before = partTris(out[i]);
-      out[i] = { ...out[i], manifold: out[i].manifold.simplify(D / k) };
+      const before = partTris(out[i]), old = out[i].manifold;
+      out[i] = { ...out[i], manifold: old.simplify(D / k) };
       sum += partTris(out[i]) - before;
+      // the replaced handle is this build's own (a column's derived handle, a run, an earlier simplification): freed
+      // unless another part still holds it
+      if (!out.some((p) => p.manifold === old)) old.delete();
     }
   }
   return out;

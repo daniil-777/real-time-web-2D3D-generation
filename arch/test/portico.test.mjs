@@ -8,8 +8,9 @@ import { generate } from '../js/generate.js';
 import { SCHEMA } from '../js/spec.js';
 import { ORDER_KEYS, ORDERS } from '../js/orders.js';
 import { instanceCount } from '../js/kernel.js';
+import { trackHandles } from './handles.mjs';
 
-await initKernel();
+const wasm = await initKernel();
 await generate({ element: 'portico', order: 'corinthian' });       // warm-up (WASM compile, first allocations): not timed
 
 const BUDGET_MS = 1500, MAX_TRIS = 2e6, S = SCHEMA;
@@ -118,6 +119,39 @@ await t('the entablature bears on the capitals and the columns on the stylobate 
     const foot = Math.min(...r.parts.filter((p) => p.name === 'base' || p.name === 'shaft').map((p) => partsBBox([p]).min[2]));
     assert.ok(sty.max[2] - foot > 0.0009 && sty.max[2] - foot < 0.0015, `${order} ${height}: column foot ${foot} vs stylobate ${sty.max[2]}`);
   }
+});
+// kernel handles (final review): the plan (expected(), the drawing's dimensions) builds nothing, its capitals' top from
+// orders.js is the built column's for every order, and the budget's simplifications free the handles they replace
+await t('porticoPlan() and expected() make no kernel object; the planned capital top is the built one (every order)', async () => {
+  const { normalize } = await import('../js/spec.js');
+  const { porticoPlan, expected } = await import('../js/gen/portico.js');
+  const { build: buildColumn } = await import('../js/gen/column.js');
+  const { partsBBox } = await import('../js/kernel.js');
+  for (const order of ORDER_KEYS) for (const height of [undefined, 12]) {
+    const spec = normalize({ element: 'portico', order, height }).spec, tr = trackHandles(wasm);
+    let pp;
+    try { pp = porticoPlan(spec); expected(spec); } finally { tr.stop(); }
+    assert.equal(tr.made.size, 0, `${order}: the plan made ${tr.made.size} kernel objects`);
+    const col = buildColumn(pp.cspec), top = partsBBox(col).max[2];
+    for (const p of col) p.manifold.delete();
+    assert.ok(Math.abs(top - pp.capTop) < 1e-6 * pp.cd.H, `${order} ${height}: built capital top ${top}, planned ${pp.capTop}`);
+  }
+});
+await t('the triangle budget frees every handle its simplifications replace', async () => {
+  const { normalize } = await import('../js/spec.js');
+  const { porticoPlan } = await import('../js/gen/portico.js');
+  const spec = { element: 'portico', order: 'composite', columns: 12 }, D = porticoPlan(normalize(spec).spec).D, tr = trackHandles(wasm);
+  let r;
+  try { r = await generate(spec); } finally { tr.stop(); }
+  // the budget's simplifications (tolerance D/700, D/350, ...; the generators' own simplify carvings, at other tolerances)
+  const tolOk = (v) => [700, 350, 175, 87.5].some((k) => Math.abs(v - D / k) < 1e-12);
+  const simp = tr.calls.filter((c) => c.k === 'simplify' && tolOk(c.args[0])), held = new Set(r.parts.map((p) => p.manifold)), replaced = [];
+  // the chains that end in a returned part
+  for (let grew = true; grew;) { grew = false; for (const c of simp) if (held.has(c.r) && !held.has(c.self)) { held.add(c.self); replaced.push(c.self); grew = true; } }
+  assert.ok(replaced.length > 0, 'the budget simplified nothing: pick a heavier portico');
+  const alive = replaced.filter((m) => !m.isDeleted());
+  assert.equal(alive.length, 0, `${alive.length} of ${replaced.length} replaced handles still alive`);
+  const seen = new Set(); for (const p of r.parts) if (!seen.has(p.manifold)) { seen.add(p.manifold); p.manifold.delete(); }
 });
 console.log(`\n${pass} passed, ${fail} failed (${cases.length} builds + targeted checks)`);
 process.exit(fail ? 1 : 0);
