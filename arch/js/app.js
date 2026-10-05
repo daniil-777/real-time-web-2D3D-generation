@@ -236,7 +236,7 @@ const S = {
 let edgeStash = null;             // feature edges that arrived before their build was on screen
 // the idle showcase's state (see the end of this file)
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)');
-const SC = { on: false, paused: false, i: 0, timer: 0, idleT: 0, typeT: 0, engaged: false,
+const SC = { on: false, paused: false, gen: 0, i: 0, timer: 0, idleT: 0, typeT: 0, engaged: false,
   forced: Q.get('showcase') === '1',
   allowed: Q.get('showcase') === '1' || (!SHOT && Q.get('showcase') !== '0' && !Q.get('q') && !Q.get('spec') && !Q.get('deform')) };
 A.showcase = { running: false, index: -1, phase: '', shown: [] };
@@ -1245,7 +1245,14 @@ function endDrag() {
 }
 // a release ends the drag; the range's own change event (which follows) bakes, once. Only a cancelled pointer or a lost
 // focus, which never send that change, bake here.
-window.addEventListener('pointerup', () => { S.sliderActive = false; });
+window.addEventListener('pointerup', () => {
+  if (!S.sliderActive) return;
+  S.sliderActive = false;
+  // a slider brought back to where it started sends no change: nothing to bake, the preview gives way to the model
+  setTimeout(() => {
+    if (!S.sliderActive && !dragging() && !inflight && !queued && viewer && viewer.previewing && JSON.stringify(S.x) === S.builtX) viewer.showPreview(false);
+  }, 0);
+});
 window.addEventListener('pointercancel', endDrag);
 window.addEventListener('blur', endDrag);
 $('#x-keep').addEventListener('change', (e) => { S.x.keep = e.target.checked; syncURL(); requestBuild('deform'); renderX(); });
@@ -1395,7 +1402,7 @@ function startShowcase() {
 function stopShowcase() {
   clearTimeout(SC.idleT);
   if (!SC.on) return;
-  SC.on = false; SC.paused = false; A.showcase.running = false; A.showcase.phase = '';
+  SC.on = false; SC.paused = false; SC.gen++; A.showcase.running = false; A.showcase.phase = '';
   clearTimeout(SC.timer); clearTimeout(SC.typeT);
   document.documentElement.classList.remove('showcase');
   quiet(false);
@@ -1409,7 +1416,7 @@ let inView = true;
 const onShow = () => !document.hidden && inView;
 function pauseShowcase() {
   if (!SC.on || SC.paused) return;
-  SC.paused = true; A.showcase.phase = 'paused';
+  SC.paused = true; SC.gen++; A.showcase.phase = 'paused';   // the loop under way (typing, building) ends at its next step
   clearTimeout(SC.timer); clearTimeout(SC.typeT);
   if (viewer) viewer.controls.autoRotate = false;
   $('#prompt').value = S.prompt;
@@ -1417,6 +1424,7 @@ function pauseShowcase() {
 function resumeShowcase() {
   if (!SC.on || !SC.paused || !onShow()) return;
   SC.paused = false;
+  clearTimeout(SC.timer); clearTimeout(SC.typeT);
   SC.timer = setTimeout(nextExample, 1200);
 }
 document.addEventListener('visibilitychange', () => (document.hidden ? pauseShowcase() : resumeShowcase()));
@@ -1427,15 +1435,15 @@ if (typeof IntersectionObserver !== 'undefined') {
     if (inView) resumeShowcase(); else pauseShowcase();
   }, { threshold: 0.15 }).observe(stage);
 }
-/** Type text into the prompt box, a character at a time (at once with reduced motion). */
-function typeOut(text) {
+/** Type text into the prompt box, a character at a time (at once with reduced motion); stops when its loop is over. */
+function typeOut(text, gen) {
   const box = $('#prompt');
   if (REDUCED.matches) { box.value = text; box.dispatchEvent(new Event('input')); return Promise.resolve(); }
   return new Promise((resolve) => {
     let n = 0;
     box.value = '';
     const step = () => {
-      if (!SC.on || SC.paused) return resolve();
+      if (SC.gen !== gen) return resolve();
       box.value = text.slice(0, ++n);
       if (n >= text.length) { box.dispatchEvent(new Event('input')); SC.typeT = setTimeout(resolve, 220); return; }
       SC.typeT = setTimeout(step, 22 + Math.random() * 26);
@@ -1443,31 +1451,35 @@ function typeOut(text) {
     SC.typeT = setTimeout(step, 120);
   });
 }
-const running = () => SC.on && !SC.paused;
+// One loop at a time: every pause or stop starts a new generation, and an example whose generation is over (it was
+// typing or building when the tab was hidden) ends at its next step instead of scheduling another; a resume starts
+// the new generation's loop.
 async function nextExample() {
-  if (!running()) return;
+  if (!SC.on || SC.paused) return;
+  const gen = SC.gen, live = () => SC.gen === gen && SC.on && !SC.paused;
   const t0 = performance.now(), k = SC.i++ % SHOWCASE.length, ex = SHOWCASE[k];
   A.showcase.index = k; A.showcase.phase = 'typing';
   if (viewer) viewer.controls.autoRotate = false;
-  await typeOut(ex.text);
-  if (!running()) return;
+  await typeOut(ex.text, gen);
+  if (!live()) return;
   A.showcase.phase = 'building';
   S.auto = true;
   S.reveal = !REDUCED.matches;
   // the transform is applied as a link would apply it, but the panel stays as the visitor left it (closed)
   const x = ex.x ? { ...structuredClone(XDEF), ...ex.x } : null;
   try { await submit(ex.text, x, { keepPanel: true }); } catch (e) { /* a failed example: go on */ }
-  if (!running()) return;
+  if (!live()) return;
   A.showcase.phase = REDUCED.matches ? 'holding' : 'revealing';
   A.showcase.shown.push({ index: k, text: ex.label || ex.text, at: Math.round(performance.now()), ms: Math.round(performance.now() - t0) });
   if (A.showcase.shown.length > 40) A.showcase.shown.splice(0, A.showcase.shown.length - 40);
   if (viewer && !REDUCED.matches) { viewer.controls.autoRotate = true; viewer.controls.autoRotateSpeed = -0.55; }
-  setTimeout(() => { if (running() && A.showcase.index === k) A.showcase.phase = 'holding'; }, 1100);
+  setTimeout(() => { if (live() && A.showcase.index === k) A.showcase.phase = 'holding'; }, 1100);
   // the next example's generator loads while this one is on show
   const nx = SHOWCASE[SC.i % SHOWCASE.length];
   try { const el = parseFn && parseFn(nx.text).spec.element; if (el) builder.w.postMessage({ type: 'warm', element: el }); } catch (e) { /* warm-up is optional */ }
   // one example every ~5 s; a slow build still gets 2.6 s on show (the rise, then a look)
   const hold = REDUCED.matches ? 9000 : Math.max(2600, 5200 - (performance.now() - t0));
+  clearTimeout(SC.timer);
   SC.timer = setTimeout(nextExample, hold);
 }
 // interaction stops it (capture: before the canvas or a control handles the event); a pointer that only moves delays
