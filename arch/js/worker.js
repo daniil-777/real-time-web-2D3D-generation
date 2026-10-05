@@ -22,10 +22,44 @@ import { deformParts } from './deform.js';
 
 const MANIFOLD = 'https://cdn.jsdelivr.net/npm/manifold-3d@3.5.4/manifold.js';
 const MANIFOLD_WASM = 'https://cdn.jsdelivr.net/npm/manifold-3d@3.5.4/manifold.wasm';
-// the kernel's WebAssembly (540 KB) is requested the moment this worker starts, in parallel with Manifold's JS (which
-// would otherwise ask for it only once it has loaded); a document <link rel=preload> could not serve a worker's fetch
-const wasmResponse = fetch(MANIFOLD_WASM, { credentials: 'same-origin' });
-wasmResponse.catch(() => {});
+// Subresource Integrity for the CAD kernel (a worker has no import map): both files must match the SHA-384 digests of
+// the exact manifold-3d 3.5.4 files on the CDN before any of their code runs; a changed file is refused
+const SRI = {
+  [MANIFOLD]: 'sha384-EOsX2khT48LC7b2eu/O0+bqGUQLkJOEKF4hEN0VViSLPW7vZzAjlfczpBJmVQoSx',
+  [MANIFOLD_WASM]: 'sha384-tgN/mwVxqQ2ljngQCn3I+nZE1oftv7/o1s6A0uCjx60YYAK/GMZMKREqKF7boKuN',
+};
+// SubtleCrypto exists only in secure contexts (https, localhost); elsewhere (a dev server on the LAN) fetch's own
+// integrity option checks the same digests, at the cost of the streaming compile
+const SUBTLE = !!(globalThis.crypto && crypto.subtle);
+async function verified(bytes, url) {
+  if (!SUBTLE) return bytes;
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-384', bytes));
+  let b = '';
+  for (const x of d) b += String.fromCharCode(x);
+  if (`sha384-${btoa(b)}` !== SRI[url]) throw Object.assign(new Error(`${url.split('/').pop()} does not match its pinned SHA-384 (integrity check)`), { integrity: true });
+  return bytes;
+}
+const fetchOk = (url) => fetch(url, { credentials: 'same-origin', ...(SUBTLE ? {} : { integrity: SRI[url] }) })
+  .then((r) => { if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`); return r; });
+/** The kernel's WebAssembly, compiled while it downloads (streaming) and hashed alongside: only a module whose bytes
+ *  passed the check is handed on to be instantiated (run). A failed streaming compile (a wrong MIME type) compiles the
+ *  verified bytes instead. */
+async function compileVerified(res) {
+  if (!SUBTLE || !WebAssembly.compileStreaming || !res.body) return WebAssembly.compile(await verified(await res.arrayBuffer(), MANIFOLD_WASM));
+  const [a, b] = res.body.tee();
+  const streamed = WebAssembly.compileStreaming(new Response(a, { headers: { 'Content-Type': 'application/wasm' } }));
+  streamed.catch(() => {});
+  const bytes = await verified(await new Response(b).arrayBuffer(), MANIFOLD_WASM);
+  return streamed.catch(() => WebAssembly.compile(bytes));
+}
+// both files are requested the moment this worker starts, the WebAssembly (540 KB) compiling as it arrives, in parallel
+// with Manifold's JS (which would otherwise ask for it only once it has run); a document <link rel=preload> could not
+// serve a worker's fetch. A network failure is retried once; a failed integrity check is final.
+const wasmModule = fetchOk(MANIFOLD_WASM).then(compileVerified)
+  .catch((e) => (e.integrity ? Promise.reject(e) : fetchOk(MANIFOLD_WASM).then(compileVerified)));
+wasmModule.catch(() => {});
+const manifoldJS = fetchOk(MANIFOLD).then((r) => r.arrayBuffer()).then((b) => verified(b, MANIFOLD));
+manifoldJS.catch(() => {});
 
 // WebAssembly memory never shrinks, and generators leave temporaries behind: the page recycles this worker (a fresh
 // Manifold instance) when the heap grows large or after a number of builds. The heap is found by watching the
@@ -37,7 +71,6 @@ const watch = (fn) => async (...args) => {
   for (const v of Object.values((inst && inst.exports) || {})) if (v instanceof WebAssembly.Memory) memory = v;
   return r;
 };
-if (WebAssembly.instantiateStreaming) WebAssembly.instantiateStreaming = watch(WebAssembly.instantiateStreaming.bind(WebAssembly));
 WebAssembly.instantiate = watch(WebAssembly.instantiate.bind(WebAssembly));
 const heapMB = () => (memory ? Math.round(memory.buffer.byteLength / 1048576) : 0);
 
@@ -46,13 +79,15 @@ const heapMB = () => (memory ? Math.round(memory.buffer.byteLength / 1048576) : 
 const epoch = () => performance.timeOrigin + performance.now();
 const boot = { start: epoch() };
 const kernel = (async () => {
-  const { default: Module } = await import(MANIFOLD);
+  // Manifold's JS, verified, runs from a blob: URL (it resolves nothing against its own URL: instantiateWasm below
+  // hands it the WebAssembly)
+  const url = URL.createObjectURL(new Blob([await manifoldJS], { type: 'text/javascript' }));
+  let Module;
+  try { ({ default: Module } = await import(url)); } finally { URL.revokeObjectURL(url); }
   boot.imported = epoch();
-  // compile from the early response (streaming); Emscripten's own fetch is the fallback
   const instantiateWasm = (imports, receive) => {
-    wasmResponse.then((res) => WebAssembly.instantiateStreaming(res, imports))
-      .catch(() => fetch(MANIFOLD_WASM).then((r) => r.arrayBuffer()).then((b) => WebAssembly.instantiate(b, imports)))
-      .then((r) => receive(r.instance, r.module), (e) => post({ type: 'fatal', message: 'the CAD kernel could not load: ' + msg(e) }));
+    wasmModule.then((mod) => WebAssembly.instantiate(mod, imports).then((inst) => receive(inst, mod)))
+      .catch((e) => post({ type: 'fatal', message: 'the CAD kernel could not load: ' + msg(e) }));
     return {};
   };
   const wasm = await Module({ instantiateWasm });

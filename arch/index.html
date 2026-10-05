@@ -49,13 +49,30 @@
     "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/",
     "n8ao": "https://cdn.jsdelivr.net/npm/n8ao@2.0.1/dist/N8AO.js",
     "postprocessing": "data:text/javascript,export%20class%20Pass%7B%7D"
+  },
+  "integrity": {
+    "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.min.js": "sha384-EU5UWigB3OuXjAXooUegndJSqYber3YSJHDoMZs6rV96yY/ol/B4W8logw4CKWkA",
+    "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.core.js": "sha384-mdKeCwPEcbDvzaxwhm+MVuLoMou+E7jQqrs4tmu/n8HBYPGI1kZt0MkJxlMR4zFM",
+    "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/controls/OrbitControls.js": "sha384-LSqANrugPGTgf0eYsQTloqKWy926dOOXo2iZ9y6wLMIDEQoU9AaCLJF1Vcc7oJXr",
+    "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/environments/RoomEnvironment.js": "sha384-/H49oz0ZtMgJNgMZ+OhhuMuKBOsaiC3kY0/PZSvgJJXAOJJwmSBJjzlV5lJul3MB",
+    "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/postprocessing/EffectComposer.js": "sha384-9Rdp95mYHRj8gGxPz4TqkDaCUh8rd67b7V5slkjz7GA9uNXtykhptQdEPPOocbUn",
+    "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/postprocessing/MaskPass.js": "sha384-5MFlCMNYgjI2KQDXH12DjwyKtWiXRsrFMMGKIP3pCQemWtt1INLwPKwZDF0TEKG9",
+    "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/postprocessing/Pass.js": "sha384-927X5fcqlqKPsXZV1w3tv5BZx797OXX3D/TDJk0FHwJd12z58B5aqS77g5LZoprI",
+    "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/postprocessing/RenderPass.js": "sha384-uXlYrFHzQTAiW5xsJFs0kB/Pym7jA0qunZ+aS1V25CJ1MjaKbgNQv5SjoEzNoa4F",
+    "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/postprocessing/SMAAPass.js": "sha384-XObh8MSfejI2yQTnB0uC2O1XkdLJMTe8R5UW546TuwmRjjEL0kv367zVSzbhihqr",
+    "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/postprocessing/ShaderPass.js": "sha384-0DjIyth2/18aCmCo4x7GEOqSJTu3uNx5ptRg+rlkZ7zs9MlNfUXVEhbUuzVzglaG",
+    "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/shaders/CopyShader.js": "sha384-Hxod3deUgRexb42wOr+7J8ySu/QNr1oXlCfY9bivrSKBseng+R34eirHq/Rvvxee",
+    "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/shaders/SMAAShader.js": "sha384-OjA3eJHhEhL7Ggc/82fZIWV8f5WamiiWzpcNZbw0UHxLHSJjkz8Sy+nlT+7j7YuT",
+    "https://cdn.jsdelivr.net/npm/n8ao@2.0.1/dist/N8AO.js": "sha384-jcJ/w7gj+XcRFfP4/YSQb2BtRmB5MZCoFMyF9aDzo0CYtODOgJnXShwgIuvAv2MT"
   }
 }
 </script>
 <!-- N8AO also ships a pass for the pmndrs "postprocessing" library that this page does not use; that import is
-     satisfied by the one-line stub above instead of a 300 KB download. -->
-<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.min.js" crossorigin>
-<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.core.js" crossorigin>
+     satisfied by the one-line stub above instead of a 300 KB download. Subresource Integrity: every module the page
+     takes from the CDN (the import map's "integrity", the preloads' integrity=) and the CAD kernel the worker fetches
+     (worker.js, checked with SubtleCrypto) must match these SHA-384 digests of the pinned versions, or it is refused. -->
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.min.js" integrity="sha384-EU5UWigB3OuXjAXooUegndJSqYber3YSJHDoMZs6rV96yY/ol/B4W8logw4CKWkA" crossorigin="anonymous">
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.core.js" integrity="sha384-mdKeCwPEcbDvzaxwhm+MVuLoMou+E7jQqrs4tmu/n8HBYPGI1kZt0MkJxlMR4zFM" crossorigin="anonymous">
 <style>
   :root {
     --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Inter, system-ui, sans-serif;
