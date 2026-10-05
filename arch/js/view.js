@@ -17,6 +17,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { PBR } from './export.js';
+import { polar3 } from './deform.js';
 
 const DEG = Math.PI / 180;
 // view directions in the kernel's Z-up frame (az: 0 = from the front (-Y), negative = from the left; el above horizon)
@@ -171,7 +172,7 @@ function stoneMaterial(key) {
       .replace('#include <common>', '#include <common>\nvarying vec3 vArchP;')
       .replace('#include <project_vertex>', `#include <project_vertex>
         vec4 archP = vec4(transformed, 1.0);
-        #ifdef USE_INSTANCING
+        #if defined(USE_INSTANCING) && !defined(ARCH_DEFORM)
           archP = instanceMatrix * archP;
         #endif
         vArchP = (modelMatrix * archP).xyz;`);
@@ -214,6 +215,203 @@ function dominantMaterial(meshes) {
   let best = null, bestA = -1;
   for (const [k, a] of area) if (a > bestA) { best = k; bestA = a; }
   return best;
+}
+
+// ------------------------------------------------------------------------------------------------ GPU deformation preview
+//
+// While a transform slider or a lattice handle moves, the undeformed element is drawn deformed by a vertex shader that
+// evaluates the same map as deform.js (the worker bakes the exact, refined, watertight result on release). Bend, twist,
+// taper, shear (lean) and stretch are all "axis ops": a point's image depends on its coordinate t along the op's axis
+// and is affine in the two cross coordinates (Barr's deformations). So each op is sampled from deform.js's own compiled
+// map into a table over t — T(t) = image of the axis point, P(t), Q(t) = images of the two cross unit vectors — and the
+// shader interpolates it: no maths is duplicated, the preview is the engine's map (1024 samples over the op's input
+// frame; a table step of L/850 bends a 3 m rail to within micrometres). FFD is evaluated directly (Bernstein sums
+// over the control-point offsets). Normals come from the Jacobian of the whole chain (forward differences, cofactor
+// matrix). Rigid ornament is moved on the CPU by the engine's own instance formula (point + polar rotation of J).
+
+const DEF_MAX_OPS = 8, DEF_SAMPLES = 1024, DEF_MAX_DEG = 6;
+const AXIS = { x: 0, y: 1, z: 2 };
+
+const DEFORM_GLSL = /* glsl */`
+uniform highp sampler2D uDefTab;
+uniform highp sampler2D uDefOff;
+uniform int uDefN;
+uniform int uDefSamples;
+uniform int uDefAxis[${DEF_MAX_OPS}];
+uniform vec3 uDefC[${DEF_MAX_OPS}];
+uniform vec2 uDefDom[${DEF_MAX_OPS}];
+uniform int uDefFFD;
+uniform ivec3 uDefDims;
+uniform vec3 uDefMin;
+uniform vec3 uDefSize;
+uniform float uDefGround;
+uniform float uDefH;
+float archAx(vec3 v, int a) { return a == 0 ? v.x : (a == 1 ? v.y : v.z); }
+vec3 archRow(int row, float s) {
+  int N = uDefSamples; float hi = float(N - 1);
+  if (s <= 0.0) { vec3 a = texelFetch(uDefTab, ivec2(0, row), 0).xyz, b = texelFetch(uDefTab, ivec2(1, row), 0).xyz; return a + (b - a) * s; }
+  if (s >= hi) { vec3 a = texelFetch(uDefTab, ivec2(N - 2, row), 0).xyz, b = texelFetch(uDefTab, ivec2(N - 1, row), 0).xyz; return b + (b - a) * (s - hi); }
+  int i = int(s); float f = s - float(i);
+  return mix(texelFetch(uDefTab, ivec2(i, row), 0).xyz, texelFetch(uDefTab, ivec2(i + 1, row), 0).xyz, f);
+}
+vec3 archOp(int k, vec3 v) {
+  int a = uDefAxis[k]; vec3 c = uDefC[k]; vec2 dom = uDefDom[k];
+  float s = (archAx(v, a) - dom.x) / (dom.y - dom.x) * float(uDefSamples - 1);
+  int p = a == 0 ? 1 : (a == 1 ? 2 : 0), q = a == 0 ? 2 : (a == 1 ? 0 : 1);
+  return archRow(3 * k, s) + archRow(3 * k + 1, s) * (archAx(v, p) - archAx(c, p)) + archRow(3 * k + 2, s) * (archAx(v, q) - archAx(c, q));
+}
+void archBern(int deg, float x, out float b[${DEF_MAX_DEG + 1}]) {
+  float px[${DEF_MAX_DEG + 1}], qx[${DEF_MAX_DEG + 1}];
+  px[0] = 1.0; qx[0] = 1.0;
+  for (int i = 1; i <= ${DEF_MAX_DEG}; i++) { px[i] = px[i - 1] * x; qx[i] = qx[i - 1] * (1.0 - x); }
+  float c = 1.0;
+  for (int i = 0; i <= ${DEF_MAX_DEG}; i++) {
+    b[i] = 0.0;
+    if (i <= deg) { b[i] = c * px[i] * qx[deg - i]; c = c * float(deg - i) / float(i + 1); }
+  }
+}
+vec3 archFFD(vec3 v) {
+  vec3 s = clamp((v - uDefMin) / uDefSize, 0.0, 1.0);
+  float bs[${DEF_MAX_DEG + 1}], bt[${DEF_MAX_DEG + 1}], bu[${DEF_MAX_DEG + 1}];
+  archBern(uDefDims.x, s.x, bs); archBern(uDefDims.y, s.y, bt); archBern(uDefDims.z, s.z, bu);
+  vec3 d = vec3(0.0); int id = 0;
+  for (int k = 0; k <= ${DEF_MAX_DEG}; k++) { if (k > uDefDims.z) break;
+    for (int j = 0; j <= ${DEF_MAX_DEG}; j++) { if (j > uDefDims.y) break;
+      float w2 = bu[k] * bt[j];
+      for (int i = 0; i <= ${DEF_MAX_DEG}; i++) { if (i > uDefDims.x) break;
+        d += w2 * bs[i] * texelFetch(uDefOff, ivec2(id, 0), 0).xyz; id++; } } }
+  return v + d;
+}
+vec3 archDeform(vec3 v) {
+  for (int k = 0; k < ${DEF_MAX_OPS}; k++) { if (k >= uDefN) break; v = archOp(k, v); }
+  if (uDefFFD > 0) v = archFFD(v);
+  v.z += uDefGround;
+  return v;
+}
+vec3 archInst(vec3 p) {
+  #ifdef USE_INSTANCING
+    return (instanceMatrix * vec4(p, 1.0)).xyz;
+  #else
+    return p;
+  #endif
+}
+vec3 archInstN(vec3 n) {
+  #ifdef USE_INSTANCING
+    mat3 im = mat3(instanceMatrix);
+    n /= vec3(dot(im[0], im[0]), dot(im[1], im[1]), dot(im[2], im[2]));
+    return im * n;
+  #else
+    return n;
+  #endif
+}
+`;
+
+/** Shader edits that move a material's vertices (and normals) through the deformation, in kernel space. */
+function injectDeform(sh) {
+  let v = sh.vertexShader.replace('#include <common>', '#include <common>\n' + DEFORM_GLSL);
+  v = v.replace('#include <beginnormal_vertex>', `
+    #define ARCH_HAS_N
+    vec3 archQ = archInst(position);
+    vec3 archF0 = archDeform(archQ);
+    vec3 archJx = (archDeform(archQ + vec3(uDefH, 0.0, 0.0)) - archF0) / uDefH;
+    vec3 archJy = (archDeform(archQ + vec3(0.0, uDefH, 0.0)) - archF0) / uDefH;
+    vec3 archJz = (archDeform(archQ + vec3(0.0, 0.0, uDefH)) - archF0) / uDefH;
+    vec3 archNi = archInstN(vec3(normal));
+    vec3 archN = archNi.x * cross(archJy, archJz) + archNi.y * cross(archJz, archJx) + archNi.z * cross(archJx, archJy);
+    archN = dot(archN, archN) > 1e-30 ? normalize(archN) : archNi;
+    archQ = archF0;
+    vec3 objectNormal = archN;`);
+  v = v.replace('#include <defaultnormal_vertex>', `
+    vec3 transformedNormal = normalMatrix * objectNormal;
+    #ifdef FLIP_SIDED
+      transformedNormal = - transformedNormal;
+    #endif`);
+  v = v.replace('#include <begin_vertex>', `
+    #ifndef ARCH_HAS_N
+      vec3 archQ = archDeform(archInst(position));
+    #endif
+    vec3 transformed = archQ;`);
+  v = v.replace('#include <project_vertex>', `
+    vec4 mvPosition = modelViewMatrix * vec4(transformed, 1.0);
+    gl_Position = projectionMatrix * mvPosition;`);
+  v = v.replace('#include <worldpos_vertex>', `
+    #if defined( USE_ENVMAP ) || defined( DISTANCE ) || defined ( USE_SHADOWMAP ) || defined ( USE_TRANSMISSION ) || NUM_SPOT_LIGHT_COORDS > 0
+      vec4 worldPosition = modelMatrix * vec4(transformed, 1.0);
+    #endif`);
+  sh.vertexShader = v;
+}
+
+/** The uniforms every deforming material shares, filled from deform.js's deformer. */
+class DeformUniforms {
+  constructor() {
+    this.tab = new Float32Array(DEF_SAMPLES * 3 * DEF_MAX_OPS * 4);
+    this.tabTex = new THREE.DataTexture(this.tab, DEF_SAMPLES, 3 * DEF_MAX_OPS, THREE.RGBAFormat, THREE.FloatType);
+    this.off = new Float32Array(343 * 4);
+    this.offTex = new THREE.DataTexture(this.off, 343, 1, THREE.RGBAFormat, THREE.FloatType);
+    for (const t of [this.tabTex, this.offTex]) { t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.needsUpdate = true; }
+    this.u = {
+      uDefTab: { value: this.tabTex }, uDefOff: { value: this.offTex }, uDefN: { value: 0 }, uDefSamples: { value: DEF_SAMPLES },
+      uDefAxis: { value: new Array(DEF_MAX_OPS).fill(2) }, uDefC: { value: Array.from({ length: DEF_MAX_OPS }, () => new THREE.Vector3()) },
+      uDefDom: { value: Array.from({ length: DEF_MAX_OPS }, () => new THREE.Vector2(0, 1)) }, uDefFFD: { value: 0 },
+      uDefDims: { value: new THREE.Vector3(1, 1, 1) }, uDefMin: { value: new THREE.Vector3() }, uDefSize: { value: new THREE.Vector3(1, 1, 1) },
+      uDefGround: { value: 0 }, uDefH: { value: 1e-3 },
+    };
+  }
+
+  /** Fill from ops (resolved list) and D = makeDeformer(ops, bbox). Returns false when an op cannot run on the GPU. */
+  set(ops, D, ground) {
+    const u = this.u, diag = Math.hypot(...[0, 1, 2].map((k) => D.bbox.max[k] - D.bbox.min[k])) || 1;
+    let n = 0, ci = 0, ffd = null;
+    const v = new Float64Array(3);
+    for (let k = 0; k < ops.length; k++) {
+      const F = D.frames[k];
+      if (!F) continue;
+      const c = D.compiled[ci++], type = c.type;
+      if (type === 'ffd') {
+        if (ffd || ci < D.compiled.length) return false;   // the shader runs FFD after the axis ops: it must be last
+        ffd = c; continue;
+      }
+      if (n >= DEF_MAX_OPS) return false;
+      const op = ops[k], ai = AXIS[op.axis ?? (type === 'bend' ? 'x' : 'z')];
+      const p = (ai + 1) % 3, q = (ai + 2) % 3, cen = [0, 1, 2].map((a) => (F.min[a] + F.max[a]) / 2);
+      const L = Math.max(F.max[ai] - F.min[ai], 1e-6), t0 = F.min[ai] - 0.1 * L, t1 = F.max[ai] + 0.1 * L;
+      const base = 3 * n * DEF_SAMPLES * 4;
+      for (let i = 0; i < DEF_SAMPLES; i++) {
+        const t = t0 + ((t1 - t0) * i) / (DEF_SAMPLES - 1);
+        v[0] = cen[0]; v[1] = cen[1]; v[2] = cen[2]; v[ai] = t;
+        c.map(v);
+        const T0 = v[0], T1 = v[1], T2 = v[2];
+        for (const [row, axis] of [[1, p], [2, q]]) {
+          v[0] = cen[0]; v[1] = cen[1]; v[2] = cen[2]; v[ai] = t; v[axis] += 1;
+          c.map(v);
+          const o = base + (row * DEF_SAMPLES + i) * 4;
+          this.tab[o] = v[0] - T0; this.tab[o + 1] = v[1] - T1; this.tab[o + 2] = v[2] - T2;
+        }
+        const o = base + i * 4;
+        this.tab[o] = T0; this.tab[o + 1] = T1; this.tab[o + 2] = T2;
+      }
+      u.uDefAxis.value[n] = ai;
+      u.uDefC.value[n].set(cen[0], cen[1], cen[2]);
+      u.uDefDom.value[n].set(t0, t1);
+      n++;
+    }
+    u.uDefN.value = n;
+    if (ffd) {
+      const { dims, min, size } = ffd.lattice;
+      if (Math.max(...dims) > DEF_MAX_DEG) return false;
+      u.uDefFFD.value = 1;
+      u.uDefDims.value.set(dims[0], dims[1], dims[2]);
+      u.uDefMin.value.set(min[0], min[1], min[2]);
+      u.uDefSize.value.set(size[0], size[1], size[2]);
+      const off = ffd.offsets;
+      for (let i = 0; i < off.length / 3; i++) { this.off[4 * i] = off[3 * i]; this.off[4 * i + 1] = off[3 * i + 1]; this.off[4 * i + 2] = off[3 * i + 2]; }
+      this.offTex.needsUpdate = true;
+    } else u.uDefFFD.value = 0;
+    u.uDefGround.value = ground || 0;
+    u.uDefH.value = 2e-4 * diag;
+    this.tabTex.needsUpdate = true;
+    return true;
+  }
 }
 
 // ------------------------------------------------------------------------------------------------ passes
@@ -448,6 +646,10 @@ export class Viewer {
     this.whiteMat = new THREE.MeshStandardMaterial({ color: 0xf6f6f4, roughness: 0.95, metalness: 0 });
     this.lineFaceMat = new THREE.MeshBasicMaterial({ color: 0xffffff, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
     this.lineMat = new THREE.LineBasicMaterial({ color: 0x1b1b1d });
+    this.defU = new DeformUniforms();
+    this.deformDepth = this.withDeform(new THREE.MeshDepthMaterial());
+    this.preview = null; this.previewGroup = null; this.previewing = false;
+    this.lattice = null; this.handleCb = null; this.drag = null;
 
     this.persp = new THREE.PerspectiveCamera(30, 1, 0.05, 500);
     this.ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.05, 500);
@@ -549,8 +751,10 @@ export class Viewer {
   }
 
   /** Show a built element. meshes: worker meshes (Z-up); stats: { bbox: {min, max} Z-up, size, spec }.
+   *  opts: { keepCamera } (a deformation bake keeps the view), { keepPreview } (a drag is still going on: the GPU
+   *  preview stays on screen and the new model waits behind it).
    *  Resolves after the new geometry has been rendered (and the AO has settled). */
-  async setModel(meshes, stats = {}) {
+  async setModel(meshes, stats = {}, opts = {}) {
     for (const m of this.model.children) { m.geometry.dispose(); m.dispose(); }   // dispose() frees the instance buffers
     this.model.clear();
     this.clearEdges();
@@ -587,7 +791,11 @@ export class Viewer {
     this.element = element;
     this.fitLights();
     this.fitAO();
-    if (changed) this.setView(this.view);
+    // a deformation bake keeps the view unless the shape left the frame (then all of it is framed); otherwise re-frame
+    // for a new element or a clearly different size
+    if (opts.keepCamera) { if (!this.fits()) this.setView(this.view, true); }
+    else if (changed) this.setView(this.view);
+    if (!opts.keepPreview) this.showPreview(false);
     try { await this.renderer.compileAsync(this.scene, this.camera); } catch (e) { /* compiles on first render instead */ }
     if (this.ao) this.ao.firstFrame();
     // the first frame with the new geometry is drawn now (not left to requestAnimationFrame, which a hidden or
@@ -644,6 +852,7 @@ export class Viewer {
     if (!MODES.includes(mode) || mode === this.mode) return;
     this.mode = mode;
     for (const m of this.model.children) m.material = this.material(m.userData.key);
+    if (this.previewGroup) for (const m of this.previewGroup.children) m.material = m.userData.rigid ? this.material(m.userData.key) : this.deformMaterial(m.userData.key);
     for (const m of this.figure.children) m.material = this.figMats[mode];
     if (this.edges) this.edges.visible = mode === 'line';
     const lit = mode !== 'line';
@@ -687,6 +896,10 @@ export class Viewer {
 
   bounds() {
     const b = this.box.clone();
+    if (this.lattice && this.lattice.points) {
+      const P = this.lattice.points, v = new THREE.Vector3();
+      for (let i = 0; i < P.length; i += 3) b.expandByPoint(v.set(P[i], P[i + 2], -P[i + 1]));   // Z-up -> Y-up
+    }
     if (this.figure.visible) {
       const p = this.figure.position; // Z-up -> Y-up
       b.expandByPoint(new THREE.Vector3(p.x - 0.3, 0, -p.y - 0.2));
@@ -784,6 +997,17 @@ export class Viewer {
     this.controls.update();
     this.updateClip();
     this.dirty = Math.max(this.dirty, 12);
+  }
+
+  /** Whether the element's box (with the figure) is inside the frame, with a little slack. */
+  fits(slack = 1.06) {
+    const b = this.bounds(), v = new THREE.Vector3();
+    this.camera.updateMatrixWorld();
+    for (let i = 0; i < 8; i++) {
+      v.set(i & 1 ? b.max.x : b.min.x, i & 2 ? b.max.y : b.min.y, i & 4 ? b.max.z : b.min.z).project(this.camera);
+      if (Math.abs(v.x) > slack || Math.abs(v.y) > slack || v.z > 1) return false;
+    }
+    return true;
   }
 
   /** The whole element (and the figure) in the current view. */
@@ -913,6 +1137,230 @@ export class Viewer {
     const sz = this.box.getSize(new THREE.Vector3());
     this.controls.minDistance = Math.min(R * 0.04, Math.max(Math.min(sz.x, sz.y, sz.z), 0.05) * 0.6);
     this.controls.maxDistance = R * 30;
+  }
+
+  // ---------------------------------------------------------------------------------------------- deformation preview
+
+  /** A material that runs the deformation (shared uniforms) after its own shader edits. */
+  withDeform(mat) {
+    const prev = mat.onBeforeCompile, U = this.defU.u;
+    const key = mat.customProgramCacheKey && mat.customProgramCacheKey !== THREE.Material.prototype.customProgramCacheKey
+      ? mat.customProgramCacheKey() : mat.type;
+    mat.defines = { ...(mat.defines || {}), ARCH_DEFORM: '' };
+    mat.onBeforeCompile = (sh, r) => { if (prev) prev.call(mat, sh, r); Object.assign(sh.uniforms, U); injectDeform(sh); };
+    mat.customProgramCacheKey = () => key + '-deform';
+    return mat;
+  }
+
+  deformMaterial(key) {
+    const k = this.mode + ':deform:' + key;
+    if (!this.mats.has(k)) {
+      const m = this.mode === 'stone' ? stoneMaterial(key) : this.mode === 'white' ? this.whiteMat.clone() : this.lineFaceMat.clone();
+      this.mats.set(k, this.withDeform(m));
+    }
+    return this.mats.get(k);
+  }
+
+  /** The undeformed element the GPU preview deforms: refined meshes from the worker (rigid parts flagged, with the
+   *  centre of their mesh box). Built once per spec; hidden until a drag starts. */
+  setPreviewBase(key, meshes) {
+    this.clearPreview();
+    const g = this.previewGroup = new THREE.Group();
+    g.visible = false;
+    this.root.add(g);
+    this.preview = { key, rigid: [], meshes };
+    const tmp = new THREE.Matrix4();
+    for (const mesh of meshes) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(mesh.positions, 3));
+      geo.setAttribute('normal', new THREE.BufferAttribute(mesh.normals, 3));
+      const nv = mesh.positions.length / 3;
+      geo.setIndex(new THREE.BufferAttribute(nv < 65536 ? Uint16Array.from(mesh.indices) : mesh.indices, 1));
+      const n = mesh.transforms ? mesh.transforms.length / 16 : 1;
+      const im = new THREE.InstancedMesh(geo, mesh.rigid ? this.material(mesh.material) : this.deformMaterial(mesh.material), n);
+      for (let i = 0; i < n; i++) im.setMatrixAt(i, mesh.transforms ? tmp.fromArray(mesh.transforms, 16 * i) : tmp.identity());
+      im.instanceMatrix.needsUpdate = true;
+      if (!mesh.rigid) im.customDepthMaterial = this.deformDepth;
+      im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false;
+      im.userData.key = mesh.material; im.userData.rigid = !!mesh.rigid;
+      if (mesh.rigid && mesh.transforms) this.preview.rigid.push({ im, T: Float64Array.from(mesh.transforms), centre: mesh.centre });
+      g.add(im);
+    }
+  }
+  hasPreview(key) { return !!(this.preview && this.preview.key === key); }
+  clearPreview() {
+    if (this.previewGroup) {
+      for (const m of this.previewGroup.children) { m.geometry.dispose(); m.dispose(); }
+      this.root.remove(this.previewGroup);
+    }
+    this.previewGroup = null; this.preview = null; this.previewing = false;
+    this.model.visible = true;
+  }
+
+  /**
+   * Show the preview deformed by ops (resolved) through D = makeDeformer(ops, bbox): shader tables for the warped parts,
+   * the engine's instance formula for the rigid ones. box: the deformed bbox (Z-up) for lights and clipping.
+   * Returns false when the preview cannot show it (no base, or an op the shader does not run).
+   */
+  previewDeform(ops, D, ground = 0, box = null) {
+    if (!this.preview) return false;
+    if (!this.defU.set(ops, D, ground)) return false;
+    const J = new Float64Array(9), Q = new Float64Array(16), m4 = new THREE.Matrix4();
+    for (const r of this.preview.rigid) {
+      const n = r.T.length / 16, cl = r.centre;
+      for (let i = 0; i < n; i++) {
+        const M = r.T.subarray(16 * i, 16 * i + 16);
+        if (D.identity) { r.im.setMatrixAt(i, m4.fromArray(M)); continue; }
+        const c = [M[0] * cl[0] + M[4] * cl[1] + M[8] * cl[2] + M[12], M[1] * cl[0] + M[5] * cl[1] + M[9] * cl[2] + M[13],
+          M[2] * cl[0] + M[6] * cl[1] + M[10] * cl[2] + M[14]];
+        const fc = D.point(c);
+        D.jacobian(c, J);
+        const { R, s } = polar3(J);
+        let k = Math.abs(s[1]);                                  // deformParts' scaleInstances 'auto'
+        if (!(k > 0) || !Number.isFinite(k) || Math.abs(k - 1) < 1e-6) k = 1;
+        const A = R.map((x) => x * k), Ml = [M[0], M[4], M[8], M[1], M[5], M[9], M[2], M[6], M[10]];
+        for (let row = 0; row < 3; row++) for (let col = 0; col < 3; col++) {
+          Q[col * 4 + row] = A[3 * row] * Ml[col] + A[3 * row + 1] * Ml[3 + col] + A[3 * row + 2] * Ml[6 + col];
+        }
+        const tm = [M[12] - c[0], M[13] - c[1], M[14] - c[2]];
+        for (let row = 0; row < 3; row++) Q[12 + row] = fc[row] + A[3 * row] * tm[0] + A[3 * row + 1] * tm[1] + A[3 * row + 2] * tm[2];
+        Q[14] += ground;
+        Q[3] = Q[7] = Q[11] = 0; Q[15] = 1;
+        r.im.setMatrixAt(i, m4.fromArray(Q));
+      }
+      r.im.instanceMatrix.needsUpdate = true;
+    }
+    if (box) {
+      this.box.set(new THREE.Vector3(box.min[0], box.min[2], -box.max[1]), new THREE.Vector3(box.max[0], box.max[2], -box.min[1]));
+      this.fitLights();
+    }
+    this.showPreview(true);
+    if (this.ao) this.ao.firstFrame();
+    this.dirty = Math.max(this.dirty, 3);
+    return true;
+  }
+
+  showPreview(on) {
+    on = !!(on && this.previewGroup);
+    this.previewing = on;
+    if (this.previewGroup) this.previewGroup.visible = on;
+    this.model.visible = !on;
+    if (this.edges) this.edges.visible = !on && this.mode === 'line';
+    this.dirty = Math.max(this.dirty, 3);
+  }
+
+  // ---------------------------------------------------------------------------------------------- FFD lattice handles
+
+  /** Show the control points (Float64Array xyz, Z-up, as drawn: rest + offsets + ground) of an l x m x n lattice, or
+   *  hide them (null). selected: indices drawn larger (the dragged / pinned points). */
+  setLattice(points, dims, selected = []) {
+    if (!points) {
+      if (this.lattice) { this.root.remove(this.lattice.group); this.lattice.dots.geometry.dispose(); this.lattice.dots.dispose(); this.lattice.lines.geometry.dispose(); }
+      this.lattice = null; this.dirty = Math.max(this.dirty, 2);
+      return;
+    }
+    const count = points.length / 3, [l, m] = dims;
+    if (!this.lattice || this.lattice.count !== count) {
+      this.setLattice(null);
+      const group = new THREE.Group();
+      const dots = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 16, 12),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false, depthWrite: false, transparent: true, toneMapped: false }), count);
+      dots.renderOrder = 20; dots.frustumCulled = false;
+      const lines = new THREE.LineSegments(new THREE.BufferGeometry(),
+        new THREE.LineBasicMaterial({ color: 0x0a84ff, transparent: true, opacity: 0.32, depthTest: false, depthWrite: false, toneMapped: false }));
+      lines.renderOrder = 19; lines.frustumCulled = false;
+      // edges of the lattice graph
+      const pairs = [], id = (i, j, k) => i + (l + 1) * (j + (m + 1) * k), n = dims[2];
+      for (let k = 0; k <= n; k++) for (let j = 0; j <= m; j++) for (let i = 0; i <= l; i++) {
+        if (i < l) pairs.push(id(i, j, k), id(i + 1, j, k));
+        if (j < m) pairs.push(id(i, j, k), id(i, j + 1, k));
+        if (k < n) pairs.push(id(i, j, k), id(i, j, k + 1));
+      }
+      lines.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pairs.length * 3), 3));
+      group.add(lines, dots);
+      this.root.add(group);
+      this.lattice = { group, dots, lines, pairs, count, points: null };
+    }
+    const L = this.lattice, diag = this.box.getSize(new THREE.Vector3()).length() || 1, r = Math.max(0.0055 * diag, 0.004);
+    L.points = Float64Array.from(points);
+    const sel = new Set(selected), m4 = new THREE.Matrix4(), col = new THREE.Color();
+    for (let i = 0; i < count; i++) {
+      const k = sel.has(i) ? 1.45 : 1;
+      m4.makeScale(r * k, r * k, r * k).setPosition(points[3 * i], points[3 * i + 1], points[3 * i + 2]);
+      L.dots.setMatrixAt(i, m4);
+      L.dots.setColorAt(i, col.set(sel.has(i) ? 0xff8a00 : 0x0a84ff));
+    }
+    L.dots.instanceMatrix.needsUpdate = true;
+    if (L.dots.instanceColor) L.dots.instanceColor.needsUpdate = true;
+    const pos = L.lines.geometry.attributes.position.array;
+    L.pairs.forEach((p, i) => { pos[3 * i] = points[3 * p]; pos[3 * i + 1] = points[3 * p + 1]; pos[3 * i + 2] = points[3 * p + 2]; });
+    L.lines.geometry.attributes.position.needsUpdate = true;
+    this.dirty = Math.max(this.dirty, 2);
+  }
+
+  /** Screen position (CSS px in the canvas) of lattice point i, or null. */
+  handleScreen(i) {
+    if (!this.lattice || !this.lattice.points) return null;
+    const P = this.lattice.points, v = new THREE.Vector3(P[3 * i], P[3 * i + 1], P[3 * i + 2]);
+    this.root.localToWorld(v).project(this.camera);
+    return { x: (v.x + 1) / 2 * this._w, y: (1 - v.y) / 2 * this._h, z: v.z };
+  }
+
+  /** Dragging lattice points: cb = { down(i, shift), move(i, [x, y, z] Z-up as drawn, shift), up(i) }; null turns it off. */
+  enableHandles(cb) {
+    this.handleCb = cb;
+    if (this._handleListeners) return;
+    this._handleListeners = true;
+    const el = this.canvas, ray = new THREE.Raycaster(), plane = new THREE.Plane(), hit = new THREE.Vector3();
+    const nearest = (e) => {
+      if (!this.handleCb || !this.lattice || !this.lattice.points) return -1;
+      const rc = el.getBoundingClientRect(), x = e.clientX - rc.left, y = e.clientY - rc.top;
+      let best = -1, bd = (e.pointerType === 'touch' ? 22 : 12) ** 2;
+      for (let i = 0; i < this.lattice.count; i++) {
+        const p = this.handleScreen(i);
+        if (!p || p.z > 1) continue;
+        const d = (p.x - x) ** 2 + (p.y - y) ** 2;
+        if (d < bd) { bd = d; best = i; }
+      }
+      return best;
+    };
+    const toLocal = (e) => {
+      const rc = el.getBoundingClientRect();
+      ray.setFromCamera(new THREE.Vector2(((e.clientX - rc.left) / rc.width) * 2 - 1, -((e.clientY - rc.top) / rc.height) * 2 + 1), this.camera);
+      if (!ray.ray.intersectPlane(plane, hit)) return null;
+      const q = this.root.worldToLocal(hit.clone());
+      return [q.x, q.y, q.z];
+    };
+    el.addEventListener('pointerdown', (e) => {
+      const i = nearest(e);
+      if (i < 0) return;
+      e.stopImmediatePropagation(); e.preventDefault();
+      const P = this.lattice.points, w = this.root.localToWorld(new THREE.Vector3(P[3 * i], P[3 * i + 1], P[3 * i + 2]));
+      plane.setFromNormalAndCoplanarPoint(this.camera.getWorldDirection(new THREE.Vector3()), w);
+      this.drag = { i, id: e.pointerId };
+      this.controls.enabled = false;
+      try { el.setPointerCapture(e.pointerId); } catch (err) { /* synthetic events */ }
+      this.handleCb.down(i, e.shiftKey);
+    }, { capture: true });
+    el.addEventListener('pointermove', (e) => {
+      if (this.drag && e.pointerId === this.drag.id) {
+        const q = toLocal(e);
+        if (q) this.handleCb.move(this.drag.i, q, e.shiftKey);
+        e.stopImmediatePropagation();
+        return;
+      }
+      if (e.buttons === 0) el.style.cursor = nearest(e) >= 0 ? 'pointer' : '';
+    }, { capture: true });
+    const end = (e) => {
+      if (!this.drag || e.pointerId !== this.drag.id) return;
+      const i = this.drag.i;
+      this.drag = null;
+      this.controls.enabled = true;
+      e.stopImmediatePropagation();
+      if (this.handleCb) this.handleCb.up(i);
+    };
+    el.addEventListener('pointerup', end, { capture: true });
+    el.addEventListener('pointercancel', end, { capture: true });
   }
 
   // ---------------------------------------------------------------------------------------------- frames

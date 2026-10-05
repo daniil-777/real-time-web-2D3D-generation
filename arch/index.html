@@ -157,6 +157,42 @@
   details.more[open] summary::before { content: '– '; }
   details.more .fields { margin-top: 8px; }
 
+  /* transform panel */
+  #xform { border-radius: 16px; background: #fafafa; box-shadow: 0 0 0 1px var(--hair); padding: 0; }
+  #xform > summary { list-style: none; cursor: pointer; padding: 12px 14px; display: flex; justify-content: space-between; align-items: baseline;
+                     font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); border-radius: 16px; }
+  #xform > summary::-webkit-details-marker { display: none; }
+  #xform > summary::after { content: '+'; font-size: 15px; font-weight: 400; color: var(--text-3); letter-spacing: 0; }
+  #xform[open] > summary::after { content: '–'; }
+  #xform > summary small { font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; margin-left: 8px; color: var(--accent); }
+  #xform .body { padding: 0 14px 12px; display: grid; gap: 8px; }
+  .xrow { display: grid; grid-template-columns: 62px minmax(0, 1fr) 76px; gap: 8px; align-items: center; }
+  .xrow label { color: var(--text-2); font-size: 13px; white-space: nowrap; cursor: default; }
+  .xrow output { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text); text-align: right; white-space: nowrap; }
+  .xrow output.off { color: var(--text-3); }
+  #xform input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 2px; margin: 10px 0;
+    background: linear-gradient(to right, rgba(118, 118, 128, 0.24) 0 var(--lo, 0%), var(--text) var(--lo, 0%) var(--hi, 0%),
+      rgba(118, 118, 128, 0.24) var(--hi, 0%) 100%); cursor: pointer; }
+  #xform input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #fff;
+    box-shadow: 0 0.5px 4px rgba(0, 0, 0, 0.14), 0 4px 10px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06); }
+  #xform input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border: 0; border-radius: 50%; background: #fff;
+    box-shadow: 0 0.5px 4px rgba(0, 0, 0, 0.14), 0 4px 10px rgba(0, 0, 0, 0.12); }
+  #xform input[type=range]:focus-visible { outline: 3px solid rgba(0, 113, 227, 0.45); outline-offset: 4px; }
+  #xform .grp { font-size: 11px; color: var(--text-3); margin: 4px 0 -2px; }
+  .xtog { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 13px; color: var(--text-2); }
+  .xtog label { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; }
+  #xform input[type=checkbox] { -webkit-appearance: none; appearance: none; position: relative; width: 36px; height: 22px; margin: 0; flex: none;
+    border-radius: 11px; background: rgba(120, 120, 128, 0.32); cursor: pointer; transition: background .25s var(--ease); }
+  #xform input[type=checkbox]::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 1px rgba(0, 0, 0, 0.16); transition: transform .25s var(--ease); }
+  #xform input[type=checkbox]:checked { background: #34c759; }
+  #xform input[type=checkbox]:checked::after { transform: translateX(14px); }
+  #xform select { -webkit-appearance: none; appearance: none; height: 28px; border: 0; border-radius: 8px; padding: 0 10px; background: #fff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1); font-size: 12.5px; }
+  #xform .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  #xwarn { font-size: 12.5px; color: var(--warn); }
+  #xwarn:empty, #xinfo:empty { display: none; }
+  #xinfo { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
   #out .row { display: flex; gap: 6px; flex-wrap: wrap; }
   #out .pill { font-size: 12.5px; padding: 7px 13px; }
   #stats { margin-top: 8px; color: var(--text-3); font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -248,6 +284,33 @@
         <div class="fields" id="fields"></div>
         <details class="more"><summary>more</summary><div class="fields" id="fieldsMore"></div></details>
       </section>
+      <details id="xform" aria-label="transform the element">
+        <summary>transform <small id="xnote"></small></summary>
+        <div class="body">
+          <div class="grp">stretch</div>
+          <div class="xrow"><label for="x-sx">length</label><input id="x-sx" type="range" min="0.5" max="2" step="0.01" value="1" data-x="sx"><output for="x-sx" id="o-sx"></output></div>
+          <div class="xrow"><label for="x-sy">depth</label><input id="x-sy" type="range" min="0.5" max="2" step="0.01" value="1" data-x="sy"><output for="x-sy" id="o-sy"></output></div>
+          <div class="xrow"><label for="x-sz">height</label><input id="x-sz" type="range" min="0.5" max="2" step="0.01" value="1" data-x="sz"><output for="x-sz" id="o-sz"></output></div>
+          <div class="xtog"><label title="re-array the ornament (more balusters, bays, dentils) and keep capitals and bases true">keep ornament <input type="checkbox" id="x-keep" checked></label></div>
+          <div class="grp">bend</div>
+          <div class="xrow"><label for="x-bend" title="curve the run in plan, as for a round building">plan</label><input id="x-bend" type="range" min="-180" max="180" step="1" value="0" data-x="bend"><output for="x-bend" id="o-bend"></output></div>
+          <div class="xrow"><label for="x-bow" title="bend the height sideways">bow</label><input id="x-bow" type="range" min="-45" max="45" step="0.5" value="0" data-x="bow"><output for="x-bow" id="o-bow"></output></div>
+          <div class="grp">shape</div>
+          <div class="xrow"><label for="x-twist">twist</label><input id="x-twist" type="range" min="-360" max="360" step="1" value="0" data-x="twist"><output for="x-twist" id="o-twist"></output></div>
+          <div class="xrow"><label for="x-taper" title="scale of the top">taper</label><input id="x-taper" type="range" min="0.3" max="1.5" step="0.01" value="1" data-x="taper"><output for="x-taper" id="o-taper"></output></div>
+          <div class="xrow"><label for="x-lx" title="lean sideways, in % of the height">lean ↔</label><input id="x-lx" type="range" min="-25" max="25" step="0.5" value="0" data-x="lx"><output for="x-lx" id="o-lx"></output></div>
+          <div class="xrow"><label for="x-ly" title="lean back or forward, in % of the height">lean ↕</label><input id="x-ly" type="range" min="-25" max="25" step="0.5" value="0" data-x="ly"><output for="x-ly" id="o-ly"></output></div>
+          <div class="grp">free-form</div>
+          <div class="xtog">
+            <label title="show the deformation lattice: drag a control point, its neighbours follow (as-rigid-as-possible); shift-drag moves one point only">lattice <input type="checkbox" id="x-ffd"></label>
+            <select id="x-dims" aria-label="lattice size"><option value="3">3 × 3 × 3</option><option value="4">4 × 4 × 4</option></select>
+            <label title="small repeated ornament (balusters, dentils, leaves) moves rigidly instead of bending">rigid ornament <input type="checkbox" id="x-rigid" checked></label>
+          </div>
+          <div class="actions"><button type="button" class="pill" id="x-reset">reset</button></div>
+          <div id="xwarn" role="status"></div>
+          <div id="xinfo"></div>
+        </div>
+      </details>
       <section id="out" aria-labelledby="outTitle">
         <h2 id="outTitle">download</h2>
         <div class="row">
