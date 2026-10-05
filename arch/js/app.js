@@ -6,7 +6,7 @@
 //      &view=three-quarter|front|side|top  &shot=1 (canvas only)  &embed=1 (inside the site: the showcase runs at once)
 //      &showcase=1 (run the idle showcase now, and again after 12 s idle) | 0 (never)
 
-import { SCHEMA, DEFAULTS, ELEMENTS, MATERIALS } from './spec.js';
+import { SCHEMA, DEFAULTS, ELEMENTS, MATERIALS, APPLIES } from './spec.js';
 import { ORDERS } from './orders.js';
 import { PBR, isRigidPart, frameScale, RIGID_RATIO } from './export.js';
 import { smartStretch, makeDeformer, resolveOps, arapLattice, ffdLattice, foldCheck, polar3 } from './deform.js';
@@ -526,17 +526,13 @@ const ORDER_FIELDS = ['order', 'archType', 'roofType', 'domeType', 'spireType', 
   'supports', 'covering', 'finial', 'base', 'frieze', 'cornice'];
 const COUNTS = ['flutes', 'columns', 'balusters', 'bays', 'steps', 'ribs'];
 const BOOLS = ['pedestal', 'entasis', 'keystone', 'urns', 'returns', 'drum', 'lantern', 'oculus', 'dormers'];
-const APPLY = {
-  base: ['column', 'pilaster', 'base', 'portico'], flutes: ['column', 'pilaster', 'portico'],
-  frieze: ['entablature', 'portico'], cornice: ['entablature', 'cornice', 'portico'],
-};
 // fields without a default that still belong on the card (the generator decides when they are left on auto)
 const ALWAYS = { roof: ['covering', 'material', 'overhang', 'pitch', 'dormers'], moulding: ['enrichment'], dome: ['ribs'], cupola: ['ribs'] };
 let cardElement = null;
 
 function relevant(el, spec) {
   const keys = new Set([...Object.keys(DEFAULTS[el] || {}), ...(NUMS[el] || []), ...(ALWAYS[el] || []), 'material'].filter((k) => SCHEMA[k]));
-  for (const [k, els] of Object.entries(APPLY)) if (els.includes(el) && spec[k] !== undefined) keys.add(k);
+  for (const [k, els] of Object.entries(APPLIES)) if (els.includes(el) && spec[k] !== undefined) keys.add(k);
   if (spec.supports === 'columns' && ['arch', 'arcade'].includes(el)) { keys.add('base'); keys.add('flutes'); }
   keys.delete('element');
   const order = [...ORDER_FIELDS, ...(NUMS[el] || []).filter((k) => !COUNTS.includes(k) && k !== 'pitch'), ...COUNTS, 'pitch', ...BOOLS, 'material'];

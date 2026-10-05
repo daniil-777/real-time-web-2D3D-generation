@@ -90,6 +90,14 @@ export const DEFAULTS = {
   console: { height: 0.6, depth: 0.42, width: 0.26, material: 'limestone' },
 };
 
+/** The order-derived fields normalize() fills (base, flutes, frieze, cornice) and the elements whose build reads them;
+ *  the others carry them unused, so the spec card and the drawing's spec block leave them out there. */
+export const APPLIES = {
+  base: ['column', 'pilaster', 'base', 'portico'], flutes: ['column', 'pilaster', 'portico'],
+  frieze: ['entablature', 'portico', 'window', 'door'], cornice: ['entablature', 'cornice', 'portico', 'window', 'door'],
+};
+export const applies = (field, element) => !Object.hasOwn(APPLIES, field) || APPLIES[field].includes(element);
+
 /** Default dimensions that give way when a count is stated. */
 export const DEFAULT_YIELDS = { balustrade: { balusters: ['length'] } };
 

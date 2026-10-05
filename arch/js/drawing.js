@@ -18,6 +18,8 @@
 // a step in depth of more than 2 % of the element is a contour; everything else is detail. Where detail lines crowd
 // (slates converging at an apex) they are thinned to a legible density.
 
+import { applies } from './spec.js';
+
 export const PAPER = { w: 420, h: 297, name: 'A3' };
 export const SCALES = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000];   // ISO 5455 and the architects' 1:25, 1:250
 export const PX_PER_MM = 12;
@@ -1383,7 +1385,8 @@ function titleStrip(D, { spec, meta, lay, size, dims, deform, fm }) {
   y += 2.5;
   label(D, xi, y, 'SPECIFICATION');
   y += 3.4;
-  const entries = Object.entries(spec).filter(([key, v]) => v !== undefined && v !== null && v !== '' && !SPEC_SKIP.has(key))
+  // the fields of this element (normalize() fills frieze and cornice for a column too: spec.js APPLIES)
+  const entries = Object.entries(spec).filter(([key, v]) => v !== undefined && v !== null && v !== '' && !SPEC_SKIP.has(key) && applies(key, spec.element))
     .sort(([a], [b]) => (a === 'element' ? -1 : b === 'element' ? 1 : 0));
   const specText = entries.map(([key, v]) => `${key}: ${typeof v === 'number' ? +v.toFixed(3) : v}`).join('  ');
   // lower block heights (bottom-up): number 14, fields 4 x 9.5, element ~ 20–30, scale 15/25, issue 14

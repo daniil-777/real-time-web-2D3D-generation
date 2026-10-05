@@ -320,7 +320,13 @@ try {
         `SVG well formed (${(svg.length / 1e3).toFixed(0)} kB, A3 in mm)`);
       ok((svg.match(/<path /g) || []).length >= s.sheet.groups.length, 'one path per line group');
       ok(svg.includes('1:20') && svg.includes('ARCH STUDIO') && svg.includes('Ø 0.30'), 'scale, title block and the lower diameter written');
+      // the spec block lists the column's own fields: its base and flutes, not the frieze and cornice normalize() fills
+      ok(/\bbase: attic\b/.test(svg) && /\bflutes: 24\b/.test(svg) && !/\bfrieze:/.test(svg) && !/\bcornice:/.test(svg), 'column spec block: base and flutes, no frieze or cornice');
     }
+  }
+  {
+    const s = await sheetFor({ element: 'entablature', order: 'doric', length: 2 });
+    if (s) { const svg = D.toSVG(s.sheet); ok(/\bfrieze: triglyph\b/.test(svg) && /\bcornice: mutules\b/.test(svg) && !/\bbase:/.test(svg) && !/\bflutes:/.test(svg), 'entablature spec block: frieze and cornice, no base or flutes'); }
   }
   // a crafted link: inherited names never reach the spec block, and no text (title, interpretation, a field value) can
   // put a character into the SVG that XML 1.0 forbids (C0 controls, U+FFFE/FFFF, lone surrogates); a pair survives
