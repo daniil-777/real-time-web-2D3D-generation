@@ -13,7 +13,10 @@ import { ORDERS, entablatureDims } from '../orders.js';
 import { K, mat, revolve, box, union, part, instances, loft, crossSection, extrudeXY, memo } from '../kernel.js';
 import { Prof } from '../profiles.js';
 import { extrudeElevation, rosette, acanthusLeaf } from '../ornament.js';
-import { normalize, DEFAULTS } from '../spec.js';
+import { normalize } from '../spec.js';
+
+/** Did the request state field f? (spec.given after normalize(); a raw spec: any value it carries) */
+const stated = (spec, f) => (spec.given ? spec.given.includes(f) : spec[f] !== undefined && spec[f] !== null);
 import { build as buildColumn } from './column.js';
 
 export const ELEMENTS = ['arch', 'arcade'];
@@ -36,8 +39,8 @@ function character(spec) {
   let type = spec.archType || 'semicircular';
   let order = spec.order || 'tuscan';
   const style = spec.style;
-  // a style only overrides a field that still has its default value (the parser leaves unsaid fields unset)
-  const defType = type === DEFAULTS[spec.element]?.archType, defOrder = order === DEFAULTS[spec.element]?.order;
+  // a style only overrides a field the request did not state (spec.given; a default value may also be a request)
+  const defType = !stated(spec, 'archType'), defOrder = !stated(spec, 'order');
   if (defType && (style === 'gothic' || order === 'gothic')) type = 'pointed';
   if (defType && style === 'moorish') type = 'horseshoe';
   // a Gothic arch on the default (Tuscan) order stands on Gothic clustered piers
@@ -544,8 +547,7 @@ function layout(spec) {
       const a = layoutFor(spec, 1, n).X, b = layoutFor(spec, 2, n).X;
       return clamp(1 + (target - a) / (b - a), 0.3, 40);
     };
-    const def = DEFAULTS.arcade;
-    if (spec.bays !== undefined && spec.bays !== def.bays) S = solve(N);
+    if (stated(spec, 'bays')) S = solve(N);
     else {
       let best = null;
       for (let n = 1; n <= 20; n++) {
@@ -555,7 +557,7 @@ function layout(spec) {
       N = best.n; S = best.s;
     }
   }
-  else if (spec.height && S === DEFAULTS[spec.element]?.span) {
+  else if (spec.height && !stated(spec, 'span')) {
     // a height without a span: proportion the arch by its opening rule (the default span is not a request)
     const Z1 = layoutFor({ ...spec, height: undefined }, 1, N).Z;
     S = clamp(spec.height / Z1, 0.3, 40);
