@@ -315,6 +315,132 @@
   .pill[aria-busy=true] { opacity: 0.6; cursor: progress; }
   .pill[aria-busy=true]::after { content: '…'; }
 
+  /* paint: a floating vertical toolbar (Procreate-like), the colour popover, brush options, the ring cursor */
+  #paintBtn svg { width: 13px; height: 13px; }
+  #paintBtn[aria-pressed=true] { background: var(--text); color: #fff; }
+  #c.painting { cursor: crosshair; }
+  #c.painting.onsurf { cursor: none; }
+  #c.painting:active { cursor: none; }
+  #paintBar { position: absolute; z-index: 3; left: 12px; top: 50%; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 7px 5px; border-radius: 16px; transform: translate(calc(-100% - 24px), -50%); opacity: 0; pointer-events: none;
+    transition: transform .32s cubic-bezier(.2, .9, .25, 1.05), opacity .2s var(--ease); }
+  html.painting #paintBar { transform: translate(0, -50%); opacity: 1; pointer-events: auto; }
+  #paintBar .pb, #paintPop .pb { --s: 34px; width: var(--s); height: var(--s); border: 0; border-radius: 10px; background: none; color: var(--text-2); display: grid;
+    place-items: center; padding: 0; cursor: pointer; position: relative; -webkit-tap-highlight-color: transparent; transition: background .12s var(--ease), color .12s var(--ease); }
+  #paintBar .pb svg { width: 18px; height: 18px; }
+  #paintBar .pb:hover { background: var(--fill); color: var(--text); }
+  #paintBar .pb[aria-pressed=true] { background: var(--text); color: #fff; }
+  #paintBar .sep { width: 22px; height: 1px; background: var(--hair); margin: 5px 0; flex: none; }
+  #paintBar .puck { position: relative; width: 40px; height: 40px; margin-bottom: 4px; flex: none; }
+  #paintBar .puck .cur { --s: 30px; position: absolute; left: 2px; top: 2px; border-radius: 50%; padding: 0;
+    box-shadow: 0 0 0 2px #fff, 0 0 0 3px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.22); }
+  #paintBar .puck .cur:hover { background-color: inherit; }
+  #paintBar .puck .cur.gold { background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 45%, rgba(0, 0, 0, 0.18)); }
+  #paintBar .puck .prev { position: absolute; right: -4px; bottom: -4px; width: 24px; height: 24px; border: 0; padding: 0; background: none; cursor: pointer; border-radius: 50%; }
+  #paintBar .puck .prev::after { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: var(--pc, #fff);
+    box-shadow: 0 0 0 1.5px #fff, 0 0 0 2.5px rgba(0, 0, 0, 0.14); }
+  #paintBar .puck .prev.gold::after { background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 45%, rgba(0, 0, 0, 0.18)); }
+  #paintBar .puck .prev:hover::after { transform: scale(1.15); }
+  .hs { display: grid; grid-template-columns: 74px 1fr 40px; align-items: center; gap: 8px; height: 30px; font-size: 12px; color: var(--text-2); cursor: ew-resize; touch-action: none; border-radius: 8px; }
+  .hs .track { position: relative; height: 22px; border-radius: 11px; background: rgba(118, 118, 128, 0.2); box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.08); }
+  .hs .fillh { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 11px; background: rgba(29, 29, 31, 0.16); }
+  .hs .knob { position: absolute; top: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(0, 0, 0, 0.1); }
+  .hs output { text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+  .hs:focus-visible { outline: 3px solid rgba(0, 113, 227, 0.5); outline-offset: 2px; }
+  .tog { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 10px; min-height: 30px; padding: 0; border: 0; background: none;
+    font-size: 12px; color: var(--text-2); cursor: pointer; text-align: left; }
+  .tog i { position: relative; width: 34px; height: 20px; border-radius: 10px; background: rgba(118, 118, 128, 0.24); flex: none; transition: background .15s var(--ease); }
+  .tog i::after { content: ''; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    transition: transform .15s var(--ease); }
+  .tog[aria-checked=true] i { background: var(--text); }
+  .tog[aria-checked=true] i::after { transform: translateX(14px); }
+  #brushPrev { display: block; width: 100%; height: 56px; border-radius: 10px; background: #f6f5f1; box-shadow: inset 0 0 0 1px var(--hair); margin-bottom: 4px; }
+  #oStats { font-size: 11px; color: var(--text-3); }
+  #paintCursor .ring-fill { fill: rgba(255, 255, 255, 0.08); stroke: none; }
+  .vs { position: relative; width: 30px; height: 104px; margin: 4px 0; border-radius: 15px; background: rgba(118, 118, 128, 0.2); box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.08); cursor: ns-resize; touch-action: none; flex: none; }
+  .vs .fillv { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 15px; background: rgba(29, 29, 31, 0.16); }
+  .vs .knob { position: absolute; left: 3px; right: 3px; height: 24px; border-radius: 12px; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(0, 0, 0, 0.1); }
+  .vs .ico { position: absolute; left: 0; right: 0; bottom: -2px; text-align: center; font-size: 9.5px; color: var(--text-3); pointer-events: none; display: none; }
+  .vs:focus-visible { outline: 3px solid rgba(0, 113, 227, 0.5); outline-offset: 2px; }
+  .vs .val { position: absolute; left: calc(100% + 12px); top: 50%; transform: translateY(-50%); padding: 3px 8px; border-radius: 7px; background: rgba(29, 29, 31, 0.88);
+    color: #fff; font-size: 11.5px; font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; opacity: 0; transition: opacity .15s; pointer-events: none; }
+  .vs.active .val, .vs:hover .val, .vs:focus-visible .val { opacity: 1; }
+  #sizePreview { position: absolute; z-index: 2; left: 50%; top: 50%; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+    transform: translate(-50%, -50%); pointer-events: none; opacity: 0; transition: opacity .2s; }
+  #sizePreview.on { opacity: 1; }
+  .paintPop { position: absolute; z-index: 4; left: 66px; top: 12px; width: 252px; padding: 12px; border-radius: 18px;
+    background: rgba(255, 255, 255, 0.86); -webkit-backdrop-filter: saturate(180%) blur(24px); backdrop-filter: saturate(180%) blur(24px);
+    box-shadow: 0 0 0 0.5px var(--hair), 0 12px 40px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.06); }
+  .paintPop[hidden] { display: none; }
+  .paintPop h3 { margin: 10px 0 6px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); }
+  .paintPop h3:first-child { margin-top: 0; }
+  #sv { position: relative; height: 150px; border-radius: 10px; touch-action: none; cursor: crosshair;
+    background-image: linear-gradient(to top, #000, rgba(0, 0, 0, 0)), linear-gradient(to right, #fff, rgba(255, 255, 255, 0)); }
+  #hue { position: relative; height: 14px; margin-top: 10px; border-radius: 7px; touch-action: none; cursor: ew-resize;
+    background: linear-gradient(to right, #f00, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00); }
+  #sv .th, #hue .th { position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; border: 2.5px solid #fff;
+    box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.3), 0 1px 4px rgba(0, 0, 0, 0.35); pointer-events: none; }
+  #hue .th { top: 50%; }
+  .hexRow { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+  .hexRow .sw { width: 30px; height: 30px; border-radius: 8px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); flex: none; }
+  #hex { flex: 1; min-width: 0; height: 30px; border: 0; border-radius: 8px; padding: 0 9px; background: var(--fill); font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; text-transform: uppercase; }
+  #hex:focus { outline: none; box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.35); }
+  .sws { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .sws button { aspect-ratio: 1; min-height: 24px; border: 0; border-radius: 50%; padding: 0; cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+    transition: transform .12s var(--ease); }
+  .sws button:hover { transform: scale(1.12); }
+  .sws button[aria-pressed=true] { box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px var(--text); }
+  .sws button.gold { background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0) 45%, rgba(0, 0, 0, 0.2)) !important; }
+  #recent:empty::before { content: 'Colours you paint with appear here'; grid-column: 1 / -1; font-size: 11px; color: var(--text-3); }
+  .paintPop .seg { display: flex; width: 100%; }
+  .paintPop .seg button { flex: 1; }
+  .popFoot { display: flex; justify-content: space-between; margin-top: 10px; }
+  #paintCursor { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  #paintCursor path { fill: none; vector-effect: non-scaling-stroke; }
+  #paintCursor .o { stroke: rgba(0, 0, 0, 0.55); stroke-width: 2.6; }
+  #paintCursor .i { stroke: #fff; stroke-width: 1.2; }
+  #paintCursor .dot { fill: #fff; stroke: rgba(0, 0, 0, 0.6); stroke-width: 1; }
+  #paintCursor[hidden] { display: none; }
+  #paintHint { position: absolute; z-index: 1; left: 50%; top: 12px; transform: translateX(-50%); padding: 5px 11px; font-size: 11.5px; color: var(--text-2);
+    pointer-events: none; opacity: 0; transition: opacity .3s; white-space: nowrap; }
+  html.painting #paintHint { opacity: 1; }
+  html.painting #grips, html.painting #gripHint { display: none !important; }
+  html.painting #hint { opacity: 0 !important; }
+  #c.painting:focus-visible { outline-color: rgba(0, 113, 227, 0.16); }   /* the canvas holds the focus while painting (Space, arrows)
+                                                                       without a heavy frame */
+  @media (max-width: 1260px) { #paintHint { display: none; } }   /* it would run under the size pill */   /* its "double-click to fit" does not apply while painting */
+  html.shot #paintBar, html.shot .paintPop, html.shot #paintCursor, html.shot #paintHint, html.shot #sizePreview { display: none !important; }
+  @media (pointer: coarse) { #paintBar .pb { --s: 44px; } #paintBar .puck { width: 48px; height: 48px; } #paintBar .puck .cur { --s: 38px; } #paintBar .puck .prev { width: 30px; height: 30px; }
+    .vs { width: 44px; height: 120px; } .vs .knob { height: 30px; border-radius: 15px; } .sws button { min-height: 44px; } .hs, .tog { min-height: 44px; }
+    .paintPop .seg button { min-height: 44px; } #hex { height: 44px; } #hue { height: 24px; } .paintPop .pill { min-height: 44px; } }
+  /* a short stage (iPad landscape, small windows): the bar never covers the size pill or the view buttons; it scrolls */
+  #paintBar { max-height: calc(100% - 116px); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: none; }
+  #paintBar::-webkit-scrollbar { display: none; }
+  @media (max-height: 820px) { .vs { height: 88px; } }
+  @media (max-height: 820px) and (pointer: coarse) { .vs { height: 96px; } #paintBar .pb { --s: 42px; } }
+  /* phones: two rows at the foot of the stage: the tools (44 px), then two long labelled sliders */
+  @media (max-width: 600px), (max-height: 560px) {
+    #paintBar { left: 12px; right: 12px; top: auto; bottom: 56px; max-height: none; overflow: visible; flex-direction: row; flex-wrap: wrap; justify-content: center;
+      gap: 2px 4px; padding: 6px 8px; border-radius: 18px; transform: translateY(calc(100% + 90px)); }
+    html.painting #paintBar { transform: none; }
+    #paintBar .sep { display: none; }
+    #paintBar .pb { --s: 44px; }
+    #paintBar .puck { width: 50px; height: 50px; margin: 0 4px 0 0; }
+    #paintBar .puck .cur { --s: 44px; left: 3px; top: 3px; }
+    #paintBar .puck .prev { width: 28px; height: 28px; right: -6px; bottom: -6px; }
+    .vs { order: 10; flex: 1 1 40%; min-width: 130px; height: 40px; margin: 4px 2px 0; border-radius: 20px; cursor: ew-resize; }
+    .vs .fillv { top: 0; right: auto; border-radius: 20px; }
+    .vs .knob { top: 6px; bottom: 6px; height: auto; width: 22px; left: auto; right: auto; border-radius: 11px; }
+    .vs::before { content: attr(data-label); position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 12px; font-weight: 500; color: var(--text-2); pointer-events: none; }
+    .vs .val { opacity: 1; left: auto; right: 40px; top: 50%; bottom: auto; transform: translateY(-50%); padding: 0; background: none; color: var(--text); font-size: 12px; }
+    .paintPop { left: 50% !important; top: auto !important; bottom: 172px; transform: translateX(-50%); width: min(320px, calc(100vw - 24px)); max-height: calc(100% - 184px); overflow: auto; }
+    #paintHint { display: none; }
+    #paintBar #pSym, #paintBar #pScope { display: none; }
+  }
+  #xform .body :disabled, .seg button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .xlock { margin: 0 0 8px; font-size: 11.5px; color: var(--warn); }
+  .xlock[hidden] { display: none; }
   /* screenshots: the canvas, nothing else */
   html.shot #top, html.shot #panel, html.shot .ov, html.shot #hint, html.shot #busy, html.shot #scTag { display: none !important; }
   /* the idle showcase: a quiet tag instead of the controls hint */
@@ -352,6 +478,9 @@
         <button type="button" id="fit" title="frame the whole element (F, or double-click)" aria-label="frame the whole element">fit</button>
       </div>
       <div id="extra" class="ov">
+        <button type="button" id="paintBtn" class="pill glass" aria-pressed="false" title="Paint on the element (P)">
+          <svg viewBox="0 0 14 14" aria-hidden="true"><path d="M9.2 1.6l3.2 3.2-5.6 5.6-3.2-3.2zM3.3 7.5L2 9.2c-.6.8-.5 2 .3 2.6.6.4 1.6.6 2.8-.4l1.4-1.2" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"/></svg>
+          <span class="lbl">paint</span></button>
         <button type="button" id="figure" class="pill glass" aria-pressed="false" title="a 1.80 m figure for scale">
           <svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="2" r="1.4" fill="currentColor"/><path d="M6 4.2v4M3.6 5.2L6 4.6l2.4.6M6 8.2l-1.5 3.3M6 8.2l1.5 3.3" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
           <span class="lbl">1.80 m</span></button>
@@ -360,6 +489,49 @@
           <button type="button" data-units="ft" aria-pressed="false">ft</button>
         </div>
       </div>
+      <div id="paintBar" class="glass" role="toolbar" aria-label="Paint tools" aria-orientation="vertical" inert>
+        <div class="puck"><button type="button" class="pb cur" id="pColor" aria-label="Colour" aria-haspopup="dialog" aria-expanded="false" title="Colour"></button><button type="button" class="prev" id="pPrev" aria-label="Previous colour: swap (X)" title="Previous colour · tap or X to swap"></button></div>
+        <button type="button" class="pb" data-tool="brush" aria-pressed="true" aria-label="Brush" title="Brush (B)"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M14.5 3.5l2 2-7.8 7.8-2.6.6.6-2.6z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M6.4 13.7c-1.6.1-2.6 1-2.9 2.8 1.7.3 3.2-.2 3.9-1.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+        <button type="button" class="pb" data-tool="erase" aria-pressed="false" aria-label="Eraser" title="Eraser (E)"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 13.2l7.6-7.6a1.6 1.6 0 012.3 0l2.6 2.6a1.6 1.6 0 010 2.3L11 15.5H5.8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M7.4 9.3l4.9 4.9M6 16.5h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+        <button type="button" class="pb" data-tool="fill" aria-pressed="false" aria-label="Fill a part" title="Fill a part (G)"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M9 3.5l6 6-5.2 5.2a1.6 1.6 0 01-2.3 0L3.8 11a1.6 1.6 0 010-2.3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M3.8 10h11" stroke="currentColor" stroke-width="1.5"/><path d="M16.6 12.4c.8 1.2 1.2 2 1.2 2.6a1.2 1.2 0 01-2.4 0c0-.6.4-1.4 1.2-2.6z" fill="currentColor"/></svg></button>
+        <button type="button" class="pb" data-tool="pick" aria-pressed="false" aria-label="Eyedropper" title="Eyedropper (I)"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M13.6 3.3a2 2 0 012.9 2.9l-1.8 1.8.7.7-1.3 1.3-4.1-4.1 1.3-1.3.7.7z" fill="currentColor"/><path d="M10.3 7.2l-6 6-.6 3.1 3.1-.6 6-6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></button>
+        <div class="sep"></div>
+        <div class="vs" id="pSize" data-label="Size" role="slider" tabindex="0" aria-label="Brush size" title="Size · [ and ]"><div class="fillv"></div><div class="knob"></div><span class="val"></span></div>
+        <div class="vs" id="pOpacity" data-label="Opacity" role="slider" tabindex="0" aria-label="Opacity" title="Opacity · keys 1–0"><div class="fillv"></div><div class="knob"></div><span class="val"></span></div>
+        <div class="sep"></div>
+        <button type="button" class="pb" id="pScope" aria-pressed="true" aria-label="Paint all copies" title="All copies: paint one baluster, every baluster takes it (C toggles this copy only)"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="5" width="3" height="11" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="8.5" y="5" width="3" height="11" rx="1" fill="currentColor"/><rect x="14" y="5" width="3" height="11" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></button>
+        <button type="button" class="pb" id="pSym" aria-pressed="false" aria-label="Mirror symmetry" title="Symmetry: mirror across the element's centre (M)"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5v15" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 2"/><path d="M7.5 5.5L3 10l4.5 4.5zM12.5 5.5L17 10l-4.5 4.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></button>
+        <button type="button" class="pb" id="pMore" aria-label="Brush options" aria-haspopup="dialog" aria-expanded="false" title="Brush options: hardness, flow, smoothing, pressure, clear"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="5" cy="10" r="1.5" fill="currentColor"/><circle cx="10" cy="10" r="1.5" fill="currentColor"/><circle cx="15" cy="10" r="1.5" fill="currentColor"/></svg></button>
+      </div>
+      <div id="paintPop" class="paintPop" role="dialog" aria-label="Colour" hidden>
+        <h3>Colour</h3>
+        <div id="sv" role="slider" aria-label="Saturation and brightness" tabindex="0"><span class="th"></span></div>
+        <div id="hue" role="slider" aria-label="Hue" tabindex="0"><span class="th"></span></div>
+        <div class="hexRow"><span class="sw" id="hexSw"></span><input id="hex" aria-label="Hex colour" spellcheck="false" autocomplete="off" maxlength="7"></div>
+        <h3>Finish</h3>
+        <div class="seg" role="group" aria-label="Finish"><button type="button" data-finish="matte" aria-pressed="true">matte</button><button type="button" data-finish="gloss" aria-pressed="false">gloss</button><button type="button" data-finish="gold" aria-pressed="false">gold leaf</button></div>
+        <h3>Architectural palette</h3>
+        <div class="sws" id="palette"></div>
+        <h3>Recent</h3>
+        <div class="sws" id="recent"></div>
+      </div>
+      <div id="paintOpts" class="paintPop" role="dialog" aria-label="Brush options" hidden>
+        <canvas id="brushPrev" aria-hidden="true"></canvas>
+        <h3>Brush</h3>
+        <div class="hs" id="oHard" role="slider" tabindex="0" aria-label="Hardness"><span class="lbl">Hardness</span><span class="track"><i class="fillh"></i><i class="knob"></i></span><output></output></div>
+        <div class="hs" id="oFlow" role="slider" tabindex="0" aria-label="Flow"><span class="lbl">Flow</span><span class="track"><i class="fillh"></i><i class="knob"></i></span><output></output></div>
+        <div class="hs" id="oSmooth" role="slider" tabindex="0" aria-label="StreamLine smoothing"><span class="lbl">StreamLine</span><span class="track"><i class="fillh"></i><i class="knob"></i></span><output></output></div>
+        <h3>Pen pressure</h3>
+        <button type="button" class="tog" id="oPSize" role="switch" aria-checked="true"><span>Changes the size</span><i></i></button>
+        <button type="button" class="tog" id="oPOpac" role="switch" aria-checked="false"><span>Changes the opacity</span><i></i></button>
+        <h3>Apply to</h3>
+        <div class="seg" role="group" aria-label="Copies"><button type="button" data-scope="all" aria-pressed="true">all copies</button><button type="button" data-scope="one" aria-pressed="false">this copy</button></div>
+        <button type="button" class="tog" id="oSym" role="switch" aria-checked="false" style="margin-top:6px"><span>Mirror (symmetry X)</span><i></i></button>
+        <div class="popFoot"><span id="oStats"></span><button type="button" class="pill" id="pClear">clear paint</button></div>
+      </div>
+      <div id="sizePreview" aria-hidden="true"></div>
+      <svg id="paintCursor" aria-hidden="true" hidden><path class="o"/><path class="i"/><circle class="dot" r="1.6"/></svg>
+      <div id="paintHint" class="glass" aria-hidden="true">Pencil or left drag paints · two fingers or right drag orbit</div>
       <div id="grips" hidden>
         <svg id="gripAxis" aria-hidden="true"><line id="gaLine" visibility="hidden"/><g id="gaTicks"></g></svg>
         <div id="gripBtns" role="group" aria-label="parameter grips: drag one, or focus it and press Enter to type a value, arrows to step"></div>
@@ -447,6 +619,7 @@
           <button type="button" class="pill" data-export="stl" title="binary STL · Z up · millimetres (for 3D printing)">STL</button>
           <button type="button" class="pill" data-export="json" title="the specification as JSON">spec.json</button>
         </div>
+        <p id="paintNote" class="note" hidden style="margin:6px 0 8px;font-size:11.5px;color:var(--text-3)">Paint: GLB and OBJ carry it as vertex colours (the painted parts are split finely where the paint changes; copies painted one by one are written separately). STL and the drawing are unpainted.</p>
         <div class="row" id="drawRow">
           <button type="button" class="pill" data-drawing="png" title="A3 drawing sheet: elevations, plan, dimensions, scale bar, title block · PNG at 300 dpi">drawing.png</button>
           <button type="button" class="pill" data-drawing="svg" title="A3 drawing sheet: elevations, plan, dimensions, scale bar, title block · SVG in millimetres, one layer per view and line weight">drawing.svg</button>

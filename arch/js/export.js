@@ -390,51 +390,66 @@ export function toGLB(meshes, opts = {}) {
     return json.accessors.length - 1;
   };
   const matIndex = new Map();
-  const material = (key) => {
-    if (matIndex.has(key)) return matIndex.get(key);
+  const material = (key, painted = false) => {
+    const mk = painted ? key + '|painted' : key;
+    if (matIndex.has(mk)) return matIndex.get(mk);
     const p = PBR[key] || PBR.limestone;
-    json.materials.push({ name: key, pbrMetallicRoughness: { baseColorFactor: [...hexLinear(p.color), 1], metallicFactor: p.metalness,
-      roughnessFactor: p.roughness } });
-    matIndex.set(key, json.materials.length - 1);
+    // a painted part carries its colour in COLOR_0 (the material colour mixed with the paint): its factor is white
+    json.materials.push({ name: painted ? key + '-painted' : key, pbrMetallicRoughness: { baseColorFactor: painted ? [1, 1, 1, 1] : [...hexLinear(p.color), 1],
+      metallicFactor: p.metalness, roughnessFactor: p.roughness } });
+    matIndex.set(mk, json.materials.length - 1);
     return json.materials.length - 1;
   };
   // one glTF mesh from Y-up arrays
-  const addMesh = (name, P, N, T, mat) => {
+  const addMesh = (name, P, N, T, mat, col = null) => {
     const nv = P.length / 3;
     const idx = nv <= 65535 ? Uint16Array.from(T) : (T instanceof Uint32Array ? T : Uint32Array.from(T));
     const attributes = { POSITION: vec3Accessor(P) };
     if (N) attributes.NORMAL = vec3Accessor(N);
+    if (col) { json.accessors.push({ bufferView: view(col, 34962), componentType: 5126, count: col.length / 4, type: 'VEC4' }); attributes.COLOR_0 = json.accessors.length - 1; }
     json.accessors.push({ bufferView: view(idx, 34963), componentType: idx instanceof Uint16Array ? 5123 : 5125, count: idx.length,
       type: 'SCALAR' });
-    json.meshes.push({ name, primitives: [{ attributes, indices: json.accessors.length - 1, material: material(mat), mode: 4 }] });
+    json.meshes.push({ name, primitives: [{ attributes, indices: json.accessors.length - 1, material: material(mat, !!col), mode: 4 }] });
     return json.meshes.length - 1;
   };
   const flipWinding = (T) => { const o = Uint32Array.from(T); for (let t = 0; t < o.length; t += 3) { const x = o[t + 1]; o[t + 1] = o[t + 2]; o[t + 2] = x; } return o; };
 
-  for (const mesh of meshes) {
-    const list = instanceList(mesh);
+  // paint (paint.js refinePainted): opts.paintMesh(meshIndex, copy (-1: every copy alike), base linear rgb) ->
+  // { positions, normals, indices, colors } (the part split where the paint changes, linear RGBA per vertex) or null;
+  // opts.expand(meshIndex): the copies differ (each gets its own mesh)
+  meshes.forEach((mesh0, mi) => {
+    const list = instanceList(mesh0), base = hexLinear((PBR[mesh0.material] || PBR.limestone).color);
+    const expand = !!(opts.paintMesh && opts.expand && opts.expand(mi));
+    const sharedPM = opts.paintMesh && !expand ? opts.paintMesh(mi, -1, base) : null;
     let shared = -1;
     list.forEach((m, i) => {
+      const pm = expand ? opts.paintMesh(mi, i, base) : sharedPM, col = pm ? pm.colors : null;
+      const mesh = pm ? { ...mesh0, positions: pm.positions, normals: pm.normals, indices: pm.indices } : mesh0;
       const nodeName = list.length > 1 ? `${mesh.name}_${i + 1}` : mesh.name;
       const my = mul(mul(C, m), CI); // the instance transform in Y-up space
       const node = { name: nodeName };
       if (isTRS(my)) {
-        if (shared < 0) {
+        if (expand && col) {
           const y = transformed(mesh, C);
-          shared = addMesh(mesh.name, y.p, y.q, mesh.indices, mesh.material);
+          node.mesh = addMesh(nodeName, y.p, y.q, mesh.indices, mesh.material, col);
+        } else {
+          if (shared < 0) {
+            const y = transformed(mesh, C);
+            shared = addMesh(mesh.name, y.p, y.q, mesh.indices, mesh.material, col);
+          }
+          node.mesh = shared;
         }
-        node.mesh = shared;
         if (isTranslation(my)) {
           if (!isIdentity(my)) node.translation = [my[12], my[13], my[14]];
         } else node.matrix = Array.from(my);
       } else { // shear: bake this instance into its own mesh
         const y = transformed(mesh, mul(C, m));
-        node.mesh = addMesh(nodeName, y.p, y.q, y.flip ? flipWinding(mesh.indices) : mesh.indices, mesh.material);
+        node.mesh = addMesh(nodeName, y.p, y.q, y.flip ? flipWinding(mesh.indices) : mesh.indices, mesh.material, col);
       }
       json.nodes.push(node);
       json.scenes[0].nodes.push(json.nodes.length - 1);
     });
-  }
+  });
   const pad = (4 - (offset % 4)) % 4;
   if (pad) { chunks.push(new Uint8Array(pad)); offset += pad; }
   json.buffers[0].byteLength = offset;
@@ -463,16 +478,24 @@ const nrm = (x) => { const r = Math.round(x * 1e4) / 1e4; return r === 0 ? '0' :
  *  per part, every instance expanded, vertex normals, usemtl per material key (Blender and Rhino create materials by
  *  name). */
 export function toOBJParts(meshes, opts = {}) {
-  const out = [`# Arch Studio${opts.name ? ' - ' + opts.name : ''}\n# units: metres, Y up\n\n`];
+  const out = [`# Arch Studio${opts.name ? ' - ' + opts.name : ''}\n# units: metres, Y up${opts.paintMesh ? '\n# painted parts carry vertex colours (v x y z r g b, sRGB)' : ''}\n\n`];
   let base = 1;
-  for (const src of meshes) {
-    // every vertex gets a normal, so v and vn indices stay equal across parts
-    const mesh = src.normals ? src : { ...src, normals: vertexNormals(src.positions, src.indices) };
-    out.push(`o ${safe(mesh.name)}\ng ${safe(mesh.name)}\nusemtl ${safe(mesh.material || 'stone')}\n`);
-    for (const m of instanceList(mesh)) {
+  const enc = (c) => (c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055);
+  meshes.forEach((src0, mi) => {
+    const bc = hexLinear((PBR[src0.material] || PBR.limestone).color);
+    const expand = !!(opts.paintMesh && opts.expand && opts.expand(mi)), sharedPM = opts.paintMesh && !expand ? opts.paintMesh(mi, -1, bc) : null;
+    out.push(`o ${safe(src0.name)}\ng ${safe(src0.name)}\nusemtl ${safe(src0.material || 'stone')}\n`);
+    instanceList(src0).forEach((m, k) => {
+      const pm = expand ? opts.paintMesh(mi, k, bc) : sharedPM, src = pm ? { ...src0, positions: pm.positions, normals: pm.normals, indices: pm.indices } : src0;
+      // every vertex gets a normal, so v and vn indices stay equal across parts
+      const mesh = src.normals ? src : { ...src, normals: vertexNormals(src.positions, src.indices) };
+      // a part some of whose copies are painted: its unpainted copies carry the material colour (one format per object)
+      let col = pm ? pm.colors : null;
+      if (!col && expand) { col = new Float32Array((mesh.positions.length / 3) * 4); for (let i = 0; i < col.length; i += 4) { col[i] = bc[0]; col[i + 1] = bc[1]; col[i + 2] = bc[2]; col[i + 3] = 1; } }
       const y = transformed(mesh, mul(C, m)), n = y.p.length / 3, v = new Array(n), vn = new Array(n);
       for (let i = 0; i < n; i++) {
-        v[i] = `v ${num(y.p[i * 3])} ${num(y.p[i * 3 + 1])} ${num(y.p[i * 3 + 2])}\n`;
+        v[i] = col ? `v ${num(y.p[i * 3])} ${num(y.p[i * 3 + 1])} ${num(y.p[i * 3 + 2])} ${enc(col[i * 4]).toFixed(4)} ${enc(col[i * 4 + 1]).toFixed(4)} ${enc(col[i * 4 + 2]).toFixed(4)}\n`
+          : `v ${num(y.p[i * 3])} ${num(y.p[i * 3 + 1])} ${num(y.p[i * 3 + 2])}\n`;
         vn[i] = `vn ${nrm(y.q[i * 3])} ${nrm(y.q[i * 3 + 1])} ${nrm(y.q[i * 3 + 2])}\n`;
       }
       out.push(v.join(''), vn.join(''));
@@ -483,8 +506,8 @@ export function toOBJParts(meshes, opts = {}) {
       }
       out.push(f.join(''));
       base += n;
-    }
-  }
+    });
+  });
   return out;
 }
 

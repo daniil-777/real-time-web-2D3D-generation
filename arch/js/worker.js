@@ -18,6 +18,7 @@
 import { setKernel, partsBBox, instanceCount } from './kernel.js';
 import { generate, family } from './generate.js';
 import { partMesh, featureEdges, toGLB, toOBJParts, toSTL, RIGID_RATIO, isRigidPart, frameScale } from './export.js';
+import { fromData, refinePainted, perCopy, partsOf } from './paint.js';
 import { deformParts } from './deform.js';
 
 const MANIFOLD = 'https://cdn.jsdelivr.net/npm/manifold-3d@3.5.4/manifold.js';
@@ -326,6 +327,13 @@ function edges(id) {
   post({ type: 'edges', id: last.id, edges: list }, list.map((a) => a.buffer));
 }
 
+/** Export options that bake the page's paint (paint.js): the painted parts refined and coloured per vertex. */
+function paintOpts(data) {
+  const P = fromData(data), B = P.build(1 << 20), M = last.meshes, keys = partsOf(M).map((p) => p.name);
+  return { paintMesh: (i, k, base) => { const pi = P.index.get(keys[i]); return pi === undefined ? null : refinePainted(M[i], B, pi, k < 0 ? 0 : k, base); },
+    expand: (i) => perCopy(P, keys[i]) };
+}
+
 const stale = () => Object.assign(new Error('the model on screen is not the one this worker holds'), { code: 'stale' });
 
 /** Export the model on screen: forId must be the build the page shows, or the answer is a 'stale' error. */
@@ -334,13 +342,17 @@ function exportAs(m) {
   const name = m.name || last.spec.element;
   let buffers, mime;
   if (m.format === 'glb') {
-    buffers = [toGLB(last.meshes, { name, extras: { spec: last.spec, ...(last.deform ? { deform: last.deform } : {}), generator: 'Arch Studio' } })];
+    // paint baked into vertex colours (COLOR_0), the painted parts split where the paint changes (refinePainted);
+    // every copy alike unless a stroke named one copy
+    let paint = {};
+    if (m.paint && m.paint.strokes && m.paint.strokes.length) paint = paintOpts(m.paint);
+    buffers = [toGLB(last.meshes, { name, ...paint, extras: { spec: last.spec, ...(last.deform ? { deform: last.deform } : {}), ...(m.paint && m.paint.strokes.length ? { paint: 'baked into COLOR_0' } : {}), generator: 'Arch Studio' } })];
     mime = 'model/gltf-binary';
   }
   else if (m.format === 'obj') {
     // chunk by chunk: a large model never becomes one giant string
     const enc = new TextEncoder();
-    buffers = toOBJParts(last.meshes, { name }).map((t) => enc.encode(t).buffer);
+    buffers = toOBJParts(last.meshes, { name, ...(m.paint && m.paint.strokes && m.paint.strokes.length ? paintOpts(m.paint) : {}) }).map((t) => enc.encode(t).buffer);
     mime = 'text/plain';
   } else if (m.format === 'stl') { buffers = [toSTL(last.meshes, { name })]; mime = 'model/stl'; }
   else throw new Error('unknown export format ' + m.format);

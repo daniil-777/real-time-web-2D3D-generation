@@ -18,6 +18,7 @@ import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { PBR } from './export.js';
 import { polar3 } from './deform.js';
+import { CELL_CAP, FILL_MAX, LIVE_CELL_CAP, BRICK_N } from './paint.js';
 
 const DEG = Math.PI / 180;
 // view directions in the kernel's Z-up frame (az: 0 = from the front (-Y), negative = from the left; el above horizon)
@@ -155,6 +156,282 @@ const LOOK = {
   glass: { kind: 'PLAIN', k: [0, 0, 0, 0] },
 };
 
+// ------------------------------------------------------------------------------------------------ paint (paint.js)
+//
+// The dab field, evaluated per fragment in the part's own coordinates (the position before the instance transform):
+// the part's header (3 texels) gives its grid; the fragment's cell lists the dabs that reach it, in order, merged with
+// the part's fills; dabs of one stroke build up to the stroke's opacity, strokes go over each other, erase strokes
+// remove paint. The stroke in progress is a uniform list evaluated directly (merged into the textures when it fills).
+// Any material can carry it (stone and the white model do); a mesh without the aPaintPart attribute reads 0: no paint.
+const PAINT_U = {
+  uPaintOn: { value: 0 },
+  // seven samplers in all (a lit material has 16 texture units, its own maps take up to 5): the headers, the cell
+  // tables and index lists are packed into one float and one integer texture with offsets
+  uPDab: { value: null }, uPMeta: { value: null }, uPUint: { value: null },
+  uPLDab: { value: null }, uPLUint: { value: null }, uFCol: { value: null }, uFFin: { value: null },
+  uPOff: { value: new THREE.Vector4() }, uPOff2: { value: new THREE.Vector4() },
+  uFieldOn: { value: 0 },
+  uPLiveG: { value: new THREE.Vector4(0, 0, 0, 1) }, uPLiveH: { value: new THREE.Vector4() },
+  uPLiveA: { value: new Float32Array(48 * 4) }, uPLiveB: { value: new Float32Array(48 * 4) },
+  uPLiveC: { value: new THREE.Vector4() }, uPLiveD: { value: new THREE.Vector4() },
+};
+const PAINT_VERT_HEAD = /* glsl */`
+attribute float aPaintPart;
+varying vec3 vPaintP;
+flat varying float vPaintPart;
+flat varying float vPaintI;`;
+const PAINT_VERT = /* glsl */`
+vPaintP = transformed; vPaintPart = aPaintPart;
+#ifdef USE_INSTANCING
+  vPaintI = float(gl_InstanceID);
+#else
+  vPaintI = 0.0;
+#endif`;
+// the same hash as paint.js hash3 (uint arithmetic wraps like Math.imul)
+const PAINT_FRAG_HEAD = /* glsl */`
+uniform float uPaintOn;
+uniform highp sampler2D uPDab; uniform highp sampler2D uPMeta; uniform highp usampler2D uPUint;
+uniform highp sampler2D uPLDab; uniform highp usampler2D uPLUint; uniform vec4 uPOff; uniform vec4 uPOff2;
+uniform vec4 uPLiveG; uniform vec4 uPLiveH;
+uniform highp sampler2D uFCol; uniform highp sampler2D uFFin; uniform float uFieldOn;
+uniform vec4 uPLiveA[48]; uniform vec4 uPLiveB[48]; uniform vec4 uPLiveC; uniform vec4 uPLiveD;
+varying vec3 vPaintP;
+flat varying float vPaintPart;
+flat varying float vPaintI;
+vec3 apC; float apA; float apT; vec2 apF;
+float apId; float apAcc; float apLim; float apCap; float apKind; vec3 apCol; vec2 apFin; float apHard; float apFlow;
+ivec2 apAt(int j) { return ivec2(j & 1023, j >> 10); }
+vec2 apFinish(float f) { return f < 0.5 ? vec2(0.82, 0.0) : f < 1.5 ? vec2(0.16, 0.0) : vec2(0.26, 1.0); }
+void apFlush() {
+  if (apId < 0.0) return;
+  float s = apCap * min(apAcc, apLim);
+  if (apKind < 0.5 || apKind > 1.5) { apC += apT * s * apCol; apA += apT * s; apF += apT * s * apFin; }
+  apT *= 1.0 - s;
+  apId = -1.0; apAcc = 0.0; apLim = 0.0;
+}
+void apStart(float id, vec3 col, float cap, float kf, float hf) {
+  if (id == apId) return;
+  apFlush();
+  apId = id; apCol = col; apCap = cap; apKind = floor(kf / 4.0 + 0.01); apFin = apFinish(kf - apKind * 4.0);
+  apHard = mod(hf, 256.0) / 255.0; apFlow = floor(hf / 256.0 + 0.001) / 255.0;
+}
+void apDab(vec3 c, float r, float p, float px) {
+  float w = max(r * (1.0 - apHard), px);
+  float cov = 1.0 - smoothstep(r - w, r, length(vPaintP - c));
+  apAcc += cov * apFlow * (1.0 - apAcc);
+  apLim = max(apLim, cov * p);
+}
+uint apHash(ivec3 c) { return (uint(c.x) * 73856093u) ^ (uint(c.y) * 19349663u) ^ (uint(c.z) * 83492791u); }
+// the committed grid's cell: start and count in the index list
+ivec2 apCell(ivec3 c, int hoff, int hsize) {
+  if (hsize == 0 || any(lessThan(c, ivec3(0))) || any(greaterThan(c, ivec3(65535, 65535, 65534)))) return ivec2(0);
+  uint k0 = uint(c.x) | (uint(c.y) << 16), k1 = uint(c.z) + 1u, mask = uint(hsize - 1), h = apHash(c) & mask;
+  for (int i = 0; i < 32; i++) {
+    uvec4 e = texelFetch(uPUint, apAt(hoff + int(h)), 0);
+    if (e.y == 0u) break;
+    if (e.x == k0 && e.y == k1) return ivec2(e.z, e.w);
+    h = (h + 1u) & mask;
+  }
+  return ivec2(0);
+}
+// the live grid's cell: the head of its list (1-based, newest first)
+int apLiveHead(ivec3 c, int hsize) {
+  if (hsize == 0 || any(lessThan(c, ivec3(0))) || any(greaterThan(c, ivec3(65535, 65535, 65534)))) return 0;
+  uint k0 = uint(c.x) | (uint(c.y) << 16), k1 = uint(c.z) + 1u, mask = uint(hsize - 1), h = apHash(c) & mask;
+  for (int i = 0; i < 32; i++) {
+    uvec4 e = texelFetch(uPLUint, apAt(int(h)), 0);
+    if (e.y == 0u) break;
+    if (e.x == k0 && e.y == k1) return int(e.z);
+    h = (h + 1u) & mask;
+  }
+  return 0;
+}
+// the flattened field (paint.js packField): its layer for this part and copy, then a trilinear sample inside one brick
+int apBrick(ivec3 c, int hoff, int hsize) {
+  if (hsize == 0 || any(lessThan(c, ivec3(0))) || any(greaterThan(c, ivec3(65535, 65535, 65534)))) return -1;
+  uint k0 = uint(c.x) | (uint(c.y) << 16), k1 = uint(c.z) + 1u, mask = uint(hsize - 1), h = apHash(c) & mask;
+  for (int i = 0; i < 32; i++) {
+    uvec4 e = texelFetch(uPUint, apAt(int(uPOff2.y + 0.5) + hoff + int(h)), 0);
+    if (e.y == 0u) break;
+    if (e.x == k0 && e.y == k1) return int(e.z);
+    h = (h + 1u) & mask;
+  }
+  return -1;
+}
+void apField(int pi) {
+  int oH = int(uPOff.x + 0.5), oL = int(uPOff.y + 0.5), oC = int(uPOff.z + 0.5);
+  vec4 h0 = texelFetch(uPMeta, apAt(oH + pi * 3), 0);
+  if (h0.w < 0.5) return;
+  int layer = int(h0.x + 0.5) - 1, cs = int(h0.y + 0.5), cc = int(h0.z + 0.5);
+  for (int i = 0; i < 64; i++) {
+    if (i >= cc) break;
+    vec4 e = texelFetch(uPMeta, apAt(oC + cs + i), 0);
+    if (abs(e.x - vPaintI) < 0.5) { layer = int(e.y + 0.5); break; }
+  }
+  vec4 h1 = texelFetch(uPMeta, apAt(oH + pi * 3 + 1), 0), h2 = texelFetch(uPMeta, apAt(oH + pi * 3 + 2), 0);
+  vec4 L0 = texelFetch(uPMeta, apAt(oL + layer * 4), 0), L1 = texelFetch(uPMeta, apAt(oL + layer * 4 + 1), 0);
+  vec3 g = (vPaintP * h1.xyz + h2.xyz - L0.xyz) / L0.w;
+  ivec3 b = ivec3(floor(g / 8.0));
+  int bi = apBrick(b, int(L1.x + 0.5), int(L1.y + 0.5));
+  vec4 fc; vec2 ff;
+  if (bi < 0) { fc = texelFetch(uPMeta, apAt(oL + layer * 4 + 2), 0); ff = texelFetch(uPMeta, apAt(oL + layer * 4 + 3), 0).xy; }
+  else {
+    vec3 l = g - vec3(b) * 8.0;
+    ivec3 l0 = min(ivec3(floor(l)), ivec3(7));
+    vec3 t = clamp(l - vec3(l0), 0.0, 1.0);
+    int base = bi * ${BRICK_N} + l0.x + 9 * (l0.y + 9 * l0.z);
+    vec4 c000 = texelFetch(uFCol, apAt(base), 0), c100 = texelFetch(uFCol, apAt(base + 1), 0);
+    vec4 c010 = texelFetch(uFCol, apAt(base + 9), 0), c110 = texelFetch(uFCol, apAt(base + 10), 0);
+    vec4 c001 = texelFetch(uFCol, apAt(base + 81), 0), c101 = texelFetch(uFCol, apAt(base + 82), 0);
+    vec4 c011 = texelFetch(uFCol, apAt(base + 90), 0), c111 = texelFetch(uFCol, apAt(base + 91), 0);
+    fc = mix(mix(mix(c000, c100, t.x), mix(c010, c110, t.x), t.y), mix(mix(c001, c101, t.x), mix(c011, c111, t.x), t.y), t.z);
+    vec2 f000 = texelFetch(uFFin, apAt(base), 0).xy, f100 = texelFetch(uFFin, apAt(base + 1), 0).xy;
+    vec2 f010 = texelFetch(uFFin, apAt(base + 9), 0).xy, f110 = texelFetch(uFFin, apAt(base + 10), 0).xy;
+    vec2 f001 = texelFetch(uFFin, apAt(base + 81), 0).xy, f101 = texelFetch(uFFin, apAt(base + 82), 0).xy;
+    vec2 f011 = texelFetch(uFFin, apAt(base + 90), 0).xy, f111 = texelFetch(uFFin, apAt(base + 91), 0).xy;
+    ff = mix(mix(mix(f000, f100, t.x), mix(f010, f110, t.x), t.y), mix(mix(f001, f101, t.x), mix(f011, f111, t.x), t.y), t.z);
+  }
+  apC += apT * fc.rgb; apA += apT * fc.a; apF += apT * ff;
+}
+void archPaint(float px) {
+  apC = vec3(0.0); apA = 0.0; apT = 1.0; apF = vec2(0.0); apId = -1.0; apAcc = 0.0; apLim = 0.0;
+  int pi = int(vPaintPart + 0.5) - 1;
+  if (pi < 0) return;
+  // 1. the stroke in progress: its newest dabs (uniforms), then its live grid (newest first)
+  int n = int(uPLiveD.z + 0.5);
+  for (int q = 0; q < 48; q++) {
+    if (q >= n) break;
+    int k = n - 1 - q;
+    vec4 b = uPLiveB[k];
+    if (abs(b.z - vPaintPart) > 0.5 || (b.y >= 0.0 && abs(b.y - vPaintI) > 0.5)) continue;
+    apStart(uPLiveD.w, uPLiveC.rgb, uPLiveC.a, uPLiveD.y, uPLiveD.x);
+    vec4 a = uPLiveA[k];
+    apDab(a.xyz, a.w, b.x, px);
+  }
+  if (uPLiveH.y > 0.5) {
+    int e = apLiveHead(ivec3(floor((vPaintP - uPLiveG.xyz) / uPLiveG.w)), int(uPLiveH.x + 0.5));
+    for (int it = 0; it < ${LIVE_CELL_CAP}; it++) {
+      if (e == 0) break;
+      uvec4 en = texelFetch(uPLUint, apAt(int(uPLiveH.z + 0.5) + ((e - 1) >> 1)), 0);
+      bool odd = ((e - 1) & 1) == 1;
+      int d = int(odd ? en.z : en.x);
+      e = int(odd ? en.w : en.y);
+      vec4 t1 = texelFetch(uPLDab, apAt(d * 2 + 1), 0);
+      if (abs(t1.x - vPaintPart) > 0.5 || (t1.y >= 0.0 && abs(t1.y - vPaintI) > 0.5)) continue;
+      vec4 t0 = texelFetch(uPLDab, apAt(d * 2), 0);
+      apStart(uPLiveD.w, uPLiveC.rgb, uPLiveC.a, uPLiveD.y, uPLiveD.x);
+      apDab(t0.xyz, t0.w, t1.z, px);
+    }
+  }
+  // 2. the committed paint, newest first (the cell's list merged with the part's fills), until it is covered
+  vec4 h0 = texelFetch(uPMeta, apAt(pi * 3), 0), h1 = texelFetch(uPMeta, apAt(pi * 3 + 1), 0), h2 = texelFetch(uPMeta, apAt(pi * 3 + 2), 0);
+  if (h2.x > 0.5) {
+    ivec2 sc = apCell(ivec3(floor((vPaintP - h0.xyz) / h0.w)), int(h1.x + 0.5), int(h1.y + 0.5));
+    int st = sc.x, i = sc.y - 1, fs = int(h1.z + 0.5), j = int(h1.w + 0.5) - 1;
+    for (int it = 0; it < ${CELL_CAP + FILL_MAX}; it++) {
+      if ((i < 0 && j < 0) || apT < 1e-3) break;
+      int oI = int(uPOff2.x + 0.5);
+      uint di = i >= 0 ? texelFetch(uPUint, apAt(oI + ((st + i) >> 2)), 0)[(st + i) & 3] : 0u;
+      uint dj = j >= 0 ? texelFetch(uPUint, apAt(oI + ((fs + j) >> 2)), 0)[(fs + j) & 3] : 0u;
+      int d;
+      if (i >= 0 && (j < 0 || di > dj)) { d = int(di); i--; } else { d = int(dj); j--; }
+      vec4 t2 = texelFetch(uPDab, apAt(d * 3 + 2), 0);
+      float cp = floor(t2.y / 16.0 + 0.001) - 1.0;
+      if (cp >= 0.0 && abs(cp - vPaintI) > 0.5) continue;
+      vec4 t1 = texelFetch(uPDab, apAt(d * 3 + 1), 0);
+      float kf = t2.y - (cp + 1.0) * 16.0;
+      apStart(t2.z, t1.rgb, t1.a, kf, t2.x);
+      if (kf > 7.5) { apAcc = 1.0; apLim = 1.0; continue; }
+      vec4 t0 = texelFetch(uPDab, apAt(d * 3), 0);
+      apDab(t0.xyz, t0.w, t2.w, px);
+    }
+  }
+  apFlush();
+  if (uFieldOn > 0.5 && apT >= 1e-3) apField(pi);
+}`;
+const PAINT_FRAG = /* glsl */`
+if (uPaintOn > 0.5) {
+  archPaint(max(length(fwidth(vPaintP)) * 0.75, 1e-5));
+  if (apA > 0.001) {
+    vec3 pc = apC / apA; vec2 pf = apF / apA;
+    // pigment on the material: a little of the stone's own mottling shows through (limewash, not plastic)
+    float lum0 = max(dot(diffuse, vec3(0.2126, 0.7152, 0.0722)), 1e-3);
+    float tex = clamp(dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722)) / lum0, 0.7, 1.3);
+    diffuseColor.rgb = diffuseColor.rgb * (1.0 - apA) + pc * mix(1.0, tex, 0.4 * (1.0 - pf.y)) * apA;
+    roughnessFactor = mix(roughnessFactor, pf.x, apA);
+    metalnessFactor = mix(metalnessFactor, pf.y, apA);
+  }
+}`;
+/** Shader edits that add the paint to a lit material (call from its onBeforeCompile). */
+function injectPaint(sh) {
+  Object.assign(sh.uniforms, PAINT_U);
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\n' + PAINT_VERT_HEAD)
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + PAINT_VERT);
+  sh.fragmentShader = sh.fragmentShader
+    .replace('#include <common>', '#include <common>\n' + PAINT_FRAG_HEAD)
+    .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\n' + PAINT_FRAG);
+}
+const TEX_FMT = {
+  rgba32f: [THREE.RGBAFormat, THREE.FloatType, 4, Float32Array],
+  rgba16f: [THREE.RGBAFormat, THREE.HalfFloatType, 4, Uint16Array],
+  rgba8: [THREE.RGBAFormat, THREE.UnsignedByteType, 4, Uint8Array],
+  rgba32ui: [THREE.RGBAIntegerFormat, THREE.UnsignedIntType, 4, Uint32Array],
+  rg32ui: [THREE.RGIntegerFormat, THREE.UnsignedIntType, 2, Uint32Array],
+  r32ui: [THREE.RedIntegerFormat, THREE.UnsignedIntType, 1, Uint32Array],
+};
+const INTERNAL = { rgba32f: 'RGBA32F', rgba16f: 'RGBA16F', rgba8: 'RGBA8', rgba32ui: 'RGBA32UI', rg32ui: 'RG32UI', r32ui: 'R32UI' };
+function paintTex(data, rows, kind) {
+  const [format, type] = TEX_FMT[kind];
+  const t = new THREE.DataTexture(data, 1024, rows, format, type);
+  t.internalFormat = INTERNAL[kind];
+  t.minFilter = t.magFilter = THREE.NearestFilter; t.generateMipmaps = false; t.flipY = false; t.unpackAlignment = 1;
+  t.needsUpdate = true;
+  return t;
+}
+/** Every paint sampler needs a texture of its own kind from the first frame (an integer sampler with the default
+ *  float texture bound fails the draw). */
+function paintDefaults() {
+  const U = PAINT_U;
+  if (!U.uPLDab.value) { putTex('uPLDab', new Float32Array(4), 'rgba32f'); putTex('uPLUint', new Uint32Array(4), 'rgba32ui'); }
+  if (!U.uFCol.value) { putTex('uFCol', new Uint16Array(4), 'rgba16f'); putTex('uFFin', new Uint8Array(4), 'rgba8'); }
+  if (!U.uPDab.value) { putTex('uPDab', new Float32Array(4), 'rgba32f'); putTex('uPMeta', new Float32Array(4), 'rgba32f'); putTex('uPUint', new Uint32Array(4), 'rgba32ui'); }
+}
+/** A paint texture from a typed array (padded to whole rows of 1024 texels); reused while its size holds. */
+function putTex(name, data, kind) {
+  const per = TEX_FMT[kind][2], rows = Math.max(1, Math.ceil(data.length / (1024 * per)));
+  let arr = data;
+  if (data.length !== rows * 1024 * per) { arr = new (TEX_FMT[kind][3])(rows * 1024 * per); arr.set(data.subarray ? data.subarray(0, Math.min(data.length, arr.length)) : data); }
+  const u = PAINT_U[name], t = u.value;
+  if (t && t.image.height === rows && t.userData.kind === kind) { t.image.data = arr; t.needsUpdate = true; return; }
+  if (t) t.dispose();
+  u.value = paintTex(arr, rows, kind);
+  u.value.userData.kind = kind;
+}
+// the pick pass: part-local position (float bits) and part | copy << 12 per pixel, in an integer target (core WebGL2)
+const PICK_VERT = /* glsl */`
+attribute float aPaintPart;
+varying vec3 vP;
+flat varying int vPart;
+flat varying int vI;
+void main() {
+  vec4 p = vec4(position, 1.0);
+  #ifdef USE_INSTANCING
+    p = instanceMatrix * p;
+    vI = gl_InstanceID;
+  #else
+    vI = 0;
+  #endif
+  vP = position; vPart = int(aPaintPart + 0.5);
+  gl_Position = projectionMatrix * modelViewMatrix * p;
+}`;
+const PICK_FRAG = /* glsl */`
+layout(location = 0) out highp uvec4 pickOut;
+varying vec3 vP;
+flat varying int vPart;
+flat varying int vI;
+void main() { pickOut = uvec4(floatBitsToUint(vP.x), floatBitsToUint(vP.y), floatBitsToUint(vP.z), uint(vPart) | (uint(vI) << 12)); }`;
+
 function stoneMaterial(key) {
   const p = PBR[key] || PBR.limestone, look = LOOK[key] || LOOK.limestone;
   const mat = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(p.color), roughness: p.roughness, metalness: p.metalness });
@@ -168,6 +445,7 @@ function stoneMaterial(key) {
   const bump = look.k[3] > 0;
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uniforms);
+    injectPaint(sh);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vArchP;')
       .replace('#include <project_vertex>', `#include <project_vertex>
@@ -193,7 +471,7 @@ function stoneMaterial(key) {
           normal = normalize(abs(det) * normal - grad);
         }` : ''}`);
   };
-  mat.customProgramCacheKey = () => 'arch-' + look.kind + (bump ? '-b' : '') + (look.sheen ? '-s' : '');
+  mat.customProgramCacheKey = () => 'arch-p-' + look.kind + (bump ? '-b' : '') + (look.sheen ? '-s' : '');
   return mat;
 }
 
@@ -652,6 +930,13 @@ export class Viewer {
 
     this.mats = new Map();
     this.whiteMat = new THREE.MeshStandardMaterial({ color: 0xf6f6f4, roughness: 0.95, metalness: 0 });
+    this.whiteMat.onBeforeCompile = (sh) => injectPaint(sh);
+    this.whiteMat.customProgramCacheKey = () => 'white-p';
+    paintDefaults();
+    this.paintVersion = 0; this.modelVersion = 0; this.pickRT = null; this.pickTiles = new Map(); this.pickKey = '';
+    this.pickMat = new THREE.ShaderMaterial({ vertexShader: PICK_VERT, fragmentShader: PICK_FRAG, glslVersion: THREE.GLSL3, blending: THREE.NoBlending });
+    this.pickCam = { mw: new THREE.Matrix4(), pm: new THREE.Matrix4(), key: '' };
+    this.pickV = { m: new THREE.Matrix4(), v: new THREE.Vector3(), a: new THREE.Vector3(), b: new THREE.Vector3(), n: new THREE.Vector3(), c: new THREE.Vector3() };
     this.lineFaceMat = new THREE.MeshBasicMaterial({ color: 0xffffff, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
     this.lineMat = new THREE.LineBasicMaterial({ color: 0x1b1b1d });
     this.defU = new DeformUniforms();
@@ -768,6 +1053,7 @@ export class Viewer {
     this.model.clear();
     this.clearEdges();
     const tmp = new THREE.Matrix4();
+    this.modelVersion++;
     for (const mesh of meshes) {
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', new THREE.BufferAttribute(mesh.positions, 3));
@@ -776,6 +1062,9 @@ export class Viewer {
       geo.setIndex(new THREE.BufferAttribute(nv < 65536 ? Uint16Array.from(mesh.indices) : mesh.indices, 1));
       const n = mesh.transforms ? mesh.transforms.length / 16 : 1;
       const im = new THREE.InstancedMesh(geo, this.material(mesh.material), n);
+      // the paint's part index (paint.js: the first mesh of that name), the same on every copy
+      // the paint's part index: this mesh (paint.js partsOf: one part per mesh), the same on every copy
+      geo.setAttribute('aPaintPart', new THREE.InstancedBufferAttribute(new Float32Array(n).fill(this.model.children.length + 1), 1));
       for (let i = 0; i < n; i++) im.setMatrixAt(i, mesh.transforms ? tmp.fromArray(mesh.transforms, 16 * i) : tmp.identity());
       im.instanceMatrix.needsUpdate = true;
       im.castShadow = true; im.receiveShadow = true;
@@ -1457,6 +1746,158 @@ export class Viewer {
     try { this.canvas.releasePointerCapture(this.drag.id); } catch (err) { /* already released */ }
     this.drag = null;
     this.controls.enabled = true;
+  }
+
+  // ---------------------------------------------------------------------------------------------- paint
+
+  /** The paint textures from paint.js build(); colour only: the shadows are not redrawn. */
+  setPaint(B) {
+    putTex('uPDab', B.dab, 'rgba32f');
+    const F = B.field, ROW = 1024 * 4;
+    const pad = (a, Ctor) => { const n = Math.max(ROW, Math.ceil(a.length / ROW) * ROW); if (a.length === n) return a; const o = new Ctor(n); o.set(a); return o; };
+    // floats: exact part headers | field part headers | layers | copy lists
+    const parts = [pad(B.head, Float32Array), ...(F ? [pad(F.head, Float32Array), pad(F.lay, Float32Array), pad(F.copy, Float32Array)] : [])];
+    const meta = new Float32Array(parts.reduce((n, a) => n + a.length, 0));
+    let o = 0; const offs = [];
+    for (const a of parts) { offs.push(o / 4); meta.set(a, o); o += a.length; }
+    putTex('uPMeta', meta, 'rgba32f');
+    PAINT_U.uPOff.value.set(offs[1] || 0, offs[2] || 0, offs[3] || 0, 0);
+    // integers: exact cell tables | exact index lists (4 per texel) | field brick tables
+    const idx4 = pad(B.idx, Uint32Array), uparts = [pad(B.hash, Uint32Array), idx4, ...(F ? [pad(F.hash, Uint32Array)] : [])];
+    const uint = new Uint32Array(uparts.reduce((n, a) => n + a.length, 0));
+    o = 0; const uoffs = [];
+    for (const a of uparts) { uoffs.push(o / 4); uint.set(a, o); o += a.length; }
+    putTex('uPUint', uint, 'rgba32ui');
+    PAINT_U.uPOff2.value.set(uoffs[1], uoffs[2] || 0, 0, 0);
+    if (F && F !== this._field) {            // the field's samples change only when strokes are flattened
+      this._field = F;
+      putTex('uFCol', F.col, 'rgba16f'); putTex('uFFin', F.fin, 'rgba8');
+    }
+    PAINT_U.uFieldOn.value = F && F.layers ? 1 : 0;
+    this.paintHas = B.dabs > 0 || !!(F && F.layers);
+    this.paintOn();
+  }
+  paintOn() {
+    const U = PAINT_U;
+    paintDefaults();
+    U.uPaintOn.value = this.paintHas || U.uPLiveD.value.z > 0 || U.uPLiveH.value.y > 0 ? 1 : 0;
+    this.dirty = Math.max(this.dirty, 2);
+  }
+  /** The stroke in progress (paint.js live): uniforms every call, the live grid's textures when it changed. */
+  setPaintLive(L) {
+    const U = PAINT_U, g = L.grid;
+    U.uPLiveA.value.set(L.a); U.uPLiveB.value.set(L.b);
+    U.uPLiveC.value.set(L.c[0], L.c[1], L.c[2], L.c[3]); U.uPLiveD.value.set(L.d[0], L.d[1], L.n, L.d[3]);
+    if (this._liveGridV !== L.gridVersion) {
+      this._liveGridV = L.gridVersion;
+      if (g.n) {
+        putTex('uPLDab', g.dab.subarray(0, g.n * 8), 'rgba32f');
+        const hs = g.T.t.length, ent = g.ent.subarray(0, Math.max(4, g.m * 2 + (g.m & 1) * 2)), lu = new Uint32Array(hs + ent.length);
+        lu.set(g.T.t); lu.set(ent, hs);
+        putTex('uPLUint', lu, 'rgba32ui');
+        this._liveEntOff = hs / 4;
+      }
+      U.uPLiveG.value.set(g.origin[0], g.origin[1], g.origin[2], g.cell);
+      U.uPLiveH.value.set(g.n ? g.T.size : 0, g.n, this._liveEntOff || 0, 0);
+    }
+    this.paintOn();
+  }
+
+  /** The surface under canvas point (x, y) (CSS px): { mesh (index), name, copy, p (part-local), n (part-local normal),
+   *  world (Y-up world point), nw (world normal, towards the camera), scale } or null. An integer pick pass (the
+   *  part-local position's float bits, part | copy << 12 per pixel; core WebGL2, exact for any copy count) is drawn once
+   *  per view and read back in 64 px tiles as the pointer needs them. */
+  pick(x, y) {
+    const W = this._w, H = this._h;
+    if (!this.model.children.length || !(x >= 0) || !(y >= 0) || x >= W || y >= H) return null;
+    const cam = this.camera, PC = this.pickCam, r = this.renderer;
+    cam.updateMatrixWorld();
+    if (!PC.mw.equals(cam.matrixWorld) || !PC.pm.equals(cam.projectionMatrix) || PC.w !== W || PC.h !== H || PC.model !== this.modelVersion || PC.cam !== cam) {
+      PC.mw.copy(cam.matrixWorld); PC.pm.copy(cam.projectionMatrix); PC.w = W; PC.h = H; PC.model = this.modelVersion; PC.cam = cam;
+      this.pickTiles.clear();
+      if (!this.pickRT) this.pickRT = new THREE.WebGLRenderTarget(W, H, { type: THREE.UnsignedIntType, format: THREE.RGBAIntegerFormat, internalFormat: 'RGBA32UI',
+        minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, generateMipmaps: false });
+      if (this.pickRT.width !== W || this.pickRT.height !== H) this.pickRT.setSize(W, H);
+      const mats = this.model.children.map((m) => m.material), cc = r.getClearColor(this._cc || (this._cc = new THREE.Color())), ca = r.getClearAlpha();
+      const sh = r.shadowMap.enabled;
+      for (const m of this.model.children) m.material = this.pickMat;
+      // the 1.80 m figure stands in front of the element: it occludes (part 0: no paint) instead of being painted through
+      const fig = [];
+      if (this.figure.visible) this.figure.traverse((o) => { if (o.isMesh) { fig.push([o, o.material]); o.material = this.pickMat; } });
+      // only the model and the figure are drawn (edges, lattice, previews have float outputs: not into an integer target)
+      const others = this.root.children.filter((o) => o !== this.model && o !== this.figure).map((o) => [o, o.visible]);
+      for (const [o] of others) o.visible = false;
+      r.shadowMap.enabled = false;
+      r.setRenderTarget(this.pickRT);
+      r.setClearColor(0x000000, 0); r.clear();
+      r.render(this.root, cam);
+      r.setRenderTarget(null);
+      r.setClearColor(cc, ca); r.shadowMap.enabled = sh;
+      this.model.children.forEach((m, i) => { m.material = mats[i]; });
+      for (const [o, m] of fig) o.material = m;
+      for (const [o, v] of others) o.visible = v;
+      this.pickRenders = (this.pickRenders || 0) + 1;
+    }
+    const T = 64, px = Math.min(W - 1, Math.max(0, Math.floor(x))), py = Math.min(H - 1, Math.max(0, H - 1 - Math.floor(y)));
+    const at = (qx, qy) => {
+      if (qx < 0 || qy < 0 || qx >= W || qy >= H) return null;
+      const tx = Math.floor(qx / T), ty = Math.floor(qy / T), k = tx * 65536 + ty;
+      let tile = this.pickTiles.get(k);
+      if (!tile) {
+        const w = Math.min(T, W - tx * T), h = Math.min(T, H - ty * T), u = new Uint32Array(w * h * 4);
+        r.readRenderTargetPixels(this.pickRT, tx * T, ty * T, w, h, u);
+        tile = { w, h, u, f: new Float32Array(u.buffer) };
+        this.pickTiles.set(k, tile);
+      }
+      const o = ((qy - ty * T) * tile.w + (qx - tx * T)) * 4, id = tile.u[o + 3];
+      return id & 4095 ? { o, f: tile.f, id } : null;
+    };
+    const c = at(px, py);
+    if (!c) return null;
+    const part = c.id & 4095, copy = c.id >>> 12, mesh = part - 1;
+    const im = this.model.children[mesh];
+    if (!im) return null;
+    const P = (e) => [e.f[e.o], e.f[e.o + 1], e.f[e.o + 2]];
+    // sub-pixel position: bilinear over the 2 x 2 texels around the point when they are all on this copy of this part
+    const fx = x - 0.5, fy = H - y - 0.5, x0 = Math.floor(fx), y0 = Math.floor(fy), u = fx - x0, v = fy - y0;
+    const q = [at(x0, y0), at(x0 + 1, y0), at(x0, y0 + 1), at(x0 + 1, y0 + 1)];
+    let p = P(c);
+    if (q.every((e) => e && e.id === c.id)) { const Q = q.map(P); p = [0, 1, 2].map((a) => (Q[0][a] * (1 - u) + Q[1][a] * u) * (1 - v) + (Q[2][a] * (1 - u) + Q[3][a] * u) * v); }
+    // normal: the local surface's tangents from the neighbouring texels
+    const nb = (e) => (e && e.id === c.id ? P(e) : P(c));
+    const dx = nb(at(px + 1, py)), dx0 = nb(at(px - 1, py)), dy = nb(at(px, py + 1)), dy0 = nb(at(px, py - 1));
+    const V = this.pickV, n = V.n.set(0, 0, 0);
+    V.a.set(dx[0] - dx0[0], dx[1] - dx0[1], dx[2] - dx0[2]); V.b.set(dy[0] - dy0[0], dy[1] - dy0[1], dy[2] - dy0[2]);
+    n.crossVectors(V.a, V.b);
+    const M = V.m;
+    im.getMatrixAt(copy, M);
+    M.premultiply(im.matrixWorld);
+    const world = new THREE.Vector3(p[0], p[1], p[2]).applyMatrix4(M);
+    const toCam = V.c.subVectors(cam.position, world);
+    const nw = n.lengthSq() > 1e-30 ? n.clone().transformDirection(M) : toCam.clone().normalize();
+    if (nw.dot(toCam) < 0) { nw.negate(); n.negate(); }
+    const sx = V.a.setFromMatrixColumn(M, 0).length(), sy = V.a.setFromMatrixColumn(M, 1).length(), sz = V.a.setFromMatrixColumn(M, 2).length();
+    return { mesh, name: im.name, copy, p, n: n.lengthSq() > 1e-30 ? n.normalize().toArray() : [0, 0, 1], world, nw, scale: (sx + sy + sz) / 3 };
+  }
+
+  /** Screen points (CSS px) of a circle of world radius r around a pick, lying on the surface (the brush cursor). */
+  ring(hit, r, n = 48) {
+    const t1 = new THREE.Vector3(), t2 = new THREE.Vector3(), v = new THREE.Vector3(), out = [];
+    const nw = hit.nw;
+    t1.set(Math.abs(nw.y) < 0.9 ? 0 : 1, Math.abs(nw.y) < 0.9 ? 1 : 0, 0).cross(nw).normalize();
+    t2.crossVectors(nw, t1);
+    for (let i = 0; i <= n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      v.copy(hit.world).addScaledVector(t1, Math.cos(a) * r).addScaledVector(t2, Math.sin(a) * r).addScaledVector(nw, r * 0.02).project(this.camera);
+      out.push([(v.x + 1) / 2 * this._w, (1 - v.y) / 2 * this._h]);
+    }
+    return out;
+  }
+  /** Screen pixels per metre at a world point (the size slider's preview). */
+  pxPerMetre(world) {
+    const a = world.clone().project(this.camera), right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
+    const b = world.clone().add(right).project(this.camera);
+    return Math.hypot((b.x - a.x) / 2 * this._w, (b.y - a.y) / 2 * this._h);
   }
 
   // ---------------------------------------------------------------------------------------------- grips (projection)
