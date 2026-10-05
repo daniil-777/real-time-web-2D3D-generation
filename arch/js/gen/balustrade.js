@@ -11,8 +11,10 @@
 import { mat, revolve, loft, box, union, part, instances, extrudeProfileX, bezier } from '../kernel.js';
 import { Prof } from '../profiles.js';
 import { urnParts } from './finial.js';
+import { effective } from './balustrade-style.js';
 
 export const ELEMENTS = ['balustrade', 'baluster'];
+export { effective };   // generate() merges it into the spec it returns
 export const BALUSTERS = ['vase', 'double-vase', 'bottle', 'square', 'bar'];
 
 const OV = 0.001;                 // overlap of touching pieces (Manifold does not fuse touching faces)
@@ -21,20 +23,7 @@ const TRI_BUDGET = 1.1e6;         // triangles allowed for all balusters togethe
 // greatest diameter D as a fraction of the baluster's height (typical stone balusters: about 190 mm on 600 mm)
 const D_OF = { vase: 0.33, 'double-vase': 0.31, bottle: 0.31, square: 0.29 };
 const RES = { low: { segs: 32, q: 5 }, medium: { segs: 64, q: 8 }, high: { segs: 96, q: 12 } };
-// a period's balustrade when the request names the style but not the baluster: Renaissance double-vase (Bramante,
-// Sansovino), Baroque pear-shaped bottle balusters under urns, Art Deco square, Modern bars; stated fields win
-const STYLE_BALUSTRADE = { renaissance: { baluster: 'double-vase' }, baroque: { baluster: 'bottle', urns: true },
-  'art-deco': { baluster: 'square' }, modern: { baluster: 'bar' } };
-
-/** The fields the style decides (what is built, for the read-back): baluster kind and urns, unless stated. */
-export function effective(spec) {
-  const out = {}, given = spec.given || [];
-  for (const [k, v] of Object.entries(STYLE_BALUSTRADE[spec.style] || {})) {
-    if (!given.includes(k) && !(k === 'urns' && spec.element === 'baluster')) out[k] = v;
-  }
-  return out;
-}
-const styled = (spec) => ({ ...spec, ...effective(spec) });
+const styled = (spec) => ({ ...spec, ...effective(spec) });   // the period's baluster and urns (balustrade-style.js)
 
 // ------------------------------------------------------------------------------------------------ dimensions
 

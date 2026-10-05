@@ -68,3 +68,36 @@ console.log('built pediments:', Object.entries(tally).map(([k, n]) => `${k} ${n}
 for (const f of fails.slice(0, 40)) console.log('FAIL', f);
 console.log(`readback: ${pass}/${cases.length} pass (${(ms / 1000).toFixed(1)} s)`);
 assert.equal(fails.length, 0, `${fails.length} read-backs disagree with the build`);
+
+// balustrades and balusters: a named period decides the baluster and urns (balustrade-style.js) unless stated. The line
+// before the build equals the built one, names the baluster the build has (its volume equals the stated kind's) and
+// "urns" iff the build has urns; spec.given stays as stated.
+const vol = (r) => r.parts.find((p) => p.name === 'baluster').manifold.volume();
+const ref = {};
+for (const baluster of SCHEMA.baluster.values) {
+  const r = await generate({ element: 'balustrade', length: 4, baluster });
+  ref[baluster] = vol(r); free(r.parts);
+}
+let bpass = 0, bn = 0;
+const bfails = [];
+for (const style of [undefined, ...SCHEMA.style.values]) for (const stated of [{}, { baluster: 'vase' }, { urns: false }, { urns: true }]) {
+  for (const element of ['balustrade', 'baluster']) {
+    if (element === 'baluster' && 'urns' in stated) continue;
+    const spec = { element, ...(style ? { style } : {}), ...(element === 'balustrade' ? { length: 4 } : {}), ...stated };
+    const r = await generate(spec), line = describe(r.spec), pre = describe(normalize(spec).spec), errs = [];
+    bn++;
+    if (pre !== line) errs.push(`before the build: ${pre}`);
+    if (JSON.stringify(r.spec.given) !== JSON.stringify(normalize(spec).spec.given)) errs.push('spec.given changed');
+    const kind = (line.match(/\b(double-vase|vase|bottle|square|bar) balusters?\b/i) || [])[1]?.toLowerCase();
+    if (element === 'balustrade') {
+      if (!kind || Math.abs(vol(r) - ref[kind]) > 1e-9 * ref[kind]) errs.push(`built baluster is not "${kind}"`);
+      if (/\burns\b/.test(line) !== r.parts.some((p) => p.name.startsWith('urn-'))) errs.push('urns read ≠ urns built');
+    }
+    if (stated.baluster && kind !== stated.baluster) errs.push('a stated baluster lost to the style');
+    free(r.parts);
+    if (errs.length) bfails.push(`${JSON.stringify(spec)} → ${line}: ${errs.join('; ')}`); else bpass++;
+  }
+}
+for (const f of bfails.slice(0, 20)) console.log('FAIL', f);
+console.log(`readback balustrades: ${bpass}/${bn} pass`);
+assert.equal(bfails.length, 0, `${bfails.length} balustrade read-backs disagree with the build`);

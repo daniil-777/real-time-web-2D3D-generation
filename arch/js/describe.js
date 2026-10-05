@@ -5,6 +5,7 @@
 
 import { ORDERS, columnDims, DEFAULT_D } from './orders.js';
 import { effective } from './gen/surround.js';
+import { effective as balustradeEffective } from './gen/balustrade-style.js';
 
 const ORDER = { tuscan: 'Tuscan', doric: 'Doric', 'greek-doric': 'Greek Doric', ionic: 'Ionic', corinthian: 'Corinthian',
   composite: 'Composite', romanesque: 'Romanesque', gothic: 'Gothic', egyptian: 'Egyptian', solomonic: 'Solomonic',
@@ -112,13 +113,14 @@ function facts(spec) {
       f.title = join(st, 'balustrade');
       f.main = { field: 'length', v: s.length };
       if (s.height) f.items.push(`${m(s.height)} high`);
-      if (s.balusters) { f.items.push(`${s.balusters} ${s.baluster || ''} balusters`.replace(/\s+/g, ' ')); f.counts.push(['balusters', s.balusters]); }
-      else if (s.baluster) f.items.push(`${s.baluster} balusters`);
-      if (s.urns) f.items.push('urns');
+      const b = { ...s, ...balustradeEffective(s) };   // as built: a named period's baluster and urns (balustrade-style.js)
+      if (s.balusters) { f.items.push(`${s.balusters} ${b.baluster || ''} balusters`.replace(/\s+/g, ' ')); f.counts.push(['balusters', s.balusters]); }
+      else if (b.baluster) f.items.push(`${b.baluster} balusters`);
+      if (b.urns) f.items.push('urns');
       break;
     }
     case 'baluster': {
-      f.title = join(st, s.baluster, 'baluster');
+      f.title = join(st, { ...s, ...balustradeEffective(s) }.baluster, 'baluster');
       f.main = { field: 'height', v: s.height };
       break;
     }
