@@ -24,8 +24,11 @@ const EMBED = Q.get('embed') === '1';
 // The worker is recycled (terminated, a fresh one with a fresh Manifold instance spawned) before the next build once
 // its WASM heap passes HEAP_LIMIT_MB or it has served MAX_BUILDS builds (WASM memory never shrinks and generators leave
 // temporaries behind), after an error of the kernel itself (abort, out of bounds, unreachable…: the build is retried
-// once on the fresh worker), and by a watchdog when a build or an export does not answer within its time limit.
+// once on the fresh worker), and by a watchdog when a build, the preview geometry, an export or a drawing does not answer
+// within its time limit (that request is reported as what hung; a build caught in the restart is sent again).
 const HEAP_LIMIT_MB = 512, MAX_BUILDS = 25, BUILD_TIMEOUT_MS = 45000, EXPORT_TIMEOUT_MS = 90000;
+// what the watchdog says of the request that hung, by its type
+const HUNG = { build: 'building this', base: 'preparing the live preview', export: 'exporting', drawing: 'drawing the sheet' };
 
 class Builder {
   constructor(onFatal, onEdges) {
@@ -47,7 +50,15 @@ class Builder {
     if (pre) { A.timing.preSpawned = true; for (const m of pre.early.splice(0)) this.message(m); }
   }
   fatal(msg) { this.fail(new Error(msg)); this.rejectAll(msg); this.onFatal(msg); }
-  rejectAll(msg) { for (const p of this.pending.values()) p.reject(new Error(msg)); this.pending.clear(); }
+  /** Reject every pending request. After a watchdog restart the request that hung is told so in its own words (code
+   *  'timeout'); the others were only caught in the restart ('restarted', code 'collateral': a build retries itself). */
+  rejectAll(msg, hung = 0) {
+    for (const [id, p] of this.pending) {
+      p.reject(id === hung ? Object.assign(new Error(`${HUNG[p.type] || 'this request'} took longer than ${Math.round(p.ms / 1000)} s; the CAD kernel was restarted`), { code: 'timeout' })
+        : Object.assign(new Error(hung ? 'restarted' : msg), hung ? { code: 'collateral' } : {}));
+    }
+    this.pending.clear();
+  }
   message(m) {
     if (m.type === 'ready') {
       this.heap = m.heapMB; mark('kernel');
@@ -63,18 +74,18 @@ class Builder {
     this.pending.delete(m.id);
     if (m.type === 'error') { const e = new Error(m.message); e.code = m.code; e.detail = m.stack; p.reject(e); } else p.resolve(m);
   }
-  /** Post a request; with a time limit the worker is recycled (and the request rejected with 'timeout') if it hangs. */
+  /** Post a request; with a time limit the worker is recycled (and the request rejected, code 'timeout') if it hangs. */
   call(msg, timeoutMs = 0) {
     const id = ++this.seq;
     return new Promise((resolve, reject) => {
-      const t = timeoutMs ? setTimeout(() => { if (this.pending.has(id)) this.recycle('timeout'); }, timeoutMs) : 0;
-      this.pending.set(id, { resolve: (v) => { clearTimeout(t); resolve(v); }, reject: (e) => { clearTimeout(t); reject(e); } });
+      const t = timeoutMs ? setTimeout(() => { if (this.pending.has(id)) this.recycle('timeout', id); }, timeoutMs) : 0;
+      this.pending.set(id, { type: msg.type, ms: timeoutMs, resolve: (v) => { clearTimeout(t); resolve(v); }, reject: (e) => { clearTimeout(t); reject(e); } });
       this.w.postMessage({ ...msg, id });
     });
   }
-  recycle(reason = 'restarted') {
+  recycle(reason = 'restarted', hung = 0) {
     this.w.terminate();
-    this.rejectAll(reason);
+    this.rejectAll(reason, hung);
     this.heap = 0; this.builds = 0; this.sick = false; this.recycled++;
     this.spawn();
   }
@@ -95,7 +106,8 @@ class Builder {
       this.builds = m.stats.builds || this.builds + 1;
       return m;
     } catch (e) {
-      if (e.message === 'timeout') throw new Error(`building this took longer than ${Math.round(this.buildTimeout / 1000)} s; the CAD kernel was restarted`);
+      // another request hung and the worker was restarted under this build: build it again on the fresh one
+      if (e.code === 'collateral' && retry) return this.build(spec, edges, deform, false);
       if (e.code === 'kernel') {
         this.sick = true;
         if (retry) { this.recycle(); return this.build(spec, edges, deform, false); }
@@ -680,7 +692,7 @@ for (const b of document.querySelectorAll('[data-export]')) b.addEventListener('
     let r;
     try { r = await builder.exportAs(f, name, S.shown.id); }
     catch (e) {
-      if (e.code !== 'stale' && e.message !== 'restarted' && e.message !== 'timeout') throw e;
+      if (e.code !== 'stale' && e.message !== 'restarted' && e.code !== 'timeout') throw e;
       // the worker no longer holds the model on screen (it was recycled): rebuild the same spec quietly, once
       const rb = await builder.build(S.shown.input, false, S.shown.deform || null);
       S.shown = { ...S.shown, id: rb.id };  // the same geometry: edges and exports now refer to this build
@@ -717,7 +729,7 @@ async function drawingFile(format = 'png') {
   let r;
   try { r = await builder.drawing(S.shown.id, meta); }
   catch (e) {
-    if (e.code !== 'stale' && e.message !== 'restarted' && e.message !== 'timeout') throw e;
+    if (e.code !== 'stale' && e.message !== 'restarted' && e.code !== 'timeout') throw e;
     const rb = await builder.build(S.shown.input, false, S.shown.deform || null);
     S.shown = { ...S.shown, id: rb.id };
     r = await builder.drawing(rb.id, meta);
@@ -1140,7 +1152,11 @@ function maybeBase(now = false) {
     viewer.setPreviewBase(key, b.meshes);
     A.previewBase = { tris: b.tris, ms: Math.round(b.ms), edge: b.edge };
     if (viewer.previewing || dragging()) doPreview();
-  }, (e) => { baseFor = null; if (e.code !== 'busy' && e.message !== 'restarted') console.warn('[arch] preview geometry unavailable:', e.message); });
+  }, (e) => {
+    baseFor = null;
+    if (e.code === 'timeout') fail(e.message);        // the watchdog restarted the kernel for the preview job: say so
+    else if (e.code !== 'busy' && e.message !== 'restarted') console.warn('[arch] preview geometry unavailable:', e.message);
+  });
 }
 
 /** The undeformed meshes on screen as a preview base: rigid parts flagged by deformParts' rule. */
