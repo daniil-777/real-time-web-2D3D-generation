@@ -273,5 +273,99 @@ try {
   ok(root.listNodes().length === prim.json.nodes.length, `glTF-Transform reads the GLB (${root.listNodes().length} nodes, ${root.listMeshes().length} meshes)`);
 } catch (e) { ok(false, 'glTF-Transform reads the GLB: ' + e.message); }
 
+// ------------------------------------------------------------------------------------------------ drawing sheets
+// drawing.js: hidden lines removed exactly, the openings measured against the generator's intrados, a standard scale,
+// the side elevation left out when it repeats the front, the PNG's resolution chunk, a well-formed SVG
+{
+  console.log('\ndrawing sheets');
+  const D = await import('../js/drawing.js');
+  const { family } = await import('../js/generate.js');
+  const meshesOf = (parts, spec) => parts.map((p) => partMesh(p, spec));
+  const sheetFor = async (spec) => {
+    const r = await built(spec);
+    if (!r) return null;
+    const gen = { ...(await family(r.spec.element)) };
+    if (['arch', 'arcade', 'window', 'door'].includes(r.spec.element)) gen.archGeom = (await family('arch')).archGeom;
+    const t0 = performance.now();
+    const sheet = D.makeSheet({ meshes: meshesOf(r.parts, r.spec), spec: r.spec, gen, meta: { title: spec.element, date: '2026-10-05' } });
+    return { sheet, ms: performance.now() - t0, spec: r.spec };
+  };
+  const inkLength = (sheet, prefix) => sheet.groups.filter((g) => g.id.startsWith(prefix)).reduce((s, g) => {
+    for (let q = 0; q + 1 < g.starts.length; q++) for (let i = g.starts[q]; i + 1 < g.starts[q + 1]; i++) s += Math.hypot(g.pts[2 * i + 2] - g.pts[2 * i], g.pts[2 * i + 3] - g.pts[2 * i + 1]);
+    return s;
+  }, 0);
+
+  // hidden lines: a 1 m cube with a 0.5 m cube behind it (front view: wholly hidden; raised, so that none of its edges
+  // runs along the big cube's outline, where a hidden edge within a pixel of it coincides with the drawn outline) and one beside it
+  {
+    const big = box(-0.5, -0.5, 0, 0.5, 0.5, 1), behind = box(-0.25, 1.5, 0.2, 0.25, 2, 0.7), beside = box(1.5, -0.25, 0, 2, 0.25, 0.5);
+    const parts = [part('a', 'stone', big), part('b', 'stone', behind), part('c', 'stone', beside)];
+    const sheet = D.makeSheet({ meshes: meshesOf(parts, { element: 'pedestal' }), spec: { element: 'pedestal', material: 'limestone' }, meta: { date: '2026-10-05' } });
+    const f = 1000 / sheet.scale;
+    // front: the big cube's square (4 m of outline) + the cube beside it (4 x 0.5 m); nothing of the one behind
+    const front = inkLength(sheet, 'front-');
+    ok(Math.abs(front - (4 + 2) * f) < 0.02 * (6 * f), `front view: only the visible edges (${front.toFixed(1)} mm of line, expected ${(6 * f).toFixed(1)})`);
+    for (const p of [big, behind, beside]) p.delete();
+  }
+  // a column: 1:20, front and side (an Ionic capital differs from the side), details of capital and base
+  {
+    const s = await sheetFor({ element: 'column', order: 'ionic', height: 3.6, pedestal: true });
+    if (s) {
+      ok(s.sheet.scale === 20, `Ionic column on a pedestal at 1:${s.sheet.scale} (1:20)`);
+      ok(s.sheet.views.join() === 'front,side', `column views ${s.sheet.views.join()} (front, side)`);
+      ok(s.sheet.groups.some((g) => g.id.startsWith('detail-A')) && s.sheet.groups.some((g) => g.id.startsWith('detail-B')), 'capital and base details drawn');
+      ok(s.ms < 8000, `column sheet in ${Math.round(s.ms)} ms`);
+      const svg = D.toSVG(s.sheet);
+      ok(svg.startsWith('<?xml') && svg.includes('viewBox="0 0 420 297"') && svg.endsWith('</svg>') && !/NaN|undefined|Infinity/.test(svg),
+        `SVG well formed (${(svg.length / 1e3).toFixed(0)} kB, A3 in mm)`);
+      ok((svg.match(/<path /g) || []).length >= s.sheet.groups.length, 'one path per line group');
+      ok(svg.includes('1:20') && svg.includes('ARCH STUDIO') && svg.includes('Ø 0.30'), 'scale, title block and the lower diameter written');
+    }
+  }
+  // arches: span, rise and springing measured on the model agree with the arch family's construction
+  for (const [spec, want] of [
+    [{ element: 'arch' }, { span: 2.4, rise: 1.2, springing: 3.6 }],
+    [{ element: 'arch', archType: 'segmental' }, { span: 2.4, rise: 0.6, springing: 3.0 }],
+    [{ element: 'arcade', archType: 'horseshoe', style: 'moorish' }, { span: 2.4, rise: 2.0785 }],
+    [{ element: 'arcade', order: 'corinthian' }, { span: 2.4, rise: 1.2, springing: 3.6 }],
+    [{ element: 'window', archType: 'pointed', style: 'gothic' }, { span: 1.2, rise: 1.0392 }],
+  ]) {
+    const s = await sheetFor(spec);
+    if (!s) continue;
+    const m = s.sheet.measured || {};
+    const good = m.span !== undefined && Math.abs(m.span - want.span) < 2e-3 && Math.abs(m.rise - want.rise) < 2e-3
+      && (want.springing === undefined || Math.abs(m.springing - want.springing) < 3e-3);
+    ok(good, `${spec.element} ${spec.archType || spec.order || ''}: span ${m.span && m.span.toFixed(3)}, rise ${m.rise && m.rise.toFixed(3)}, springing ${m.springing && m.springing.toFixed(3)} at 1:${s.sheet.scale}`);
+    ok(s.sheet.cut !== null && s.sheet.views.includes('top'), `${spec.element}: the plan is a section (cut at +${s.sheet.cut && s.sheet.cut.toFixed(2)})`);
+  }
+  // a dome: the side elevation would repeat the front, so it is left out
+  {
+    const s = await sheetFor({ element: 'dome', material: 'copper', drum: true, lantern: true });
+    if (s) ok(s.sheet.views.join() === 'front,top' && s.sheet.scale === 100, `dome: views ${s.sheet.views.join()} at 1:${s.sheet.scale} (front + plan, 1:100)`);
+  }
+  // a hip roof: the pitch is marked on the profile view
+  {
+    const s = await sheetFor({ element: 'roof', roofType: 'hip' });
+    if (s) ok(s.sheet.items.some((it) => it.t === 'text' && it.str === '35°'), 'hip roof: the 35° pitch is marked');
+  }
+  // PNG resolution: pHYs inserted after IHDR (or replaced), 300 dpi read back
+  {
+    const chunk = (type, data) => {
+      const b = new Uint8Array(12 + data.length), v = new DataView(b.buffer);
+      v.setUint32(0, data.length); for (let i = 0; i < 4; i++) b[4 + i] = type.charCodeAt(i); b.set(data, 8);
+      return b;
+    };
+    const ihdr = new Uint8Array(13); new DataView(ihdr.buffer).setUint32(0, 1); new DataView(ihdr.buffer).setUint32(4, 1); ihdr[8] = 8; ihdr[9] = 2;
+    const parts = [Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', new Uint8Array(4)), chunk('IEND', new Uint8Array(0))];
+    const png = new Uint8Array(parts.reduce((s, p) => s + p.length, 0));
+    let o = 0; for (const p of parts) { png.set(p, o); o += p.length; }
+    const a = D.pngWithDpi(png, 300), b = D.pngWithDpi(a, 200);
+    ok(Math.abs(D.pngDpi(a) - 300) < 0.01 && Math.abs(D.pngDpi(b) - 200) < 0.01 && b.length === a.length, `pHYs: ${D.pngDpi(a).toFixed(2)} dpi, replaced by ${D.pngDpi(b).toFixed(2)} dpi`);
+    const types = []; for (let q = 8; q + 8 <= a.length;) { const len = new DataView(a.buffer).getUint32(q); types.push(String.fromCharCode(...a.subarray(q + 4, q + 8))); q += 12 + len; }
+    ok(types.join() === 'IHDR,pHYs,IDAT,IEND', `chunk order ${types.join()}`);
+  }
+  ok(D.fmtM(0.225, 20) === '0.225' && D.fmtM(0.899, 100) === '0.90' && D.fmtM(2.4, 50) === '2.40', 'figures: millimetres at 1:20, centimetres at 1:100');
+}
+
 console.log(`\n${checks - fails}/${checks} checks passed${fails ? ` — ${fails} FAILED` : ''}`);
 process.exit(fails ? 1 : 0);

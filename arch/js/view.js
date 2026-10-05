@@ -372,8 +372,12 @@ class DeformUniforms {
         ffd = c; continue;
       }
       if (n >= DEF_MAX_OPS) return false;
-      const op = ops[k], ai = AXIS[op.axis ?? (type === 'bend' ? 'x' : 'z')];
+      const op = ops[k], ai = Number.isInteger(c.axis) ? c.axis : AXIS[op.axis ?? (type === 'bend' ? 'x' : 'z')];
       const p = (ai + 1) % 3, q = (ai + 2) % 3, cen = [0, 1, 2].map((a) => (F.min[a] + F.max[a]) / 2);
+      // 1024 samples over the input frame (+10 % each side), interpolated linearly: the table follows the map to within
+      // (sample step)^2 x curvature / 8. Where the map has a kink — a stretch with ease 0 between its keep zone and the
+      // stretched zone, or a shear's range end — the preview rounds it over one sample step (L / 850, ~4 mm on a 3.6 m
+      // column), invisible at any zoom the viewer allows; the bake places the kink exactly.
       const L = Math.max(F.max[ai] - F.min[ai], 1e-6), t0 = F.min[ai] - 0.1 * L, t1 = F.max[ai] + 0.1 * L;
       const base = 3 * n * DEF_SAMPLES * 4;
       for (let i = 0; i < DEF_SAMPLES; i++) {
@@ -775,6 +779,7 @@ export class Viewer {
       im.userData.key = mesh.material;
       this.model.add(im);
     }
+    if (this.revealPlane) this.revealMats();       // a model that rises: its materials (and its shadow) are clipped too
     this.meshes = meshes;
     this.dominant = dominantMaterial(meshes);
     this.applyLook();
@@ -962,6 +967,54 @@ export class Viewer {
   }
 
   // ---------------------------------------------------------------------------------------------- camera
+
+  // ---------------------------------------------------------------------------------------------- reveal
+
+  /** Hide everything above the ground before a new model is shown (the reveal then raises a clipping plane through
+   *  it). A global clipping plane, so the ambient occlusion and the ink lines rise with the model; the same plane on the
+   *  model's materials (clipShadows) makes its shadow rise too (global planes do not reach the shadow pass). */
+  beginReveal() {
+    this.endReveal();
+    this.revealPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 1e-4);   // keeps y <= constant
+    this.renderer.clippingPlanes = [this.revealPlane];
+    this.renderer.localClippingEnabled = true;
+    this.revealMats();
+    this.dirty = Math.max(this.dirty, 2);
+  }
+  /** The reveal plane on every material of the model (called again when a new model brings new materials). */
+  revealMats() {
+    const planes = this.revealPlane ? [this.revealPlane] : null;
+    for (const m of this.model.children) {
+      if (!m.material) continue;
+      m.material.clippingPlanes = planes;
+      m.material.clipShadows = !!planes;
+    }
+  }
+  /** Raise the clipping plane from the foot to the top of the model in ms (ease-out), then remove it. */
+  reveal(ms = 1000) {
+    if (!this.revealPlane) this.beginReveal();
+    this.revealMats();
+    const plane = this.revealPlane, y0 = Math.min(0, this.box.min.y) - 0.01, y1 = this.box.max.y + 0.01, t0 = performance.now();
+    const step = () => {
+      if (this.revealPlane !== plane) return;
+      const t = Math.min(1, (performance.now() - t0) / ms), e = 1 - (1 - t) ** 3;
+      plane.constant = Math.max(1e-4, y0 + e * (y1 - y0));
+      if (this.ao) this.ao.firstFrame();
+      this.dirty = Math.max(this.dirty, 2);
+      if (t < 1) this.revealRAF = requestAnimationFrame(step); else this.endReveal();
+    };
+    step();
+  }
+  endReveal() {
+    if (!this.revealPlane) return;
+    cancelAnimationFrame(this.revealRAF);
+    this.revealPlane = null;
+    this.revealMats();
+    this.renderer.clippingPlanes = [];
+    this.renderer.localClippingEnabled = false;
+    if (this.ao) this.ao.firstFrame();
+    this.dirty = Math.max(this.dirty, 12);
+  }
 
   /** Frame a named view. The three-quarter view of a long run (moulding, cornice, entablature, balustrade much longer
    *  than its section) frames the near end so the profile reads; all = true frames the whole element instead. */
@@ -1253,7 +1306,7 @@ export class Viewer {
 
   /** Show the control points (Float64Array xyz, Z-up, as drawn: rest + offsets + ground) of an l x m x n lattice, or
    *  hide them (null). selected: indices drawn larger (the dragged / pinned points). */
-  setLattice(points, dims, selected = []) {
+  setLattice(points, dims, selected = [], current = null) {
     if (!points) {
       if (this.lattice) { this.root.remove(this.lattice.group); this.lattice.dots.geometry.dispose(); this.lattice.dots.dispose(); this.lattice.lines.geometry.dispose(); }
       this.lattice = null; this.dirty = Math.max(this.dirty, 2);
@@ -1285,10 +1338,10 @@ export class Viewer {
     L.points = Float64Array.from(points);
     const sel = new Set(selected), m4 = new THREE.Matrix4(), col = new THREE.Color();
     for (let i = 0; i < count; i++) {
-      const k = sel.has(i) ? 1.45 : 1;
+      const k = i === current ? 1.8 : sel.has(i) ? 1.45 : 1;
       m4.makeScale(r * k, r * k, r * k).setPosition(points[3 * i], points[3 * i + 1], points[3 * i + 2]);
       L.dots.setMatrixAt(i, m4);
-      L.dots.setColorAt(i, col.set(sel.has(i) ? 0xff8a00 : 0x0a84ff));
+      L.dots.setColorAt(i, col.set(i === current ? 0xff3b30 : sel.has(i) ? 0xff8a00 : 0x0a84ff));
     }
     L.dots.instanceMatrix.needsUpdate = true;
     if (L.dots.instanceColor) L.dots.instanceColor.needsUpdate = true;
@@ -1361,6 +1414,14 @@ export class Viewer {
     };
     el.addEventListener('pointerup', end, { capture: true });
     el.addEventListener('pointercancel', end, { capture: true });
+    this._endDrag = end;
+  }
+
+  /** End a handle drag that lost its pointer (window blur): orbiting comes back, the callback's up() is not called. */
+  cancelDrag() {
+    if (!this.drag) return;
+    this.drag = null;
+    this.controls.enabled = true;
   }
 
   // ---------------------------------------------------------------------------------------------- frames

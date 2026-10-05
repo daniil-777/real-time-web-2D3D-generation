@@ -9,11 +9,40 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>arch studio · text to architecture</title>
-<meta name="description" content="Type what an architect would type — an Ionic column, a cornice with dentils, an onion dome — and get the exact element at real scale, built by a CAD kernel in your browser. Download GLB, OBJ or STL.">
+<meta name="description" content="Type what an architect would type — an Ionic column, a cornice with dentils, an onion dome — and get the exact element at real scale, built by a CAD kernel in your browser. Download GLB, OBJ or STL, or an A3 drawing sheet with elevations, plan and dimensions.">
 <meta property="og:title" content="arch studio">
 <meta property="og:description" content="Text to exact, detailed architectural elements — columns, cornices, balustrades, arches, roofs, domes — in your browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M2 14h12M3 12.5h10M4 12V5M7 12V5M9 12V5M12 12V5M2.5 4.5h11L8 1.5z' fill='none' stroke='black' stroke-width='1.3'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<!-- the CAD kernel's WebAssembly (540 KB) downloads while the page parses; the build worker finds it in the HTTP cache -->
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/manifold-3d@3.5.4/manifold.wasm" as="fetch" crossorigin>
+<script>
+  // Start the build worker before anything else loads (it fetches and compiles the kernel meanwhile), and have it import
+  // the generator of the element the page builds first: the one the link names, else this visit's default (a copper
+  // dome on a drum with a lantern, or a Corinthian tetrastyle portico, by turns). app.js adopts this worker.
+  (function () {
+    var q = new URLSearchParams(location.search), text = (q.get('q') || '').toLowerCase(), el = null, visits = 0;
+    try { visits = +localStorage.getItem('arch.visits') || 0; localStorage.setItem('arch.visits', String(visits + 1)); } catch (e) { /* private */ }
+    window.__archDefault = ['Copper dome with drum and lantern', 'Corinthian tetrastyle portico'][visits % 2];
+    try { var sp = JSON.parse(q.get('spec') || 'null'); if (sp && sp.element) el = sp.element; } catch (e) { /* not JSON */ }
+    var GUESS = [[/portic|portik|portique|tempi|temple|colonnade/, 'portico'], [/capital|kapitell|chapiteau|capitello/, 'capital'],
+      [/balust|geländer|balaustr|railing/, 'balustrade'], [/arcade|arkade|arcata|arcad/, 'arcade'], [/\barch|bogen|\barc\b|arco/, 'arch'],
+      [/window|fenster|fenêtre|finestra/, 'window'], [/door|tür|porte|portale/, 'door'], [/roof|dach|toit|tetto|mansard/, 'roof'],
+      [/cupola/, 'cupola'], [/dome|kuppel|dôme|duomo/, 'dome'], [/spire|turmhelm|flèche|guglia|steeple/, 'spire'],
+      [/finial|pinienzapfen|épi|pinnacolo/, 'finial'], [/\burn|vase|urne/, 'urn'], [/obelisk|obélisque|obelisco/, 'obelisk'],
+      [/console|bracket|konsole|mensola/, 'console'], [/cornice|gesims|corniche|entablat|gebälk|pediment|giebel|fronton|moulding|moulure/, 'cornice'],
+      [/pilast/, 'pilaster'], [/pedestal|postament|piédestal/, 'pedestal'], [/column|säule|colonne|colonna|pillar/, 'column']];
+    if (!el && text) for (var i = 0; i < GUESS.length; i++) if (GUESS[i][0].test(text)) { el = GUESS[i][1]; break; }
+    if (!el && !text) el = /portico/i.test(window.__archDefault) ? 'portico' : 'dome';
+    try {
+      var w = new Worker('js/worker.js', { type: 'module' }), early = [];
+      w.onmessage = function (e) { early.push(e.data); };
+      w.onerror = function (e) { early.push({ type: 'fatal', message: 'the build worker failed to start' }); };
+      if (el) w.postMessage({ type: 'warm', element: el });
+      window.__archWorker = { w: w, early: early };
+    } catch (e) { /* app.js starts its own */ }
+  })();
+</script>
 <script type="importmap">
 {
   "imports": {
@@ -190,6 +219,13 @@
   #xform select { -webkit-appearance: none; appearance: none; height: 28px; border: 0; border-radius: 8px; padding: 0 10px; background: #fff;
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1); font-size: 12.5px; }
   #xform .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .xpoint { display: grid; grid-template-columns: auto 1fr; gap: 6px 8px; align-items: center; font-size: 12.5px; color: var(--text-2); }
+  .xpoint[hidden] { display: none; }
+  .xpoint .xyz { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .xpoint .xyz label { display: flex; align-items: center; gap: 4px; }
+  .xpoint input[type=number] { width: 100%; min-width: 0; height: 28px; border: 0; border-radius: 8px; padding: 0 6px; background: #fff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .xpoint .only { grid-column: 1 / -1; display: inline-flex; gap: 8px; align-items: center; }
   #xwarn { font-size: 12.5px; color: var(--warn); }
   #xwarn:empty, #xinfo:empty { display: none; }
   #xinfo { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
@@ -217,7 +253,12 @@
   html.embed #stage { min-height: 300px; }
 
   /* screenshots: the canvas, nothing else */
-  html.shot #top, html.shot #panel, html.shot .ov, html.shot #hint, html.shot #busy { display: none !important; }
+  html.shot #top, html.shot #panel, html.shot .ov, html.shot #hint, html.shot #busy, html.shot #scTag { display: none !important; }
+  /* the idle showcase: a quiet tag instead of the controls hint */
+  #scTag { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); color: var(--text-2); font-size: 11px; pointer-events: none;
+    letter-spacing: 0.02em; opacity: 0; transition: opacity 0.4s; white-space: nowrap; }
+  html.showcase #scTag { opacity: 1; }
+  html.showcase #hint { opacity: 0 !important; }
   html.shot #app, html.shot #main { display: block; height: 100vh; }
   html.shot #stage { position: fixed; inset: 0; height: auto; }
 
@@ -260,6 +301,7 @@
       <div id="toast" role="status" hidden></div>
       <div id="msg" role="status"><span class="spin" aria-hidden="true"></span>loading the CAD kernel…</div>
       <div id="hint" aria-hidden="true">drag to orbit · scroll to zoom · right-drag to pan · double-click to fit</div>
+      <div id="scTag" aria-hidden="true">showcase · touch, click or type to take over</div>
     </section>
 
     <aside id="panel" aria-label="request and specification">
@@ -306,6 +348,16 @@
             <select id="x-dims" aria-label="lattice size"><option value="3">3 × 3 × 3</option><option value="4">4 × 4 × 4</option></select>
             <label title="small repeated ornament (balusters, dentils, leaves) moves rigidly instead of bending">rigid ornament <input type="checkbox" id="x-rigid" checked></label>
           </div>
+          <div id="x-point" class="xpoint" hidden>
+            <label for="x-pt">point</label>
+            <select id="x-pt" aria-label="lattice control point"></select>
+            <span class="xyz">
+              <label>Δx <input type="number" id="x-dx" data-a="0" step="0.01" aria-label="move the point along x (metres)"></label>
+              <label>Δy <input type="number" id="x-dy" data-a="1" step="0.01" aria-label="move the point along y (metres)"></label>
+              <label>Δz <input type="number" id="x-dz" data-a="2" step="0.01" aria-label="move the point along z (metres)"></label>
+            </span>
+            <label class="only" title="move only this point (plain FFD); off: its neighbours follow as rigidly as possible">only this point <input type="checkbox" id="x-only"></label>
+          </div>
           <div class="actions"><button type="button" class="pill" id="x-reset">reset</button></div>
           <div id="xwarn" role="status"></div>
           <div id="xinfo"></div>
@@ -318,6 +370,10 @@
           <button type="button" class="pill" data-export="obj" title="Wavefront OBJ · Y up · metres · one object per part">OBJ</button>
           <button type="button" class="pill" data-export="stl" title="binary STL · Z up · millimetres (for 3D printing)">STL</button>
           <button type="button" class="pill" data-export="json" title="the specification as JSON">spec.json</button>
+        </div>
+        <div class="row" id="drawRow">
+          <button type="button" class="pill" data-drawing="png" title="A3 drawing sheet: elevations, plan, dimensions, scale bar, title block · PNG at 300 dpi">drawing.png</button>
+          <button type="button" class="pill" data-drawing="svg" title="A3 drawing sheet: elevations, plan, dimensions, scale bar, title block · SVG in millimetres, one layer per view and line weight">drawing.svg</button>
         </div>
         <div id="stats"></div>
       </section>

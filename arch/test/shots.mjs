@@ -1,7 +1,8 @@
 // Visual QA harness: drives the real page in Chrome and photographs every prompt.
 //   node arch/test/shots.mjs [promptsFile] [--ids a,b] [--cat direct,units] [--limit N] [--out DIR] [--jobs 2]
 //                            [--mode stone|white|line] [--view three-quarter|front|side|top] [--size 720] [--timeout ms]
-//                            [--no-retry]
+//                            [--no-retry] [--drawings]
+// --drawings also saves each element's A3 drawing sheet (window.__arch.drawing: 300 dpi PNG) as <id>-drawing.png.
 // promptsFile defaults to arch/test/prompts.json ({ prompts: [{ id, text, expect }] }; an entry may carry `spec` instead
 // of / besides `text`, which is then passed as ?spec=). Out-of-scope prompts (expect.outOfScope) are skipped.
 // Writes <out>/<id>.png (720×720), results.json, index.html and contact sheets sheet-NN.png (4×3 tiles, prompt and
@@ -106,6 +107,16 @@ async function shoot(page, p) {
   }
   try { r.timing = await page.evaluate(() => window.__arch && window.__arch.timing); } catch (e) { /* page gone */ }
   try { await page.screenshot({ path: path.join(OUT, `${p.id}.png`) }); r.png = `${p.id}.png`; } catch (e) { /* page gone */ }
+  if (opt.drawings && r.status === 'ok') {
+    try {
+      const d = await page.evaluate(async () => { try { return await window.__arch.drawing('png'); } catch (e) { return { error: e.message }; } });
+      if (d.error) r.drawing = { error: d.error };
+      else {
+        fs.writeFileSync(path.join(OUT, `${p.id}-drawing.png`), Buffer.from(d.base64, 'base64'));
+        r.drawing = { png: `${p.id}-drawing.png`, scale: `1:${d.scale}`, dpi: d.dpi, ms: d.ms, views: d.views, measured: d.measured };
+      }
+    } catch (e) { r.drawing = { error: String(e.message || e).split('\n')[0] }; }
+  }
   page.off('console', onLog); page.off('pageerror', onErr);
   if (logs.length) r.logs = logs.slice(0, 8);
   results.push(r);

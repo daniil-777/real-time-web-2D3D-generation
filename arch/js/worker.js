@@ -6,16 +6,18 @@
 //      { type: 'base', id, spec, deformOpts? }   the undeformed element, refined for the page's GPU preview
 //      { type: 'edges', id: buildId }
 //      { type: 'export', id, forId: buildId, format: 'glb'|'obj'|'stl', name }
+//      { type: 'drawing', id, forId: buildId, meta: { title, interpretation, prompt, date } }   the A3 drawing sheet
 // out: { type: 'ready', heapMB }  { type: 'fatal', message }
 //      { type: 'built', id, meshes: [{ name, role, material, positions, normals, indices, transforms }], stats }
 //      { type: 'base', id, key, meshes: [... + rigid, centre], bbox, shaftBox, edge, tris, ms }
 //      { type: 'edges', id: buildId, edges: [Float32Array per mesh] }   (always for the model this worker holds)
 //      { type: 'exported', id, format, buffers: [ArrayBuffer…], mime }
+//      { type: 'drawing', id, sheet }   (drawing.js makeSheet(): line groups, items, scale, measured openings)
 //      { type: 'error', id, message, code: 'stale' | 'kernel' | undefined, heapMB, builds }
 
 import { setKernel, partsBBox, instanceCount } from './kernel.js';
-import { generate } from './generate.js';
-import { partMesh, featureEdges, toGLB, toOBJParts, toSTL } from './export.js';
+import { generate, family } from './generate.js';
+import { partMesh, featureEdges, toGLB, toOBJParts, toSTL, RIGID_RATIO, isRigidPart, frameScale } from './export.js';
 import { deformParts } from './deform.js';
 
 const MANIFOLD = 'https://cdn.jsdelivr.net/npm/manifold-3d@3.5.4/manifold.js';
@@ -34,14 +36,21 @@ if (WebAssembly.instantiateStreaming) WebAssembly.instantiateStreaming = watch(W
 WebAssembly.instantiate = watch(WebAssembly.instantiate.bind(WebAssembly));
 const heapMB = () => (memory ? Math.round(memory.buffer.byteLength / 1048576) : 0);
 
+// cold-start timeline, in epoch ms (the page subtracts its own timeOrigin): worker started, Manifold's JS imported,
+// WASM fetched + compiled + instantiated, set up
+const epoch = () => performance.timeOrigin + performance.now();
+const boot = { start: epoch() };
 const kernel = (async () => {
   const { default: Module } = await import(MANIFOLD);
+  boot.imported = epoch();
   const wasm = await Module();
+  boot.instantiated = epoch();
   wasm.setup();
   setKernel(wasm);
+  boot.ready = epoch();
   return wasm;
 })();
-kernel.then(() => post({ type: 'ready', heapMB: heapMB() }), (e) => post({ type: 'fatal', message: 'the CAD kernel could not load: ' + msg(e) }));
+kernel.then(() => post({ type: 'ready', heapMB: heapMB(), boot }), (e) => post({ type: 'fatal', message: 'the CAD kernel could not load: ' + msg(e) }));
 
 let last = null; // { id, meshes, spec } of the last build, for edges and exports (plain arrays, no kernel objects)
 let builds = 0;
@@ -49,7 +58,18 @@ let builds = 0;
 // regenerating: { key, parts, r (generate result), bbox (solid), shaftBox }. Its manifolds are freed when the spec changes.
 let cache = null;
 let queue = Promise.resolve();
-self.onmessage = (e) => { queue = queue.then(() => handle(e.data)); };
+let buildsWaiting = 0;        // build requests queued behind the current job (a preview-geometry job yields to them)
+self.onmessage = (e) => {
+  const m = e.data;
+  // warm-up: import a generator module right away, in parallel with the kernel's download and compilation
+  if (m && m.type === 'warm') {
+    const t = performance.now();
+    family(m.element).then(() => post({ type: 'warmed', element: m.element, ms: performance.now() - t, at: epoch() }), () => {});
+    return;
+  }
+  if (m && m.type === 'build') buildsWaiting++;
+  queue = queue.then(() => handle(m)).finally(() => { if (m && m.type === 'build') buildsWaiting--; });
+};
 
 // errors that mean the WASM instance itself is unwell (the page then recycles the worker), not a bad request
 const KERNEL_ERR = /abort|RuntimeError|unreachable|out of bounds|memory|deleted object|BindingError|table index|null function|stack/i;
@@ -61,8 +81,8 @@ async function handle(m) {
     else if (m.type === 'base') await base(m);
     else if (m.type === 'edges') edges(m.id);
     else if (m.type === 'export') exportAs(m);
+    else if (m.type === 'drawing') await drawing(m);
   } catch (e) {
-    if (m.type === 'build') builds++;   // a failed build has left its temporaries too
     post({ type: 'error', id: m.id, message: msg(e), code: e.code || (KERNEL_ERR.test(msg(e)) ? 'kernel' : undefined),
       heapMB: heapMB(), builds, stack: e && e.stack ? String(e.stack).split('\n').slice(0, 6).join('\n') : '' });
   }
@@ -73,54 +93,65 @@ async function element(spec) {
   const key = JSON.stringify(spec || {});
   if (cache && cache.key === key) return cache;
   const t0 = performance.now();
+  builds++;                     // every generation counts (a throwing one leaves its temporaries too), once
+  await family((spec && spec.element) || 'column');   // the generator module (timed apart from the build)
+  const tImport = performance.now() - t0;
   const r = await generate(spec || {});
   if (!r.parts || !r.parts.length || !r.tris) {
     freeParts(r.parts || []);
     throw new Error(`the ${r.spec.element} generator returned no geometry`);
   }
   if (cache) freeParts(cache.parts);
-  builds++;
   const solid = r.parts.filter((p) => p.manifold.numTri() > 0);
   const shafts = solid.filter((p) => p.name === 'shaft');
-  cache = { key, parts: r.parts, r, bbox: partsBBox(solid), shaftBox: shafts.length ? partsBBox(shafts) : null, genMs: performance.now() - t0, fresh: true };
+  cache = { key, parts: r.parts, r, bbox: partsBBox(solid), shaftBox: shafts.length ? partsBBox(shafts) : null, genMs: performance.now() - t0,
+    importMs: tImport, fresh: true };
   return cache;
 }
 
-const DEFORM_DEFAULTS = { rigidInstances: true, rigidRatio: 0.25 };
+const DEFORM_DEFAULTS = { rigidInstances: true, rigidRatio: RIGID_RATIO };
 
 async function build(m) {
   const t0 = performance.now();
   const el = await element(m.spec);
   const r = el.r, fresh = el.fresh;
   el.fresh = false;
-  let parts = el.parts, deform = null;
-  if (Array.isArray(m.ops) && m.ops.length) {
-    const opts = { ...DEFORM_DEFAULTS, ...(m.deformOpts || {}), bbox: el.bbox };
-    // a lean is given in fractions of the element's height (the page cannot know it before the element is built)
-    const H = el.bbox.max[2] - el.bbox.min[2];
-    const ops = m.ops.map((o) => (o && o.lean ? { type: o.type, axis: o.axis, dx: o.lean[0] * H, dy: o.lean[1] * H } : o));
-    const d = deformParts(el.parts, ops, opts);
-    parts = d.parts;
-    deform = { ops: d.ops, warnings: d.warnings, ms: d.stats.ms, tris: d.stats.tris, edge: d.stats.edge, ground: d.stats.ground,
-      rigid: d.stats.rigid, warped: d.stats.warped, folds: d.stats.folds, minDet: d.stats.minDet, timing: d.stats.timing,
-      identity: d.deformer.identity };
+  let parts = el.parts, deform = null, meshes, t2, t3;
+  try {
+    if (Array.isArray(m.ops) && m.ops.length) {
+      const opts = { ...DEFORM_DEFAULTS, ...(m.deformOpts || {}), bbox: el.bbox };
+      // a lean is given in fractions of the element's height (the page cannot know it before the element is built)
+      const H = el.bbox.max[2] - el.bbox.min[2];
+      const ops = m.ops.map((o) => (o && o.lean ? { type: o.type, axis: o.axis, dx: o.lean[0] * H, dy: o.lean[1] * H } : o));
+      const d = deformParts(el.parts, ops, opts);   // if it throws, it has freed what it made
+      parts = d.parts;
+      deform = { ops: d.ops, warnings: d.warnings, ms: d.stats.ms, tris: d.stats.tris, edge: d.stats.edge, ground: d.stats.ground,
+        rigid: d.stats.rigid, warped: d.stats.warped, folds: d.stats.folds, minDet: d.stats.minDet, timing: d.stats.timing,
+        identity: d.deformer.identity };
+    }
+    t2 = performance.now();
+    meshes = parts.map((p) => partMesh(p, r.spec));
+    t3 = performance.now();
+  } finally {
+    // ownership by identity, not by tags: every manifold of the result that is not one of the cached element's own was
+    // made for this build (warped pieces) and is freed here, also when extracting the meshes threw
+    if (parts !== el.parts) {
+      const owned = new Set(el.parts.map((p) => p.manifold));
+      freeParts(parts.filter((p) => !owned.has(p.manifold)));
+    }
   }
-  const t2 = performance.now();
-  const meshes = parts.map((p) => partMesh(p, r.spec));
-  // warped pieces are this call's (deformParts made them); rigid and untouched parts share the cached element's
-  freeParts(parts.filter((p) => p.meta && p.meta.deform === 'warp'));
-  const t3 = performance.now();
   last = { id: m.id, meshes, spec: r.spec, deform: deform ? deform.ops : null };
   const transfer = [];
   const copy = (a) => { if (!a) return null; const c = a.slice(); transfer.push(c.buffer); return c; };
   const out = meshes.map((x) => ({ name: x.name, role: x.role, material: x.material, positions: copy(x.positions), normals: copy(x.normals),
-    indices: copy(x.indices), transforms: copy(x.transforms) }));
+    indices: copy(x.indices), transforms: copy(x.transforms), rigidTag: x.rigidTag }));
   const bbox = deform ? meshBBox(meshes) : r.bbox;
   const size = [0, 1, 2].map((k) => bbox.max[k] - bbox.min[k]);
   const stats = {
     tris: meshes.reduce((n, x) => n + (x.indices.length / 3) * (x.transforms ? x.transforms.length / 16 : 1), 0),
     parts: parts.length, instances: parts.reduce((n, p) => n + instanceCount(p), 0),
     ms: fresh ? r.ms : 0, deformMs: deform ? deform.ms : 0, meshMs: t3 - t2, totalMs: t3 - t0, cached: !fresh,
+    importMs: fresh ? el.importMs : 0, genMs: fresh ? el.genMs : 0, workerStart: m.sentAt ? epoch() - (performance.now() - t0) - m.sentAt : undefined,
     size, bbox, warnings: r.warnings, spec: r.spec, expected: r.expected, heapMB: heapMB(), builds,
     element: { bbox: el.bbox, size: [0, 1, 2].map((k) => el.bbox.max[k] - el.bbox.min[k]), shaftBox: el.shaftBox, key: el.key },
     deform,
@@ -161,15 +192,16 @@ function meshBBox(meshes) {
  */
 async function base(m) {
   const t0 = performance.now();
+  // the preview geometry is a convenience: a build waiting behind it goes first (the page asks again later)
+  if (buildsWaiting > 0) throw Object.assign(new Error('a build is waiting'), { code: 'busy' });
   const el = await element(m.spec);
   const o = { ...DEFORM_DEFAULTS, ...(m.deformOpts || {}) };
   const ext = [0, 1, 2].map((k) => el.bbox.max[k] - el.bbox.min[k]), L = Math.max(...ext), diag = Math.hypot(...ext);
   const plan = el.parts.map((p) => {
     const n = instanceCount(p), bb = p.manifold.boundingBox(), M = p.transforms ? p.transforms.subarray(0, 16) : null;
-    const sc = M ? Math.max(Math.hypot(M[0], M[1], M[2]), Math.hypot(M[4], M[5], M[6]), Math.hypot(M[8], M[9], M[10])) : 1;
-    const size = Math.hypot(bb.max[0] - bb.min[0], bb.max[1] - bb.min[1], bb.max[2] - bb.min[2]) * sc;
-    const empty = !(p.manifold.numTri() > 0);
-    const rigid = !empty && !!(o.rigidInstances && p.transforms && n >= 2 && size < o.rigidRatio * diag);
+    const sc = frameScale(M), empty = !(p.manifold.numTri() > 0);
+    const rigid = isRigidPart({ instances: p.transforms ? n : 1, scale: sc, elementDiag: diag, enabled: o.rigidInstances, empty,
+      tag: p.meta && p.meta.rigid, localDiag: Math.hypot(bb.max[0] - bb.min[0], bb.max[1] - bb.min[1], bb.max[2] - bb.min[2]) });
     const mesh = partMesh(p, el.r.spec);
     // per triangle: longest edge and area (local), for the refinement prediction
     const P = mesh.positions, T = mesh.indices, nt = T.length / 3, tri = new Float64Array(2 * nt);
@@ -214,7 +246,7 @@ async function base(m) {
   const transfer = [];
   const copy = (a) => { if (!a) return null; const c = a.slice(); transfer.push(c.buffer); return c; };
   const out = meshes.map((x) => ({ name: x.name, role: x.role, material: x.material, positions: copy(x.positions), normals: copy(x.normals),
-    indices: copy(x.indices), transforms: copy(x.transforms), rigid: x.rigid, centre: x.centre }));
+    indices: copy(x.indices), transforms: copy(x.transforms), rigid: x.rigid, centre: x.centre, rigidTag: x.rigidTag }));
   const tris = meshes.reduce((n, x) => n + (x.indices.length / 3) * (x.transforms ? x.transforms.length / 16 : 1), 0);
   post({ type: 'base', id: m.id, key: el.key, meshes: out, bbox: el.bbox, shaftBox: el.shaftBox, edge: ell, tris,
     ms: performance.now() - t0 }, transfer);
@@ -259,6 +291,31 @@ function exportAs(m) {
   } else if (m.format === 'stl') { buffers = [toSTL(last.meshes, { name })]; mime = 'model/stl'; }
   else throw new Error('unknown export format ' + m.format);
   post({ type: 'exported', id: m.id, format: m.format, buffers, mime }, buffers);
+}
+
+/**
+ * The drawing sheet of the model on screen (elevations, plan, dimensions, title strip: drawing.js), computed here so
+ * the page never blocks. The generator's own arithmetic dimensions the element (column parts, portico axes, roof
+ * pitches; arches and openings are measured on the model against arch.js's intrados).
+ */
+const OPENING_FAMILIES = new Set(['arch', 'arcade', 'window', 'door']);
+async function drawing(m) {
+  if (!last || (m.forId !== undefined && m.forId !== last.id)) throw stale();
+  const D = await import('./drawing.js');
+  const el = last.spec.element;
+  let gen = null;
+  try {
+    gen = { ...(await family(el)) };
+    if (OPENING_FAMILIES.has(el) && !gen.archGeom) gen.archGeom = (await family('arch')).archGeom;
+  } catch (e) { gen = null; }
+  const sheet = D.makeSheet({ meshes: last.meshes, spec: last.spec, deform: last.deform, gen, meta: m.meta || {} });
+  const transfer = [];
+  for (const g of sheet.groups) transfer.push(g.pts.buffer, g.starts.buffer);
+  for (const it of sheet.items) {
+    if (it.t === 'area') for (const l of it.loops) transfer.push(l.buffer);
+    else if (it.t === 'path') transfer.push(it.pts.buffer, it.starts.buffer);
+  }
+  post({ type: 'drawing', id: m.id, sheet }, [...new Set(transfer)]);
 }
 
 function post(m, transfer = []) { self.postMessage(m, transfer); }

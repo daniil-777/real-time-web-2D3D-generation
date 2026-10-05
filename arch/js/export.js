@@ -65,34 +65,152 @@ export function materialFor(role, spec = {}, meta = null) {
   }
 }
 
+// ------------------------------------------------------------------------------------------------ rigid ornament rule
+
+/** Small repeated ornament moves rigidly under a deformation (deform.js deformParts' rule, with the app's ratio): a part
+ *  with >= 2 instances whose mesh box diagonal (times the instance scale) is below RIGID_RATIO of the element's diagonal.
+ *  0.25, not the engine's 0.2: a 3 m balustrade's balusters measure 22 % and would otherwise bend on a curved run, while
+ *  capital leaves (26-37 %), volutes (60 %) and dome seams (27 %) still follow the deformation. One definition for the
+ *  worker's bake options, its preview geometry and the page's stand-in preview. */
+export const RIGID_RATIO = 0.25;
+export function isRigidPart({ instances, localDiag, scale = 1, elementDiag, enabled = true, empty = false, tag }) {
+  if (!enabled || empty) return false;
+  if (tag === true || tag === false) return tag;     // the generator's meta.rigid tag wins (deform.js does the same)
+  return instances >= 2 && localDiag * scale < RIGID_RATIO * elementDiag;
+}
+/** Largest column norm of the linear part of a column-major 4x4 (the instance scale deformParts uses). */
+export function frameScale(M) {
+  return M ? Math.max(Math.hypot(M[0], M[1], M[2]), Math.hypot(M[4], M[5], M[6]), Math.hypot(M[8], M[9], M[10])) : 1;
+}
+
 // ------------------------------------------------------------------------------------------------ mesh extraction
 
-/** Render mesh of one Part (duck-typed Manifold: calculateNormals / getMesh / delete). Normals are smooth across
- *  edges below 30° and split above (crisp arrises, smooth shafts). Keeps the merge vectors for feature edges. */
-export function partMesh(part, spec = {}) {
+/** Render mesh of one Part: positions, normals smooth across edges below 30° and split above (crisp arrises, smooth
+ *  shafts), indices, instance transforms, and the weld map back to the kernel's vertices (for feature edges).
+ *  The normals are computed here (creasedNormals) rather than with Manifold's calculateNormals: same rule, but the
+ *  kernel call costs 0.4 s on a 29k-triangle tile mesh and 0.23 s on a fluted shaft (its flat-region search), this
+ *  takes a few ms. opts.kernelNormals: true uses Manifold's (kept for comparison). */
+export function partMesh(part, spec = {}, opts = {}) {
   const src = part.manifold;
-  let m = src, own = false;
-  try { m = src.calculateNormals(0, 30); own = true; } catch (e) { m = src; }
-  const g = m.getMesh();
-  const np = g.numProp, V = g.vertProperties, nv = V.length / np;
-  const positions = new Float32Array(nv * 3);
-  let normals = np >= 6 ? new Float32Array(nv * 3) : null;
-  for (let i = 0; i < nv; i++) {
-    const s = i * np, d = i * 3;
-    positions[d] = V[s]; positions[d + 1] = V[s + 1]; positions[d + 2] = V[s + 2];
-    if (normals) { normals[d] = V[s + 3]; normals[d + 1] = V[s + 4]; normals[d + 2] = V[s + 5]; }
+  let positions, normals, indices, mergeFrom = null, mergeTo = null;
+  if (opts.kernelNormals) {
+    let m = src, own = false;
+    try { m = src.calculateNormals(0, 30); own = true; } catch (e) { m = src; }
+    const g = m.getMesh(), np = g.numProp, V = g.vertProperties, nv = V.length / np;
+    positions = new Float32Array(nv * 3);
+    normals = np >= 6 ? new Float32Array(nv * 3) : null;
+    for (let i = 0; i < nv; i++) {
+      const s = i * np, d = i * 3;
+      positions[d] = V[s]; positions[d + 1] = V[s + 1]; positions[d + 2] = V[s + 2];
+      if (normals) { normals[d] = V[s + 3]; normals[d + 1] = V[s + 4]; normals[d + 2] = V[s + 5]; }
+    }
+    indices = Uint32Array.from(g.triVerts);
+    if (!normals) normals = vertexNormals(positions, indices);
+    mergeFrom = g.mergeFromVert ? Uint32Array.from(g.mergeFromVert) : null;
+    mergeTo = g.mergeToVert ? Uint32Array.from(g.mergeToVert) : null;
+    if (own && m !== src && typeof m.delete === 'function') m.delete();
+  } else {
+    const g = src.getMesh(), np = g.numProp, V = g.vertProperties, nv = V.length / np;
+    // weld vertices the kernel keeps apart for properties (none for our parts, but the merge vectors say so)
+    const P = new Float64Array(nv * 3);
+    for (let i = 0; i < nv; i++) { P[3 * i] = V[i * np]; P[3 * i + 1] = V[i * np + 1]; P[3 * i + 2] = V[i * np + 2]; }
+    const T = Uint32Array.from(g.triVerts);
+    if (g.mergeFromVert && g.mergeFromVert.length) {
+      const to = new Uint32Array(nv);
+      for (let i = 0; i < nv; i++) to[i] = i;
+      for (let k = 0; k < g.mergeFromVert.length; k++) to[g.mergeFromVert[k]] = g.mergeToVert[k];
+      for (let k = 0; k < T.length; k++) T[k] = to[T[k]];
+    }
+    ({ positions, normals, indices, mergeFrom, mergeTo } = creasedNormals(P, T, 30));
   }
-  const indices = Uint32Array.from(g.triVerts);
-  if (!normals) normals = vertexNormals(positions, indices);
-  const out = {
+  return {
     name: part.name, role: part.role, material: materialFor(part.role, spec, part.meta),
+    rigidTag: part.meta && (part.meta.rigid === true || part.meta.rigid === false) ? part.meta.rigid : undefined,
     positions, normals, indices,
     transforms: part.transforms ? Float64Array.from(part.transforms) : null,
-    mergeFrom: g.mergeFromVert ? Uint32Array.from(g.mergeFromVert) : null,
-    mergeTo: g.mergeToVert ? Uint32Array.from(g.mergeToVert) : null,
+    mergeFrom, mergeTo,
   };
-  if (own && m !== src && typeof m.delete === 'function') m.delete();
-  return out;
+}
+
+/**
+ * Normals of a closed triangle mesh with sharp edges kept (Manifold's calculateNormals rule): around each vertex the
+ * fan of faces is split into smooth groups at the edges whose dihedral angle exceeds `deg`; each group gets one normal,
+ * the angle-weighted mean of its faces' normals (planar regions stay exactly flat, a fluted shaft's arrises stay
+ * crisp, an acanthus leaf shades smoothly). P: welded positions (xyz), T: triangles. Returns render arrays (one output
+ * vertex per group) and the weld map (mergeFrom -> mergeTo) from split vertices back to the first copy.
+ */
+export function creasedNormals(P, T, deg = 30) {
+  const nv = P.length / 3, nt = T.length / 3, cos = Math.cos((deg * Math.PI) / 180);
+  const FN = new Float64Array(3 * nt), A = new Float64Array(3 * nt);     // face normals, corner angles
+  for (let t = 0; t < nt; t++) {
+    const ia = 3 * T[3 * t], ib = 3 * T[3 * t + 1], ic = 3 * T[3 * t + 2];
+    const ux = P[ib] - P[ia], uy = P[ib + 1] - P[ia + 1], uz = P[ib + 2] - P[ia + 2];
+    const vx = P[ic] - P[ia], vy = P[ic + 1] - P[ia + 1], vz = P[ic + 2] - P[ia + 2];
+    const wx = P[ic] - P[ib], wy = P[ic + 1] - P[ib + 1], wz = P[ic + 2] - P[ib + 2];
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const l = Math.hypot(nx, ny, nz);
+    if (l > 0) { nx /= l; ny /= l; nz /= l; }
+    FN[3 * t] = nx; FN[3 * t + 1] = ny; FN[3 * t + 2] = nz;
+    const lu = Math.hypot(ux, uy, uz) || 1, lv = Math.hypot(vx, vy, vz) || 1, lw = Math.hypot(wx, wy, wz) || 1;
+    const ang = (d) => Math.acos(Math.max(-1, Math.min(1, d)));
+    A[3 * t] = ang((ux * vx + uy * vy + uz * vz) / (lu * lv));
+    A[3 * t + 1] = ang((-ux * wx - uy * wy - uz * wz) / (lu * lw));
+    A[3 * t + 2] = Math.max(0, Math.PI - A[3 * t] - A[3 * t + 1]);
+  }
+  // union-find over corners (corner k = 3 t + j): corners of one vertex join across smooth edges
+  const parent = new Uint32Array(T.length);
+  for (let k = 0; k < T.length; k++) parent[k] = k;
+  const find = (k) => { while (parent[k] !== k) { parent[k] = parent[parent[k]]; k = parent[k]; } return k; };
+  const join = (a, b) => { a = find(a); b = find(b); if (a !== b) parent[a < b ? b : a] = a < b ? a : b; };
+  const seen = new Map();     // undirected edge -> the corner pair (k at a, k at b) of its first face
+  for (let t = 0; t < nt; t++) for (let e = 0; e < 3; e++) {
+    const ka = 3 * t + e, kb = 3 * t + ((e + 1) % 3), a = T[ka], b = T[kb];
+    if (a === b) continue;
+    const key = a < b ? a * nv + b : b * nv + a, o = seen.get(key);
+    if (o === undefined) { seen.set(key, a < b ? [ka, kb, t] : [kb, ka, t]); continue; }
+    seen.delete(key);
+    const [oa, ob, to] = o;          // the other face's corners at min(a, b) and max(a, b)
+    const d = FN[3 * t] * FN[3 * to] + FN[3 * t + 1] * FN[3 * to + 1] + FN[3 * t + 2] * FN[3 * to + 2];
+    if (d < cos) continue;           // a sharp edge (or a degenerate face): the groups stay apart
+    const [ma, mb] = a < b ? [ka, kb] : [kb, ka];
+    join(oa, ma); join(ob, mb);
+  }
+  // one output vertex per group
+  const sum = new Float64Array(3 * T.length);
+  for (let k = 0; k < T.length; k++) {
+    const r = find(k), t = (k / 3) | 0, w = A[k];
+    sum[3 * r] += w * FN[3 * t]; sum[3 * r + 1] += w * FN[3 * t + 1]; sum[3 * r + 2] += w * FN[3 * t + 2];
+  }
+  // fallback for a group with no direction (zero-area slivers alone): the vertex's whole fan, angle-weighted
+  const vsum = new Float64Array(3 * nv);
+  for (let k = 0; k < T.length; k++) {
+    const v = T[k], t = (k / 3) | 0, w = A[k];
+    vsum[3 * v] += w * FN[3 * t]; vsum[3 * v + 1] += w * FN[3 * t + 1]; vsum[3 * v + 2] += w * FN[3 * t + 2];
+  }
+  const outIndex = new Int32Array(T.length).fill(-1), first = new Int32Array(nv).fill(-1);
+  const outP = [], outN = [], outI = new Uint32Array(T.length), mergeFrom = [], mergeTo = [];
+  let count = 0;
+  for (let k = 0; k < T.length; k++) {
+    const r = find(k);
+    if (outIndex[r] < 0) {
+      const v = T[k];
+      let nx = sum[3 * r], ny = sum[3 * r + 1], nz = sum[3 * r + 2];
+      const l = Math.hypot(nx, ny, nz);
+      if (l > 1e-12) { nx /= l; ny /= l; nz /= l; }
+      else {
+        nx = vsum[3 * v]; ny = vsum[3 * v + 1]; nz = vsum[3 * v + 2];
+        const lv = Math.hypot(nx, ny, nz);
+        if (lv > 1e-12) { nx /= lv; ny /= lv; nz /= lv; } else { nx = 0; ny = 0; nz = 1; }
+      }
+      outIndex[r] = count++;
+      outP.push(P[3 * v], P[3 * v + 1], P[3 * v + 2]);
+      outN.push(nx, ny, nz);
+      if (first[v] < 0) first[v] = outIndex[r]; else { mergeFrom.push(outIndex[r]); mergeTo.push(first[v]); }
+    }
+    outI[k] = outIndex[r];
+  }
+  return { positions: Float32Array.from(outP), normals: Float32Array.from(outN), indices: outI,
+    mergeFrom: Uint32Array.from(mergeFrom), mergeTo: Uint32Array.from(mergeTo) };
 }
 
 /** Area-weighted vertex normals (fallback when the kernel gave none). */

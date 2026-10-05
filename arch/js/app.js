@@ -1,19 +1,23 @@
 // Arch Studio app: prompt -> parse() -> spec -> build worker (Manifold) -> viewer (three.js), plus the spec card,
-// examples, exports and the URL. Exposes window.__arch = { ready, errors, busy, last, run } for the site and tests.
+// examples, exports, the A3 drawing sheet, the transform panel, the idle showcase and the URL. Exposes
+// window.__arch = { ready, errors, busy, last, run, drawing, showcase } for the site and tests.
 //
-// URL: ?q=<prompt>  ?spec=<json> (bypasses the parser; q is then only shown)  &mode=stone|white|line
-//      &view=three-quarter|front|side|top  &shot=1 (canvas only)  &embed=1 (inside the site)
+// URL: ?q=<prompt>  ?spec=<json> (bypasses the parser; q is then only shown)  &deform=<transform>  &mode=stone|white|line
+//      &view=three-quarter|front|side|top  &shot=1 (canvas only)  &embed=1 (inside the site: the showcase runs at once)
+//      &showcase=1 (run the idle showcase now, and again after 12 s idle) | 0 (never)
 
 import { SCHEMA, DEFAULTS, ELEMENTS, MATERIALS } from './spec.js';
 import { ORDERS } from './orders.js';
-import { PBR } from './export.js';
-import { smartStretch, makeDeformer, resolveOps, arapLattice, ffdLattice, foldCheck } from './deform.js';
+import { PBR, isRigidPart, frameScale, RIGID_RATIO } from './export.js';
+import { smartStretch, makeDeformer, resolveOps, arapLattice, ffdLattice, foldCheck, polar3 } from './deform.js';
 
 const A = window.__arch = { ready: false, errors: [], busy: false, last: null, backend: 'webgl', timing: {} };
 const mark = (k) => { if (A.timing[k] === undefined) A.timing[k] = Math.round(performance.now()); };   // ms since navigation
+mark('appStart');
 const $ = (s) => document.querySelector(s);
 const Q = new URLSearchParams(location.search);
 const SHOT = Q.get('shot') === '1';
+const EMBED = Q.get('embed') === '1';
 
 // ------------------------------------------------------------------------------------------------ build worker
 
@@ -31,16 +35,26 @@ class Builder {
     this.spawn();
   }
   spawn() {
-    this.w = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+    mark('workerSpawn');
+    // the page's head started a worker already (index.html): adopt it and replay what it said meanwhile
+    const pre = !this.recycled && window.__archWorker;
+    window.__archWorker = null;
+    this.w = pre ? pre.w : new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
     this.ready = new Promise((res, rej) => { this.ok = res; this.fail = rej; });
     this.ready.catch(() => {});
     this.w.onmessage = (e) => this.message(e.data);
     this.w.onerror = (e) => this.fatal('the build worker failed to start' + (e && e.message ? ': ' + e.message : ''));
+    if (pre) { A.timing.preSpawned = true; for (const m of pre.early.splice(0)) this.message(m); }
   }
   fatal(msg) { this.fail(new Error(msg)); this.rejectAll(msg); this.onFatal(msg); }
   rejectAll(msg) { for (const p of this.pending.values()) p.reject(new Error(msg)); this.pending.clear(); }
   message(m) {
-    if (m.type === 'ready') { this.heap = m.heapMB; mark('kernel'); this.ok(); return; }
+    if (m.type === 'ready') {
+      this.heap = m.heapMB; mark('kernel');
+      if (m.boot && !A.timing.boot) A.timing.boot = Object.fromEntries(Object.entries(m.boot).map(([k, v]) => [k, Math.round(v - performance.timeOrigin)]));
+      this.ok(); return;
+    }
+    if (m.type === 'warmed') { if (!A.timing.warm) A.timing.warm = { element: m.element, ms: Math.round(m.ms), at: Math.round((m.at || 0) - performance.timeOrigin) }; return; }
     if (m.type === 'fatal') { this.fatal(m.message); return; }
     if (m.type === 'edges') { this.onEdges(m.id, m.edges); return; }
     if (m.type === 'error' && m.heapMB !== undefined) { this.heap = m.heapMB; this.builds = m.builds; }
@@ -69,7 +83,14 @@ class Builder {
     if ((this.sick || this.heap > HEAP_LIMIT_MB || this.builds >= MAX_BUILDS) && this.pending.size === 0) this.recycle();
     await this.ready;
     try {
-      const m = await this.call({ type: 'build', spec, edges, ...(deform || {}) }, this.buildTimeout);
+      mark('firstBuildSent');
+      const m = await this.call({ type: 'build', spec, edges, sentAt: performance.timeOrigin + performance.now(),
+        ...(deform || {}) }, this.buildTimeout);
+      if (!A.timing.firstBuild) {
+        const t = m.stats;
+        A.timing.firstBuild = { back: Math.round(performance.now()), queueMs: Math.round(t.workerStart || 0), importMs: Math.round(t.importMs || 0),
+          genMs: Math.round(t.genMs || 0), buildMs: Math.round(t.ms || 0), meshMs: Math.round(t.meshMs || 0), totalMs: Math.round(t.totalMs || 0) };
+      }
       this.heap = m.stats.heapMB || 0;
       this.builds = m.stats.builds || this.builds + 1;
       return m;
@@ -86,12 +107,14 @@ class Builder {
   /** The undeformed element, refined for the GPU preview (see worker.js base()). */
   async base(spec, deformOpts) { await this.ready; return this.call({ type: 'base', spec, deformOpts }, this.buildTimeout); }
   async exportAs(format, name, forId) { await this.ready; return this.call({ type: 'export', format, name, forId }, this.exportTimeout); }
+  /** The A3 drawing sheet of the model on screen (worker.js drawing(), drawing.js makeSheet()). */
+  async drawing(forId, meta) { await this.ready; return this.call({ type: 'drawing', forId, meta }, this.exportTimeout); }
 }
 
 // ------------------------------------------------------------------------------------------------ parser (+ fallback)
 
 let parseFn = null, describeFn = null;
-const parserLoaded = import('./parse.js').then((m) => { parseFn = m.parse; }, () => { console.info('[arch] parse.js not found: keyword fallback'); });
+const parserLoaded = import('./parse.js').then((m) => { parseFn = m.parse; mark('parser'); }, () => { console.info('[arch] parse.js not found: keyword fallback'); });
 const describeLoaded = import('./describe.js').then((m) => {
   const f = m.describe || m.interpretation || m.interpret || m.oneLine;
   if (typeof f === 'function') describeFn = f;
@@ -201,7 +224,9 @@ const EXAMPLES = [
   'Pineapple finial',
   'Colonne dorique cannelée',
 ];
-const DEFAULT_PROMPT = EXAMPLES[0];
+// the first impression when nobody typed anything: rich in detail, by turns a copper dome on a drum with a lantern
+// and a Corinthian tetrastyle portico (index.html picks this visit's one, so its generator is warm before app.js runs)
+const DEFAULT_PROMPT = window.__archDefault || 'Copper dome with drum and lantern';
 
 const S = {
   prompt: '', spec: {}, parsed: null, edited: false, units: 'm',
@@ -209,6 +234,13 @@ const S = {
   shown: { id: 0, input: null },   // the build on screen: its worker id and the spec it was built from
 };
 let edgeStash = null;             // feature edges that arrived before their build was on screen
+// the idle showcase's state (see the end of this file)
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)');
+const SC = { on: false, i: 0, timer: 0, idleT: 0, typeT: 0, engaged: false,
+  forced: Q.get('showcase') === '1',
+  allowed: Q.get('showcase') === '1' || (!SHOT && Q.get('showcase') !== '0' && !Q.get('q') && !Q.get('spec') && !Q.get('deform')) };
+A.showcase = { running: false, index: -1, phase: '', shown: [] };
+
 
 const stage = $('#stage'), msgEl = $('#msg');
 const showMsg = (text, spin = false) => { msgEl.innerHTML = ''; if (spin) msgEl.insertAdjacentHTML('afterbegin', '<span class="spin" aria-hidden="true"></span>'); msgEl.append(text || ''); };
@@ -276,13 +308,20 @@ async function build() {
   S.buildReason = null;
   A.busy = true; stage.classList.add('busy');
   try {
-    await viewerReady;
     const deform = ops.length ? { ops, deformOpts: { rigidInstances: S.x.rigid } } : null;
-    const r = await builder.build(spec, viewer.mode === 'line', deform);
+    // the worker builds while three.js and the viewer are still loading (first load): send first, then wait for both
+    const line = viewer ? viewer.mode === 'line' : Q.get('mode') === 'line';
+    const pending = builder.build(spec, line, deform);
+    await viewerReady;
+    const r = await pending;
     // a newer request is waiting: do not spend a frame on this one (unless nothing has been shown for a while)
     if (queued && performance.now() - lastShown < 800) return;
+    const reveal = S.reveal && !dragging();
+    S.reveal = false;
+    if (reveal) viewer.beginReveal();
     await viewer.setModel(r.meshes, r.stats, { keepCamera: reason === 'deform' && S.stats && S.stats.spec.element === r.stats.spec.element,
-      keepPreview: S.dragging });
+      keepPreview: dragging() });
+    if (reveal) viewer.reveal(1100);
     lastShown = performance.now();
     S.shown = { id: r.id, input: spec, deform };
     S.stats = r.stats;
@@ -300,8 +339,7 @@ async function build() {
     renderRead(interp, parsed, r.stats.warnings);
     renderCard(r.stats.spec);
     renderStats(r.stats);
-    renderDims();
-    renderX();
+    if (!dragging()) { renderDims(); renderX(); }     // a drag keeps its live estimates until its own bake lands
     syncButtons();
     $('#c').setAttribute('aria-label', `3D view of the ${interp}. Arrow keys orbit, + and − zoom, F frames the whole element.`);
     announce(`Built: ${interp}${r.stats.deform ? ', transformed' : ''}.`);
@@ -321,13 +359,17 @@ async function build() {
     if (e && e.message === 'restarted') { /* superseded by a worker restart */ }
     else {
       fail(`could not build this: ${e && e.message ? e.message : e}`);
-      if (viewer && !S.dragging) viewer.showPreview(false);   // never leave a preview standing in for a failed bake
+      if (viewer && !dragging()) viewer.showPreview(false);   // never leave a preview standing in for a failed bake
     }
   } finally {
     inflight = false;
     A.busy = false;
     if (queued) build();
-    else { stage.classList.remove('busy'); idleWaiters.splice(0).forEach((r) => r()); }
+    else {
+      stage.classList.remove('busy'); idleWaiters.splice(0).forEach((r) => r());
+      // nothing more is coming and nobody is dragging: the baked model, never a stale preview, is what shows
+      if (viewer && viewer.previewing && !dragging()) viewer.showPreview(false);
+    }
   }
 }
 
@@ -625,7 +667,7 @@ for (const b of document.querySelectorAll('[data-export]')) b.addEventListener('
     catch (e) {
       if (e.code !== 'stale' && e.message !== 'restarted' && e.message !== 'timeout') throw e;
       // the worker no longer holds the model on screen (it was recycled): rebuild the same spec quietly, once
-      const rb = await builder.build(S.shown.input, false);
+      const rb = await builder.build(S.shown.input, false, S.shown.deform || null);
       S.shown = { ...S.shown, id: rb.id };  // the same geometry: edges and exports now refer to this build
       r = await builder.exportAs(f, name, rb.id);
     }
@@ -635,6 +677,64 @@ for (const b of document.querySelectorAll('[data-export]')) b.addEventListener('
     console.error('[arch] export failed', e);
   } finally { b.disabled = false; b.textContent = old; b.focus(); }
 });
+// the drawing sheet: computed in the worker, written here as SVG or painted on a canvas at 300 dpi (PNG with its pHYs)
+for (const b of document.querySelectorAll('[data-drawing]')) b.addEventListener('click', async () => {
+  if (!S.stats) return;
+  const f = b.dataset.drawing, old = b.textContent;
+  b.disabled = true; b.textContent = '…';
+  try {
+    const out = await drawingFile(f);
+    download(out.blob, `${slug()}-drawing.${f}`);
+    announce(`Drawing sheet at 1:${out.scale} downloaded.`);
+  } catch (e) {
+    toast(`The drawing failed: ${e.message}`);
+    console.error('[arch] drawing failed', e);
+  } finally { b.disabled = false; b.textContent = old; b.focus(); }
+});
+
+/** The drawing sheet of the model on screen as a file: { blob, scale, dpi, sheet, ms }. */
+async function drawingFile(format = 'png') {
+  const t0 = performance.now();
+  await waitIdle();
+  const D = await import('./drawing.js');
+  const interp = S.interpretation || describeSpec(S.stats.spec);
+  const meta = { title: interp.split(' · ')[0], interpretation: interp, prompt: S.prompt || '', date: new Date().toISOString().slice(0, 10) };
+  let r;
+  try { r = await builder.drawing(S.shown.id, meta); }
+  catch (e) {
+    if (e.code !== 'stale' && e.message !== 'restarted' && e.message !== 'timeout') throw e;
+    const rb = await builder.build(S.shown.input, false, S.shown.deform || null);
+    S.shown = { ...S.shown, id: rb.id };
+    r = await builder.drawing(rb.id, meta);
+  }
+  const sheet = r.sheet;
+  if (format === 'svg') return { blob: new Blob([D.toSVG(sheet)], { type: 'image/svg+xml' }), scale: sheet.scale, sheet, ms: performance.now() - t0 };
+  // 300 dpi A3 is 4961 x 3508 px; a browser that refuses a canvas that large (iOS caps at 16.7 M pixels) gets 200 dpi
+  for (const dpi of [300, 200]) {
+    const px = dpi / 25.4, cv = document.createElement('canvas');
+    cv.width = Math.round(sheet.w * px); cv.height = Math.round(sheet.h * px);
+    const ctx = cv.getContext('2d');
+    if (!ctx) continue;
+    D.paint(ctx, sheet, px);
+    const blob = await new Promise((res) => cv.toBlob(res, 'image/png'));
+    cv.width = cv.height = 0;
+    if (!blob) continue;
+    const png = D.pngWithDpi(new Uint8Array(await blob.arrayBuffer()), dpi);
+    return { blob: new Blob([png], { type: 'image/png' }), scale: sheet.scale, dpi, sheet, ms: performance.now() - t0 };
+  }
+  throw new Error('this browser could not make an image that large');
+}
+/** For the tests and the screenshot harness: the sheet as base64 (no download). */
+A.drawing = async (format = 'png') => {
+  const out = await drawingFile(format);
+  const buf = new Uint8Array(await out.blob.arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+  const s = out.sheet;
+  return { base64: btoa(bin), bytes: buf.length, scale: s.scale, dpi: out.dpi || null, ms: Math.round(out.ms), timing: s.timing, views: s.views,
+    measured: s.measured, cut: s.cut, number: s.number, groups: s.groups.map((g) => ({ id: g.id, lines: g.starts.length - 1 })) };
+};
+
 function slug() {
   const s = S.stats.spec;
   const head = [s.order && ['column', 'pilaster', 'capital', 'base', 'portico', 'entablature', 'cornice'].includes(s.element) ? s.order : '',
@@ -680,6 +780,9 @@ $('#c').addEventListener('wheel', hideHint, { once: true, passive: true });
 // dragged points move their neighbours as rigidly as possible). While a slider or a handle moves, the viewer deforms the
 // undeformed element on the GPU with the same maps (view.js); on release the worker bakes the exact, refined,
 // watertight result (deformParts), which is what the downloads contain.
+
+/** A slider or a lattice handle is being dragged (the GPU preview stays up and bakes do not overwrite the readouts). */
+const dragging = () => !!(S.sliderActive || (viewer && viewer.drag));
 
 const XDEF = { sx: 1, sy: 1, sz: 1, keep: true, bend: 0, bow: 0, twist: 0, taper: 1, lx: 0, ly: 0, rigid: true, ffd: false, dims: 3, pins: {}, plain: {} };
 S.x = structuredClone(XDEF);
@@ -739,12 +842,28 @@ function deformOps(free, info = S.element) {
   return ops;
 }
 
-/** resolveOps on the page: the worker sends the shaft's box, which is all resolveOps reads of the parts. */
+/** resolveOps on the page, with what deformParts would pass it: part stubs built from the undeformed meshes (name,
+ *  local box, instances, meta.rigid tag — all resolveOps and its taper lift read of a part) and the bake's options, so a
+ *  taper's lift and the 'auto' ranges match the bake. Without undeformed meshes yet: the shaft's box alone. */
+const DEFORM_OPTS = () => ({ rigidInstances: S.x.rigid, rigidRatio: RIGID_RATIO, scaleInstances: 'auto' });
+function partStubs(info) {
+  const meshes = (viewer && viewer.preview && viewer.preview.meshes) || (S.plainMeshes && S.plainMeshes.key === info.key && S.plainMeshes.meshes);
+  if (!meshes) return info.shaftBox ? [{ name: 'shaft', manifold: { numTri: () => 1, boundingBox: () => info.shaftBox }, transforms: null }] : [];
+  if (S.stubsFor && S.stubsFor.meshes === meshes) return S.stubsFor.stubs;
+  const stubs = meshes.map((m) => {
+    const P = m.positions, min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
+    for (let i = 0; i < P.length; i += 3) for (let a = 0; a < 3; a++) { if (P[i + a] < min[a]) min[a] = P[i + a]; if (P[i + a] > max[a]) max[a] = P[i + a]; }
+    const nt = m.indices.length / 3, box = { min, max };
+    return { name: m.name, manifold: { numTri: () => nt, boundingBox: () => box }, transforms: m.transforms || null,
+      meta: m.rigidTag === true || m.rigidTag === false ? { rigid: m.rigidTag } : {} };
+  });
+  S.stubsFor = { meshes, stubs };
+  return stubs;
+}
 function resolved(ops, info = S.element) {
   const H = info.bbox.max[2] - info.bbox.min[2];
   ops = ops.map((o) => (o.lean ? { type: o.type, axis: o.axis, dx: o.lean[0] * H, dy: o.lean[1] * H } : o));
-  const stubs = info.shaftBox ? [{ name: 'shaft', manifold: { numTri: () => 1, boundingBox: () => info.shaftBox }, transforms: null }] : [];
-  return resolveOps(ops, stubs, info.bbox);
+  return resolveOps(ops, partStubs(info), info.bbox, DEFORM_OPTS());
 }
 
 /** The FFD lattice for the ops before it: rest points over their output frame, offsets from the dragged points
@@ -753,8 +872,16 @@ function latticeFor(before, info) {
   const d = S.x.dims, dims = [d, d, d];
   const F = makeDeformer(resolved(before, info), info.bbox).bboxOut;
   const lat = ffdLattice(dims, F);
-  const offsets = Object.keys(S.x.pins).length ? arapLattice(dims, S.x.pins, 10, { rest: lat.rest }) : new Float64Array(3 * lat.count);
-  for (const [i, t] of Object.entries(S.x.plain)) for (let a = 0; a < 3; a++) offsets[3 * i + a] = t[a] - lat.rest[3 * i + a];
+  // targets stay within the lattice box padded by its own size on every side (a link cannot fling a point to infinity)
+  const clampT = (t) => t.map((v, a) => Math.min(lat.max[a] + lat.size[a], Math.max(lat.min[a] - lat.size[a], v)));
+  const ok = (i) => Number.isInteger(+i) && +i >= 0 && +i < lat.count;
+  const pins = Object.fromEntries(Object.entries(S.x.pins).filter(([i]) => ok(i)).map(([i, t]) => [i, clampT(t)]));
+  const offsets = Object.keys(pins).length ? arapLattice(dims, pins, 10, { rest: lat.rest }) : new Float64Array(3 * lat.count);
+  for (const [i, t0] of Object.entries(S.x.plain)) {
+    if (!ok(i)) continue;
+    const t = clampT(t0);
+    for (let a = 0; a < 3; a++) offsets[3 * i + a] = t[a] - lat.rest[3 * i + a];
+  }
   return { dims, lat, offsets };
 }
 
@@ -802,15 +929,28 @@ function doPreview() {
   maybeBase(true);
   const info = S.element, t0 = performance.now();
   const ops = resolved(previewOps(), info), D = makeDeformer(ops, info.bbox);
-  // the deformed box and the re-grounding, from a sample of the element's own vertices (the image of its bbox would
-  // overstate a twist: the corners of a twisted square box reach further than any stone)
-  const est = D.identity ? { min: info.bbox.min.slice(), max: info.bbox.max.slice() } : sampleBox(D) || D.bboxOut;
-  const ground = D.identity ? 0 : info.bbox.min[2] - est.min[2];
+  // the deformed box and the re-grounding: estimated from the element's own extreme vertices (the image of its bbox would
+  // overstate a twist: the corners of a twisted square box reach further than any stone), refreshed every 80 ms; the
+  // bake's exact ground shift when the ops are the baked ones
+  const baked = S.stats && S.stats.deform && JSON.stringify(ops) === JSON.stringify(S.stats.deform.ops);
+  // (at most every 60 ms while dragging, and always once more 120 ms after the last move, so the readout ends exact)
+  let est;
+  if (D.identity) est = { min: info.bbox.min.slice(), max: info.bbox.max.slice() };
+  else if (dragging() && S.estAt && t0 - S.estAt < 60 && S.estLast) {
+    est = S.estLast;
+    clearTimeout(S.estTrail);
+    S.estTrail = setTimeout(() => { if (dragging()) { S.estAt = 0; doPreview(); } }, 120);
+  } else { est = estimateBox(D) || D.bboxOut; S.estAt = t0; S.estLast = est; }
+  const tEst = performance.now() - t0;
+  const ground = D.identity ? 0 : baked ? S.stats.deform.ground || 0 : info.bbox.min[2] - est.min[2];
   const box = { min: [est.min[0], est.min[1], est.min[2] + ground], max: [est.max[0], est.max[1], est.max[2] + ground] };
-  const gpu = viewer.hasPreview(previewKey()) && viewer.previewDeform(ops, D, ground, box);
-  A.preview = { gpu, ms: +(performance.now() - t0).toFixed(1), ops: ops.length };
-  if (!gpu) requestBuild('deform');            // no preview geometry yet: the worker bakes, latest request only
+  const has = viewer.hasPreview(previewKey());
+  const gpu = has && viewer.previewDeform(ops, D, ground, box);
+  A.preview = { gpu, ms: +(performance.now() - t0).toFixed(1), estMs: +tEst.toFixed(1), ops: ops.length, box };
+  // no preview geometry yet: say so (the bake on release still comes); never bake at slider rate
+  if (!gpu) $('#xinfo').textContent = has ? 'no live preview for this combination — release to apply' : 'preparing preview…';
   drawLattice(ops, D, ground);
+  renderPoint();
   renderDims(box.max.map((v, a) => v - box.min[a]));
   // live fold warning (a grid of Jacobians, a few ms), at most every 150 ms
   if (performance.now() - foldT > 150) {
@@ -821,25 +961,69 @@ function doPreview() {
   renderXOutputs();
 }
 
-/** Bbox of about 2500 vertices of the preview geometry (or the meshes on screen) mapped through D. */
-function sampleBox(D) {
+/** Points that bound the preview geometry, picked once per preview base: for each warped mesh its extreme vertices in
+ *  26 directions plus every k-th vertex (<= 400), for up to 48 of its instances; for rigid ornament the instance centres
+ *  with the mesh's half diagonal (they move rigidly, so their size is known). */
+const DIRS26 = [];
+for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) if (x || y || z) DIRS26.push([x, y, z]);
+function estimatorFor(meshes) {
+  const items = [];
+  for (const m of meshes) {
+    const P = m.positions, nv = P.length / 3, T = m.transforms, n = T ? T.length / 16 : 1;
+    if (!nv) continue;
+    const step = Math.max(1, Math.ceil(n / 48)), inst = [];
+    for (let k = 0; k < n; k += step) inst.push(T ? T.subarray(16 * k, 16 * k + 16) : null);
+    if (m.rigid) {
+      const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+      for (let i = 0; i < P.length; i += 3) for (let a = 0; a < 3; a++) { lo[a] = Math.min(lo[a], P[i + a]); hi[a] = Math.max(hi[a], P[i + a]); }
+      const corners = [];
+      for (let k = 0; k < 8; k++) corners.push([k & 1 ? hi[0] : lo[0], k & 2 ? hi[1] : lo[1], k & 4 ? hi[2] : lo[2]]);
+      items.push({ rigid: true, centre: m.centre, corners, inst });
+      continue;
+    }
+    const pick = new Set(), stride = Math.max(1, Math.floor(nv / 400));
+    for (const d of DIRS26) {
+      let best = -Infinity, bi = 0;
+      for (let i = 0; i < nv; i++) { const v = d[0] * P[3 * i] + d[1] * P[3 * i + 1] + d[2] * P[3 * i + 2]; if (v > best) { best = v; bi = i; } }
+      pick.add(bi);
+    }
+    for (let i = 0; i < nv; i += stride) pick.add(i);
+    const local = new Float64Array(3 * pick.size);
+    let o = 0;
+    for (const i of pick) { local[o++] = P[3 * i]; local[o++] = P[3 * i + 1]; local[o++] = P[3 * i + 2]; }
+    items.push({ rigid: false, local, inst });
+  }
+  return items;
+}
+function estimateBox(D) {
   const meshes = (viewer.preview && viewer.preview.meshes) || (S.plainMeshes && S.plainMeshes.key === S.element.key && S.plainMeshes.meshes);
   if (!meshes) return null;
-  let total = 0;
-  for (const m of meshes) total += (m.positions.length / 3) * Math.min(m.transforms ? m.transforms.length / 16 : 1, 32);
-  const stride = Math.max(1, Math.floor(total / 2500));
+  if (!S.estFor || S.estFor.meshes !== meshes) S.estFor = { meshes, items: estimatorFor(meshes) };
   const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity], p = [0, 0, 0];
-  for (const m of meshes) {
-    const P = m.positions, T = m.transforms, n = T ? T.length / 16 : 1, step = Math.max(1, Math.floor(n / 32));
-    for (let k = 0; k < n; k += step) {
-      const M = T ? T.subarray(16 * k, 16 * k + 16) : null;
-      for (let i = 0; i < P.length; i += 3 * stride) {
-        const x = P[i], y = P[i + 1], z = P[i + 2];
-        if (M) { p[0] = M[0] * x + M[4] * y + M[8] * z + M[12]; p[1] = M[1] * x + M[5] * y + M[9] * z + M[13]; p[2] = M[2] * x + M[6] * y + M[10] * z + M[14]; }
-        else { p[0] = x; p[1] = y; p[2] = z; }
-        const q = D.point(p);
-        for (let a = 0; a < 3; a++) { if (q[a] < min[a]) min[a] = q[a]; if (q[a] > max[a]) max[a] = q[a]; }
+  const add = (q, r = 0) => { for (let a = 0; a < 3; a++) { if (q[a] - r < min[a]) min[a] = q[a] - r; if (q[a] + r > max[a]) max[a] = q[a] + r; } };
+  const xf = (M, x, y, z) => {
+    if (!M) { p[0] = x; p[1] = y; p[2] = z; return p; }
+    p[0] = M[0] * x + M[4] * y + M[8] * z + M[12]; p[1] = M[1] * x + M[5] * y + M[9] * z + M[13]; p[2] = M[2] * x + M[6] * y + M[10] * z + M[14];
+    return p;
+  };
+  const J = new Float64Array(9);
+  for (const it of S.estFor.items) {
+    for (const M of it.inst) {
+      if (it.rigid) {
+        // deformParts' rigid placement: corner' = f(c) + k R (corner - c), R the polar rotation of J(c)
+        const c = xf(M, it.centre[0], it.centre[1], it.centre[2]).slice(), fc = D.point(c);
+        D.jacobian(c, J);
+        const { R, s } = polar3(J);
+        let k = Math.abs(s[1]);
+        if (!(k > 0) || !Number.isFinite(k) || Math.abs(k - 1) < 1e-6) k = 1;
+        for (const w0 of it.corners) {
+          const w = xf(M, w0[0], w0[1], w0[2]), d = [w[0] - c[0], w[1] - c[1], w[2] - c[2]];
+          add([0, 1, 2].map((a) => fc[a] + k * (R[3 * a] * d[0] + R[3 * a + 1] * d[1] + R[3 * a + 2] * d[2])));
+        }
+        continue;
       }
+      const L = it.local;
+      for (let i = 0; i < L.length; i += 3) add(D.point(xf(M, L[i], L[i + 1], L[i + 2])));
     }
   }
   return min[0] < Infinity ? { min, max } : null;
@@ -862,9 +1046,64 @@ function drawLattice(ops, D, ground) {
     pts = Float64Array.from(ffdLattice(dims, D.bboxOut).rest);
   }
   latticeGround = ground;
+  // the current lattice (before the ground shift): what the point fields read and write
+  const rest = k >= 0 ? D.compiled[k].lattice.rest : ffdLattice(dims, D.bboxOut).rest;
+  S.latticeNow = { dims, rest, moved: Float64Array.from(pts) };
   for (let i = 2; i < pts.length; i += 3) pts[i] += ground;
-  viewer.setLattice(pts, dims, [...Object.keys(S.x.pins), ...Object.keys(S.x.plain)].map(Number));
+  viewer.setLattice(pts, dims, [...Object.keys(S.x.pins), ...Object.keys(S.x.plain)].map(Number), S.sel);
 }
+
+// ---- free-form from the keyboard: pick a control point, type or step its offset (arrows 1 cm, shift 10 cm)
+function renderPoint() {
+  const box = $('#x-point'), L = S.latticeNow;
+  box.hidden = !S.x.ffd || !L;
+  if (box.hidden) return;
+  const d = L.dims[0], count = (d + 1) ** 3, sel = $('#x-pt');
+  if (sel.options.length !== count) {
+    sel.innerHTML = '';
+    const side = (v, n, a, b) => (v === 0 ? a : v === n ? b : String(v));
+    for (let i = 0; i < count; i++) {
+      const ii = i % (d + 1), jj = Math.floor(i / (d + 1)) % (d + 1), kk = Math.floor(i / (d + 1) ** 2);
+      sel.append(new Option(`${side(kk, d, 'bottom', 'top')} · ${side(jj, d, 'front', 'back')} · ${side(ii, d, 'left', 'right')}  (${ii},${jj},${kk})`, i));
+    }
+  }
+  if (S.sel === undefined || S.sel === null || S.sel >= count) S.sel = count - 1;
+  sel.value = String(S.sel);
+  const i = S.sel;
+  for (const el of document.querySelectorAll('#x-point input[type=number]')) {
+    if (el === document.activeElement) continue;
+    const a = +el.dataset.a, off = L.moved[3 * i + a] - L.rest[3 * i + a];
+    el.value = (Math.abs(off) < 5e-5 ? 0 : off).toFixed(3);
+  }
+  $('#x-only').checked = i in S.x.plain;
+}
+function movePoint(a, value) {
+  const L = S.latticeNow, i = S.sel;
+  if (!L || i === null || i === undefined) return;
+  const t = [0, 1, 2].map((k) => Math.round((L.moved[3 * i + k]) * 1e4) / 1e4);
+  t[a] = Math.round((L.rest[3 * i + a] + value) * 1e4) / 1e4;
+  if ($('#x-only').checked) { S.x.plain[i] = t; delete S.x.pins[i]; } else { S.x.pins[i] = t; delete S.x.plain[i]; }
+  schedulePreview();
+  clearTimeout(S.pointT);
+  S.pointT = setTimeout(() => { S.releaseT = performance.now(); syncURL(); requestBuild('deform'); }, 350);
+}
+$('#x-pt').addEventListener('change', (e) => { S.sel = +e.target.value; renderPoint(); if (S.element) renderX(); });
+for (const el of document.querySelectorAll('#x-point input[type=number]')) {
+  el.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    const v = (parseFloat(el.value) || 0) + (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 0.1 : 0.01);
+    el.value = v.toFixed(3);
+    movePoint(+el.dataset.a, v);
+  });
+  el.addEventListener('change', () => { const v = parseFloat(el.value); if (Number.isFinite(v)) movePoint(+el.dataset.a, v); });
+}
+$('#x-only').addEventListener('change', (e) => {
+  const i = S.sel, t = S.x.pins[i] || S.x.plain[i];
+  if (!t) return;
+  if (e.target.checked) { S.x.plain[i] = t; delete S.x.pins[i]; } else { S.x.pins[i] = t; delete S.x.plain[i]; }
+  syncURL(); requestBuild('deform');
+});
 
 /** Ask the worker for the refined undeformed element (once per element and rigid setting); until it arrives the
  *  undeformed meshes on screen stand in, when there are some. */
@@ -884,8 +1123,8 @@ function maybeBase(now = false) {
     if (previewKey() !== key) return;
     viewer.setPreviewBase(key, b.meshes);
     A.previewBase = { tris: b.tris, ms: Math.round(b.ms), edge: b.edge };
-    if (viewer.previewing || S.dragging) doPreview();
-  }, (e) => { baseFor = null; console.warn('[arch] preview geometry unavailable:', e.message); });
+    if (viewer.previewing || dragging()) doPreview();
+  }, (e) => { baseFor = null; if (e.code !== 'busy' && e.message !== 'restarted') console.warn('[arch] preview geometry unavailable:', e.message); });
 }
 
 /** The undeformed meshes on screen as a preview base: rigid parts flagged by deformParts' rule. */
@@ -895,9 +1134,8 @@ function interimBase(meshes, bbox) {
     const P = m.positions, lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
     for (let i = 0; i < P.length; i += 3) for (let a = 0; a < 3; a++) { if (P[i + a] < lo[a]) lo[a] = P[i + a]; if (P[i + a] > hi[a]) hi[a] = P[i + a]; }
     const T = m.transforms, n = T ? T.length / 16 : 1;
-    const sc = T ? Math.max(Math.hypot(T[0], T[1], T[2]), Math.hypot(T[4], T[5], T[6]), Math.hypot(T[8], T[9], T[10])) : 1;
-    const size = Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) * sc;
-    const rigid = !!(S.x.rigid && T && n >= 2 && P.length && size < 0.25 * diag);
+    const rigid = isRigidPart({ instances: T ? n : 1, scale: frameScale(T), elementDiag: diag, enabled: S.x.rigid, empty: !P.length,
+      tag: m.rigidTag, localDiag: Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) });
     return { ...m, rigid, centre: [0, 1, 2].map((a) => (lo[a] + hi[a]) / 2) };
   });
 }
@@ -961,18 +1199,19 @@ function renderX() {
     if (x.ffd) { const ops = resolved(previewOps()), D = makeDeformer(ops, S.element.bbox); drawLattice(ops, D, d ? d.ground || 0 : 0); }
     else viewer.setLattice(null);
   }
+  renderPoint();
 }
 
 // slider: input = live preview, change (release, or a key step) = exact bake
 for (const el of document.querySelectorAll('#xform [data-x]')) {
-  el.addEventListener('pointerdown', () => { S.dragging = true; });
+  el.addEventListener('pointerdown', () => { S.sliderActive = true; });
   el.addEventListener('input', () => {
     S.x[el.dataset.x] = +el.value;
     $('#xnote').textContent = isIdentityX() ? '' : 'on';
     schedulePreview();
   });
   el.addEventListener('change', () => {
-    S.dragging = false;
+    S.sliderActive = false;
     S.releaseT = performance.now();
     S.x[el.dataset.x] = +el.value;
     syncURL();
@@ -982,7 +1221,17 @@ for (const el of document.querySelectorAll('#xform [data-x]')) {
   const lab = el.parentElement.querySelector('label');
   if (lab) lab.addEventListener('dblclick', () => { el.value = XDEF[el.dataset.x]; S.x[el.dataset.x] = XDEF[el.dataset.x]; syncURL(); renderX(); requestBuild('deform'); });
 }
-window.addEventListener('pointerup', () => { if (S.dragging && !(viewer && viewer.drag)) S.dragging = false; });
+// a drag can end without a change event (a cancelled touch, the window losing focus): end it and bake what is shown
+function endDrag() {
+  const was = S.sliderActive || (viewer && viewer.drag);
+  S.sliderActive = false;
+  if (viewer && viewer.drag) viewer.cancelDrag();
+  if (was && JSON.stringify(S.x) !== S.builtX) { S.releaseT = performance.now(); syncURL(); requestBuild('deform'); }
+  else if (was && viewer && viewer.previewing && !inflight) viewer.showPreview(false);
+}
+window.addEventListener('pointerup', () => { if (S.sliderActive) endDrag(); });
+window.addEventListener('pointercancel', endDrag);
+window.addEventListener('blur', endDrag);
 $('#x-keep').addEventListener('change', (e) => { S.x.keep = e.target.checked; syncURL(); requestBuild('deform'); renderX(); });
 $('#x-rigid').addEventListener('change', (e) => { S.x.rigid = e.target.checked; syncURL(); requestBuild('deform'); maybeBase(); });
 $('#x-ffd').addEventListener('change', (e) => {
@@ -996,13 +1245,13 @@ $('#xform').addEventListener('toggle', () => { if ($('#xform').open) { maybeBase
 
 // lattice handles: drag = ARAP (neighbours follow), shift-drag = that point only
 viewerReady.then((v) => v.enableHandles({
-  down: () => { S.dragging = true; },
+  down: (i) => { S.sel = i; renderPoint(); },
   move: (i, q, shift) => {
     const t = [q[0], q[1], q[2] - latticeGround].map((a) => Math.round(a * 1e4) / 1e4);
     if (shift) { S.x.plain[i] = t; delete S.x.pins[i]; } else { S.x.pins[i] = t; delete S.x.plain[i]; }
     schedulePreview();
   },
-  up: () => { S.dragging = false; S.releaseT = performance.now(); syncURL(); requestBuild('deform'); },
+  up: () => { S.releaseT = performance.now(); syncURL(); requestBuild('deform'); renderPoint(); },
 })).catch(() => {});
 
 // ---- the deformation in the URL: compact JSON, base64url
@@ -1025,28 +1274,35 @@ function encodeX() {
   return btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 function decodeX(str) {
-  try {
-    const o = JSON.parse(atob(str.replace(/-/g, '+').replace(/_/g, '/')));
-    const x = structuredClone(XDEF), num = (v, a, b, d) => (Number.isFinite(+v) ? Math.min(b, Math.max(a, +v)) : d);
-    if (Array.isArray(o.s)) STRETCH.forEach(([, k], i) => { x[k] = num(o.s[i], 0.5, 2, 1); });
-    if (o.k === 0) x.keep = false;
-    x.bend = num(o.b, -180, 180, 0); x.bow = num(o.w, -45, 45, 0); x.twist = num(o.t, -360, 360, 0); x.taper = num(o.p, 0.3, 1.5, 1);
-    if (Array.isArray(o.l)) { x.lx = num(o.l[0], -25, 25, 0); x.ly = num(o.l[1], -25, 25, 0); }
-    if (o.r === 0) x.rigid = false;
-    if (o.f) {
-      x.ffd = true; x.dims = o.f.d === 4 ? 4 : 3;
-      const pts = (m) => Object.fromEntries(Object.entries(m || {}).filter(([i, t]) => /^\d+$/.test(i) && Array.isArray(t) && t.length === 3 && t.every(Number.isFinite)));
-      x.pins = pts(o.f.p); x.plain = pts(o.f.m);
-    }
-    return x;
-  } catch (e) { console.warn('[arch] ?deform= ignored:', e.message); return null; }
+  let o;
+  try { o = JSON.parse(atob(String(str).replace(/-/g, '+').replace(/_/g, '/'))); } catch (e) { o = null; }
+  if (!o || typeof o !== 'object' || Array.isArray(o)) { console.warn('[arch] ?deform= ignored: not a deformation'); return null; }
+  const x = structuredClone(XDEF), num = (v, a, b, d) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(b, Math.max(a, v)) : d);
+  if (Array.isArray(o.s)) STRETCH.forEach(([, k], i) => { x[k] = num(o.s[i], 0.5, 2, 1); });
+  if (o.k === 0) x.keep = false;
+  x.bend = num(o.b, -180, 180, 0); x.bow = num(o.w, -45, 45, 0); x.twist = num(o.t, -360, 360, 0); x.taper = num(o.p, 0.3, 1.5, 1);
+  if (Array.isArray(o.l)) { x.lx = num(o.l[0], -25, 25, 0); x.ly = num(o.l[1], -25, 25, 0); }
+  if (o.r === 0) x.rigid = false;
+  if (o.f && typeof o.f === 'object' && !Array.isArray(o.f)) {
+    x.dims = o.f.d === 4 ? 4 : 3;
+    const count = (x.dims + 1) ** 3;
+    // indices inside the lattice, three finite coordinates of sane size (the box clamp follows once the element is known)
+    const pts = (m) => (m && typeof m === 'object' && !Array.isArray(m) ? Object.fromEntries(Object.entries(m).filter(([i, t]) =>
+      /^\d+$/.test(i) && +i < count && Array.isArray(t) && t.length === 3 && t.every((v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < 1e4))) : {});
+    x.pins = pts(o.f.p); x.plain = pts(o.f.m);
+    x.ffd = true;
+  }
+  return x;
 }
 
 // ------------------------------------------------------------------------------------------------ URL
 
 function syncURL() {
+  if (SC.on) return;                      // the showcase does not write the address
   const q = new URLSearchParams(location.search);
-  if (S.prompt) q.set('q', S.prompt); else q.delete('q');
+  // the default element and the showcase's examples are not the visitor's request: they stay out of the address (a
+  // reload then shows the other default, and the idle showcase may start again)
+  if (S.prompt && !S.auto) q.set('q', S.prompt); else q.delete('q');
   if (S.edited) q.set('spec', JSON.stringify(clean(S.spec))); else q.delete('spec');
   const xd = encodeX();
   if (xd) q.set('deform', xd); else q.delete('deform');
@@ -1073,5 +1329,108 @@ function syncURL() {
       return;
     }
   }
+  if (!q) S.auto = true;
   submit(q || DEFAULT_PROMPT, xq);
+})();
+
+// ------------------------------------------------------------------------------------------------ idle showcase
+
+// When nobody has asked for anything (no q / spec / deform in the address) and the page sits idle for 12 s — or at once
+// inside the site's frame (embed=1), or with ?showcase=1 — the studio shows what it can do: ten curated elements, each
+// "typed" into the prompt, built, and raised through a clipping plane, then turned slowly. Any interaction (pointer,
+// wheel, key, touch) stops it at once and it does not come back (except with ?showcase=1, after 12 s idle again).
+// prefers-reduced-motion: no typing, no rising, no turning, and a slower cycle.
+const SHOWCASE = [
+  { text: 'Corinthian tetrastyle portico' },
+  { text: 'Corinthian capital in white marble' },
+  { text: 'Russian onion dome with lantern' },
+  { text: 'Gothic window with a pointed arch' },
+  { text: 'Slate mansard roof with dormers' },
+  { text: 'Ionic column 3.6 m on a pedestal' },
+  { text: 'Broach spire with cross' },
+  { text: 'Balustrade with urns, 5 m long' },
+  { text: 'Balustrade with urns, 5 m long', x: { bend: 120 }, label: 'Curved balustrade with urns (plan curve 120°)' },
+  { text: 'Copper dome with drum and lantern' },
+];
+
+function idleShowcase(ms) {
+  clearTimeout(SC.idleT);
+  if (!SC.allowed || SC.on || (SC.engaged && !SC.forced)) return;
+  SC.idleT = setTimeout(startShowcase, ms);
+}
+function startShowcase() {
+  if (SC.on || !SC.allowed || (SC.engaged && !SC.forced) || !A.ready) return;
+  SC.on = true; A.showcase.running = true;
+  document.documentElement.classList.add('showcase');
+  // start after the element on screen (the default is the last example or the first)
+  const cur = SHOWCASE.findIndex((e) => !e.x && e.text === S.prompt);
+  SC.i = cur >= 0 ? cur + 1 : 0;
+  nextExample();
+}
+function stopShowcase() {
+  clearTimeout(SC.idleT);
+  if (!SC.on) return;
+  SC.on = false; A.showcase.running = false; A.showcase.phase = '';
+  clearTimeout(SC.timer); clearTimeout(SC.typeT);
+  document.documentElement.classList.remove('showcase');
+  $('#prompt').value = S.prompt;          // a half-typed example gives way to the request on screen
+  if (viewer) { viewer.controls.autoRotate = false; viewer.endReveal(); }
+  S.reveal = false;
+}
+/** Type text into the prompt box, a character at a time (at once with reduced motion). */
+function typeOut(text) {
+  const box = $('#prompt');
+  if (REDUCED.matches) { box.value = text; box.dispatchEvent(new Event('input')); return Promise.resolve(); }
+  return new Promise((resolve) => {
+    let n = 0;
+    box.value = '';
+    const step = () => {
+      if (!SC.on) return resolve();
+      box.value = text.slice(0, ++n);
+      if (n >= text.length) { box.dispatchEvent(new Event('input')); SC.typeT = setTimeout(resolve, 220); return; }
+      SC.typeT = setTimeout(step, 22 + Math.random() * 26);
+    };
+    SC.typeT = setTimeout(step, 120);
+  });
+}
+async function nextExample() {
+  if (!SC.on) return;
+  const t0 = performance.now(), k = SC.i++ % SHOWCASE.length, ex = SHOWCASE[k];
+  A.showcase.index = k; A.showcase.phase = 'typing';
+  if (viewer) viewer.controls.autoRotate = false;
+  await typeOut(ex.text);
+  if (!SC.on) return;
+  A.showcase.phase = 'building';
+  S.auto = true;
+  S.reveal = !REDUCED.matches;
+  const x = ex.x ? { ...structuredClone(XDEF), ...ex.x } : null;
+  try { await submit(ex.text, x); } catch (e) { /* a failed example: go on */ }
+  if (!SC.on) return;
+  A.showcase.phase = REDUCED.matches ? 'holding' : 'revealing';
+  A.showcase.shown.push({ index: k, text: ex.label || ex.text, at: Math.round(performance.now()), ms: Math.round(performance.now() - t0) });
+  announce(`Showing ${ex.label || ex.text}.`);
+  if (viewer && !REDUCED.matches) { viewer.controls.autoRotate = true; viewer.controls.autoRotateSpeed = -0.55; }
+  setTimeout(() => { if (SC.on && A.showcase.index === k) A.showcase.phase = 'holding'; }, 1100);
+  // the next example's generator loads while this one is on show
+  const nx = SHOWCASE[SC.i % SHOWCASE.length];
+  try { const el = parseFn && parseFn(nx.text).spec.element; if (el) builder.w.postMessage({ type: 'warm', element: el }); } catch (e) { /* warm-up is optional */ }
+  // one example every ~5 s; a slow build still gets 2.6 s on show (the rise, then a look)
+  const hold = REDUCED.matches ? 9000 : Math.max(2600, 5200 - (performance.now() - t0));
+  SC.timer = setTimeout(nextExample, hold);
+}
+// interaction stops it (capture: before the canvas or a control handles the event); a pointer that only moves delays
+// an idle start
+for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
+  window.addEventListener(ev, (e) => {
+    if (!e.isTrusted) return;
+    SC.engaged = true; S.auto = false;
+    if (SC.on) { stopShowcase(); syncURL(); }
+    if (SC.forced) idleShowcase(12000);
+  }, { capture: true, passive: true });
+}
+window.addEventListener('pointermove', () => { if (!SC.on && !SC.engaged) idleShowcase(EMBED || SC.forced ? 1500 : 12000); }, { passive: true });
+// once the first element is on screen
+(async () => {
+  while (!A.ready) await new Promise((r) => setTimeout(r, 200));
+  idleShowcase(EMBED || SC.forced ? 1500 : 12000);
 })();
