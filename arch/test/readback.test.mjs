@@ -3,7 +3,8 @@
 // the describe() line of generate(spec).spec names a pediment iff the build has one (a raking cornice), and the right
 // kind (broken: the urn on its pedestal; triangular / segmental: the tympanum's outline); a window / door names an arched
 // head iff the build has an arched band, and a keystone iff it has one. The effective fields are SCHEMA values (the spec
-// card can show them) and spec.given stays exactly as normalize() made it.
+// card can show them), spec.given stays exactly as normalize() made it, and the line of the normalised request (the
+// parser's, before anything is built) is the same as the built model's.
 import assert from 'node:assert/strict';
 import { initKernel } from './node-kernel.mjs';
 import { generate } from '../js/generate.js';
@@ -41,6 +42,9 @@ for (const input of cases) {
   let r;
   try { r = await generate(spec); } catch (e) { fails.push(`${JSON.stringify(spec)}: threw ${e.message}`); continue; }
   const line = describe(r.spec), errs = [];
+  // the parser's line, before anything is built (describe of the normalised request), is the built model's line too
+  const before = describe(normalize(spec).spec);
+  if (before !== line) errs.push(`before the build "${before}"`);
   const built = builtPediment(r.parts), said = (line.match(KIND) || [])[1];
   if (built !== (said ? said.toLowerCase() : null)) errs.push(`pediment: built ${built}, read "${said || 'none'}"`);
   assert.deepEqual(r.spec.given, normalize(spec).spec.given, `${JSON.stringify(spec)}: spec.given changed`);

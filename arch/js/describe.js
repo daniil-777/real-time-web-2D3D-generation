@@ -4,6 +4,7 @@
 //   captions(spec, seed = 0) → string[] (4–6)
 
 import { ORDERS, columnDims, DEFAULT_D } from './orders.js';
+import { effective } from './gen/surround.js';
 
 const ORDER = { tuscan: 'Tuscan', doric: 'Doric', 'greek-doric': 'Greek Doric', ionic: 'Ionic', corinthian: 'Corinthian',
   composite: 'Composite', romanesque: 'Romanesque', gothic: 'Gothic', egyptian: 'Egyptian', solomonic: 'Solomonic',
@@ -134,12 +135,14 @@ function facts(spec) {
     }
     case 'window': case 'door': {
       f.title = join(st, el, `${fmt(s.width)} × ${m(s.height)}`);
-      // the spec as built (generate() merges entablature.js effective()): the head, the pediment the style gives it
-      // ("no pediment" only when the request said so: a Gothic or Modern window simply has none), the keystone
-      if (s.archType) f.items.push(`${ARCH[s.archType]} head`);
-      if (s.pediment && s.pediment !== 'none') f.items.push(`${s.pediment} pediment`);
-      else if (s.pediment === 'none' && (!s.given || s.given.includes('pediment'))) f.items.push('no pediment');
-      if (s.keystone) f.items.push('keystone');
+      // as built (surround.js effective(), the builder's own rules, also before a build: the parser's line): the head,
+      // the pediment the style gives it ("no pediment" only when the request said so: a Gothic or Modern window simply
+      // has none), the keystone
+      const b = { ...s, ...effective(s) };
+      if (b.archType) f.items.push(`${ARCH[b.archType]} head`);
+      if (b.pediment && b.pediment !== 'none') f.items.push(`${b.pediment} pediment`);
+      else if (b.pediment === 'none' && (!s.given || s.given.includes('pediment'))) f.items.push('no pediment');
+      if (b.keystone) f.items.push('keystone');
       break;
     }
     case 'roof': {
@@ -279,8 +282,8 @@ const num = (v, lang) => fmt(v).replace('.', lang === 'en' ? '.' : ',');
 function foreign(spec, f, lang) {
   const el = EL[lang][f.el] || f.el;
   const parts = [cap(el)];
-  const tf = TYPE_FIELD[f.el];
-  if (tf && spec[tf] && TYPE[lang][tf][spec[tf]]) parts.push(TYPE[lang][tf][spec[tf]]);
+  const tf = TYPE_FIELD[f.el], t = { ...spec, ...effective(spec) }[tf];   // a window's pediment as built
+  if (tf && t && TYPE[lang][tf][t]) parts.push(TYPE[lang][tf][t]);
   if (spec.order && ORD[lang][spec.order] && f.el !== 'base') parts.push(ORD[lang][spec.order]);
   if (f.mat) parts.push(lang === 'de' ? `aus ${MAT.de[f.mat]}` : lang === 'fr' ? `en ${MAT.fr[f.mat]}` : `in ${MAT.it[f.mat]}`);
   if (f.main && Number.isFinite(f.main.v) && DIMW[lang][f.main.field]) {
