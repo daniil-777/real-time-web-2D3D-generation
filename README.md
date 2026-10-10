@@ -50,7 +50,8 @@ manifold-3d, puppeteer-core — development only; nothing is installed on the si
   development machine: `ARCH_TIME_SCALE=3 npm test` relaxes them on a slower one (CI does).
 - `npm run smoke` opens the built site in headless Chrome and checks what a visitor's browser sees: the site shell's
   three tabs become live, Arch Studio builds two prompts, the 3D objects and the drawings reach their first frame, and
-  nothing errors in the console. `--url https://…/` checks a deployed site instead; screenshots go to `--out DIR`.
+  nothing errors in the console. `--url https://…/` checks a deployed site instead; screenshots go to `--out DIR`;
+  `--only arch` is what CI runs (no GPU there: the neural apps cannot start at a useful speed on software rendering).
 
 Deploy: push `main`. `.github/workflows/deploy.yml` builds, runs the smoke test and publishes `_site/` to GitHub Pages
 (the Pages source is "GitHub Actions"); the unit tests run alongside and mark the commit without holding the deploy.

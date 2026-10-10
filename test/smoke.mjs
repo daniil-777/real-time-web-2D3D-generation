@@ -2,7 +2,10 @@
 // visitor's browser sees it: the site shell with its three tabs, Arch Studio building two elements from text, the 3D
 // objects and the drawings reaching their first frame, and no console errors anywhere. Exit 1 on any failure.
 //   node test/smoke.mjs [--dir _site] [--url https://host/path/] [--out DIR] [--chrome PATH] [--port 8123] [--timeout 90000]
+//                       [--only home,arch,morph3d,pixel-morph] [--budget 480000]
 // --dir serves the built tree itself (tools/serve.mjs); --url checks a deployed site instead. Screenshots go to --out.
+// --only picks checks (a machine without a GPU, like a CI runner, can start the CAD app on software WebGL but not the
+// neural apps at a useful speed); --budget is the whole run's limit in ms, after which it fails instead of hanging.
 // Needs puppeteer-core (npm install) and a Chrome: $CHROME, --chrome, or the usual places.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -13,6 +16,9 @@ import { serve } from '../tools/serve.mjs';
 const argv = process.argv.slice(2), opt = {};
 for (let i = 0; i < argv.length; i++) if (argv[i].startsWith('--')) opt[argv[i].slice(2)] = argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[++i] : true;
 const T = +(opt.timeout || 90000);
+const ONLY = opt.only ? String(opt.only).split(',') : null;
+const BUDGET = +(opt.budget || 480000);
+setTimeout(() => { console.log(`\nsmoke: no verdict after ${BUDGET / 1000} s`); process.exit(1); }, BUDGET).unref();
 const OUTDIR = opt.out || path.join(os.tmpdir(), 'smoke-' + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, ''));
 fs.mkdirSync(OUTDIR, { recursive: true });
 
@@ -37,8 +43,10 @@ const browser = await puppeteer.launch({
 const results = [];
 let failures = 0;
 async function check(name, fn) {
+  if (ONLY && !ONLY.includes(name)) return;
   const t = Date.now();
   const page = await browser.newPage();
+  page.setDefaultTimeout(T);
   await page.setViewport({ width: 1380, height: 820 });
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e && e.message || e)));

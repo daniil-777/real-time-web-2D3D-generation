@@ -29,7 +29,9 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Smoke test in headless Chrome
-        run: node test/smoke.mjs --dir _site --out smoke
+        # the runner has no GPU: the CAD app starts on software WebGL, the neural apps would not at a useful speed
+        run: node test/smoke.mjs --dir _site --only arch --budget 300000 --out smoke
+        timeout-minutes: 8
         env:
           CI: "1"
       - uses: actions/upload-artifact@v4
