@@ -3,7 +3,7 @@
 // size within tol of expected(), shaft count = columns, time < 1500 ms, < 2 M triangles. Invariants: columns on the
 // order's axis spacing; a triglyph (Doric), dentil (Ionic) or modillion (Corinthian) centred over every column axis.
 import assert from 'node:assert/strict';
-import { initKernel } from './node-kernel.mjs';
+import { initKernel, TIME_SCALE } from './node-kernel.mjs';
 import { generate } from '../js/generate.js';
 import { SCHEMA } from '../js/spec.js';
 import { ORDER_KEYS, ORDERS } from '../js/orders.js';
@@ -13,7 +13,7 @@ import { trackHandles } from './handles.mjs';
 const wasm = await initKernel();
 await generate({ element: 'portico', order: 'corinthian' });       // warm-up (WASM compile, first allocations): not timed
 
-const BUDGET_MS = 1500, MAX_TRIS = 2e6, S = SCHEMA;
+const BUDGET_MS = 1500 * TIME_SCALE, MAX_TRIS = 2e6, S = SCHEMA;
 const cases = [];
 const add = (spec) => cases.push({ element: 'portico', ...spec });
 for (const order of ORDER_KEYS) add({ order });

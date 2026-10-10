@@ -3,7 +3,7 @@
 // 2-manifold with volume, sizes within tolerance of expected(), counts exact, the classical spacing rule, time and triangle
 // budgets. Prints a table; exits non-zero on any failure.
 import assert from 'node:assert/strict';
-import { initKernel } from './node-kernel.mjs';
+import { initKernel, TIME_SCALE } from './node-kernel.mjs';
 import { generate } from '../js/generate.js';
 import { normalize, SCHEMA } from '../js/spec.js';
 import { instanceCount } from '../js/kernel.js';
@@ -11,7 +11,7 @@ import { BALUSTERS, layout } from '../js/gen/balustrade.js';
 import { solids } from './solid.mjs';
 
 await initKernel();
-const BUDGET = 500, TRI_MAX = 2e6;
+const BUDGET = 500 * TIME_SCALE, TRI_MAX = 2e6;
 let fails = 0;
 const rows = [];
 

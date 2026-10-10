@@ -4,14 +4,14 @@
 // 2-manifold with volume, x = width, y = depth, z = height within tolerance, the wall face at y = +depth/2 and the
 // projection toward -Y, the base on z = 0, time and triangle budgets.
 import assert from 'node:assert/strict';
-import { initKernel } from './node-kernel.mjs';
+import { initKernel, TIME_SCALE } from './node-kernel.mjs';
 import { generate } from '../js/generate.js';
 import { normalize, SCHEMA } from '../js/spec.js';
 import { solids } from './solid.mjs';
 import { selfIntersections } from './self-intersect.mjs';
 
 await initKernel();
-const BUDGET = 500, TRI_MAX = 2e6;
+const BUDGET = 500 * TIME_SCALE, TRI_MAX = 2e6;
 let fails = 0;
 const rows = [];
 

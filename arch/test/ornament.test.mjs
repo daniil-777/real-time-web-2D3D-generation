@@ -1,14 +1,16 @@
 // node arch/test/ornament.test.mjs [outDir]  — motif validity + a preview sheet
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import assert from 'node:assert/strict';
-import { initKernel } from './node-kernel.mjs';
+import { initKernel, ARCHKIT } from './node-kernel.mjs';
 import { part, mat } from '../js/kernel.js';
 import { acanthusLeaf, voluteScroll, eggAndDart, rosette } from '../js/ornament.js';
 import { renderPNG, sheet } from './raster.mjs';
 import { selfIntersections } from './self-intersect.mjs';
 
 await initKernel();
-const out = process.argv[2] || '/Volumes/LaCie/morph3d/archkit/previews';
+const out = process.argv[2] || (ARCHKIT ? `${ARCHKIT}/previews` : path.join(os.tmpdir(), 'arch-previews'));   // no tool drive (CI): the temp folder
 fs.mkdirSync(out, { recursive: true });
 const t0 = performance.now();
 const leaf = acanthusLeaf({ h: 0.3, w: 0.2, wrap: 0.25 });

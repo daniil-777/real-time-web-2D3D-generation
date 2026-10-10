@@ -3,7 +3,7 @@
 // re-generation by height hits the unit-D cache; fluted shafts carry the requested number of flutes.
 //   node arch/test/column.test.mjs
 import assert from 'node:assert/strict';
-import { initKernel } from './node-kernel.mjs';
+import { initKernel, TIME_SCALE } from './node-kernel.mjs';
 import { generate } from '../js/generate.js';
 import { ORDER_KEYS } from '../js/orders.js';
 import { solids } from './solid.mjs';
@@ -18,7 +18,7 @@ for (const element of ['column', 'pilaster']) for (const order of ORDER_KEYS) fo
   assert.equal(solids(g.parts).length, 1, `${tag}: one solid`);
   worst = Math.max(worst, g.ms); n++;
 }
-assert.ok(worst < 500, `first builds within 500 ms (worst ${Math.round(worst)} ms)`);
+assert.ok(worst < 500 * TIME_SCALE, `first builds within ${500 * TIME_SCALE} ms (worst ${Math.round(worst)} ms)`);
 // cached re-generation: a new height is a scale, not a rebuild
 const t = performance.now();
 for (const h of [2.5, 3, 4, 5, 6, 8]) await generate({ element: 'column', order: 'corinthian', height: h });

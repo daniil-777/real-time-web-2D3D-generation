@@ -4,8 +4,10 @@
 // temporaries, and manifold-3d 3.5.4's warp glue breaks past a 2 GB heap; deform.js falls back, but a fresh heap is
 // simply faster).
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import assert from 'node:assert/strict';
-import { initKernel } from './node-kernel.mjs';
+import { initKernel, ARCHKIT, TIME_SCALE } from './node-kernel.mjs';
 import { generate } from '../js/generate.js';
 import { box, part, partsBBox, instances, mat } from '../js/kernel.js';
 import { polar3, eigSym3, det3, makeDeformer, deformParts, resolveOps, arapLattice, ffdLattice, foldCheck, smartStretch }
@@ -374,7 +376,7 @@ await t('ARAP: no pins = zeros; two pins both exact; 10^3 lattice fast', () => {
   const pins = { 0: [lat.rest[0] - 0.3, lat.rest[1], lat.rest[2]], [last]: [lat.rest[3 * last] + 0.3, lat.rest[3 * last + 1], lat.rest[3 * last + 2] + 0.2] };
   const t0 = performance.now(), off = arapLattice(dims, pins, 10, { rest: lat.rest }), ms = performance.now() - t0;
   for (const [id, v] of Object.entries(pins)) for (let a = 0; a < 3; a++) near(lat.rest[3 * id + a] + off[3 * id + a], v[a], 1e-12, 'pin');
-  assert.ok(ms < 1000, `${ms} ms`);
+  assert.ok(ms < 1000 * TIME_SCALE, `${ms} ms`);
   return `1331 points: ${ms.toFixed(0)} ms`;
 });
 await t('ffd with pins on a Corinthian capital: watertight, no folds', async () => {
@@ -571,7 +573,7 @@ if (process.argv.includes('--previews')) {
 // ------------------------------------------------------------------------------------------------ previews
 if (PREVIEWS_ONLY) {
   const { renderPNG, sheet } = await import('./raster.mjs');
-  const OUT = '/Volumes/LaCie/morph3d/archkit/previews/deform/';
+  const OUT = (ARCHKIT ? `${ARCHKIT}/previews/deform` : path.join(os.tmpdir(), 'arch-previews', 'deform')) + '/';   // no tool drive (CI): the temp folder
   fs.mkdirSync(OUT, { recursive: true });
   // shared framing: tiny markers at the union bbox corners, so before and after are drawn at one scale
   const frame = (bb) => {

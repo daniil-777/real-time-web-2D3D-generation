@@ -1,0 +1,20 @@
+{
+  "name": "pixel-morph-site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pixel Morph: neural drawings, neural 3D objects and Arch Studio (text to architecture), all in the browser. Static site; `npm run build` writes the deployable tree to _site/.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node arch/test/all.mjs",
+    "serve": "node build.mjs --serve",
+    "smoke": "node test/smoke.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10",
+    "manifold-3d": "3.5.4",
+    "n8ao": "2.0.1",
+    "puppeteer-core": "24.43.1",
+    "three": "0.186.1"
+  }
+}

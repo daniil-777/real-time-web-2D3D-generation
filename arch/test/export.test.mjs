@@ -2,6 +2,8 @@
 // GLB / OBJ / STL with arch/js/export.js and validates the bytes: GLB header + chunks + accessors + nodes, OBJ face and
 // vertex counts, STL size and triangle count, and that all three put the element at the same place in space.
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { initKernel, ARCHKIT } from './node-kernel.mjs';
 import { part, revolve, box, mat, instances, partsBBox, instanceCount } from '../js/kernel.js';
@@ -227,11 +229,12 @@ ok(prim.json.nodes.some((n) => n.matrix) && prim.json.nodes.some((n) => n.transl
 const col = await column();
 if (col) {
   const r = check('ionic column (gen/column.js)', col);
-  fs.mkdirSync(`${ARCHKIT}/exports`, { recursive: true });
-  fs.writeFileSync(`${ARCHKIT}/exports/test-ionic-column.glb`, new Uint8Array(r.glb));
-  fs.writeFileSync(`${ARCHKIT}/exports/test-ionic-column.obj`, r.obj);
-  fs.writeFileSync(`${ARCHKIT}/exports/test-ionic-column.stl`, new Uint8Array(r.stl));
-  console.log(`  wrote ${ARCHKIT}/exports/test-ionic-column.{glb,obj,stl}`);
+  const dir = ARCHKIT ? `${ARCHKIT}/exports` : path.join(os.tmpdir(), 'arch-exports');   // no tool drive (CI): the temp folder
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(`${dir}/test-ionic-column.glb`, new Uint8Array(r.glb));
+  fs.writeFileSync(`${dir}/test-ionic-column.obj`, r.obj);
+  fs.writeFileSync(`${dir}/test-ionic-column.stl`, new Uint8Array(r.stl));
+  console.log(`  wrote ${dir}/test-ionic-column.{glb,obj,stl}`);
 } else console.log('\n(gen/column.js not present yet: column export skipped)');
 
 // more families when they are there: many instances (balusters), several roles and materials (dome: stone, roof, metal, glass)

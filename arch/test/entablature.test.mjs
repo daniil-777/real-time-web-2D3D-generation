@@ -4,7 +4,7 @@
 // triangles; plus layout invariants an architect checks (dentils evenly spaced and whole, a dentil / modillion /
 // triglyph on every column axis, rake ornaments above the horizontal cornice, Doric metopes square).
 import assert from 'node:assert/strict';
-import { initKernel } from './node-kernel.mjs';
+import { initKernel, TIME_SCALE } from './node-kernel.mjs';
 import { generate } from '../js/generate.js';
 import { SCHEMA } from '../js/spec.js';
 import { ORDER_KEYS, ORDERS } from '../js/orders.js';
@@ -14,7 +14,7 @@ await initKernel();
 await generate({ element: 'entablature', order: 'corinthian' });   // warm-up (WASM compile, first allocations): not timed
 await generate({ element: 'window', pediment: 'segmental', keystone: true });
 
-const BUDGET_MS = 500, MAX_TRIS = 2e6;
+const BUDGET_MS = 500 * TIME_SCALE, MAX_TRIS = 2e6;
 const cases = [];
 const add = (spec) => cases.push(spec);
 const S = SCHEMA;

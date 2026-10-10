@@ -21,17 +21,25 @@ import { partMesh, featureEdges, toGLB, toOBJParts, toSTL, RIGID_RATIO, isRigidP
 import { fromData, refinePainted, perCopy, partsOf } from './paint.js';
 import { deformParts } from './deform.js';
 
-const MANIFOLD = 'https://cdn.jsdelivr.net/npm/manifold-3d@3.5.4/manifold.js';
-const MANIFOLD_WASM = 'https://cdn.jsdelivr.net/npm/manifold-3d@3.5.4/manifold.wasm';
+// The CAD kernel, manifold-3d 3.5.4. In the built site (build.mjs defines ARCH_KERNEL_BASE) its two files are served
+// next to the bundle on this origin, the WebAssembly gzipped (GitHub Pages compresses no .wasm) and inflated here;
+// the unbundled sources, in development, take them from the CDN.
+const CDN = 'https://cdn.jsdelivr.net/npm/manifold-3d@3.5.4/';
+const LOCAL = typeof ARCH_KERNEL_BASE === 'string' ? new URL(ARCH_KERNEL_BASE, import.meta.url).href : null;
+const MANIFOLD = (LOCAL || CDN) + 'manifold.js';
+const MANIFOLD_WASM = LOCAL ? LOCAL + 'manifold.wasm.gz' : CDN + 'manifold.wasm';
 // Subresource Integrity for the CAD kernel (a worker has no import map): both files must match the SHA-384 digests of
-// the exact manifold-3d 3.5.4 files on the CDN before any of their code runs; a changed file is refused
+// the exact manifold-3d 3.5.4 files as published (the WebAssembly's digest is of the inflated bytes) before any of
+// their code runs; a changed file is refused
 const SRI = {
   [MANIFOLD]: 'sha384-EOsX2khT48LC7b2eu/O0+bqGUQLkJOEKF4hEN0VViSLPW7vZzAjlfczpBJmVQoSx',
   [MANIFOLD_WASM]: 'sha384-tgN/mwVxqQ2ljngQCn3I+nZE1oftv7/o1s6A0uCjx60YYAK/GMZMKREqKF7boKuN',
 };
 // SubtleCrypto exists only in secure contexts (https, localhost); elsewhere (a dev server on the LAN) fetch's own
-// integrity option checks the same digests, at the cost of the streaming compile
+// integrity option checks the same digests, at the cost of the streaming compile — except for the gzipped file, whose
+// digest is of the inflated bytes: served from this origin, it is then trusted like the page itself
 const SUBTLE = !!(globalThis.crypto && crypto.subtle);
+const GZ = MANIFOLD_WASM.endsWith('.gz');
 async function verified(bytes, url) {
   if (!SUBTLE) return bytes;
   const d = new Uint8Array(await crypto.subtle.digest('SHA-384', bytes));
@@ -40,22 +48,38 @@ async function verified(bytes, url) {
   if (`sha384-${btoa(b)}` !== SRI[url]) throw Object.assign(new Error(`${url.split('/').pop()} does not match its pinned SHA-384 (integrity check)`), { integrity: true });
   return bytes;
 }
-const fetchOk = (url) => fetch(url, { credentials: 'same-origin', ...(SUBTLE ? {} : { integrity: SRI[url] }) })
+const fetchOk = (url) => fetch(url, { credentials: 'same-origin', ...(SUBTLE || (GZ && url === MANIFOLD_WASM) ? {} : { integrity: SRI[url] }) })
   .then((r) => { if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`); return r; });
+/** The WebAssembly's bytes as a stream: inflated when the file is gzipped — the gzip magic decides, since a host that
+ *  serves .gz with Content-Encoding: gzip hands over the bytes already inflated. */
+async function wasmStream(res) {
+  if (!GZ) return res.body;
+  const reader = res.body.getReader();
+  const first = await reader.read();
+  const head = first.value || new Uint8Array(0);
+  const rest = new ReadableStream({
+    start(c) { if (head.length) c.enqueue(head); if (first.done) c.close(); },
+    async pull(c) { const { value, done } = await reader.read(); if (done) c.close(); else c.enqueue(value); },
+    cancel(reason) { return reader.cancel(reason); },
+  });
+  return head.length >= 2 && head[0] === 0x1f && head[1] === 0x8b ? rest.pipeThrough(new DecompressionStream('gzip')) : rest;
+}
 /** The kernel's WebAssembly, compiled while it downloads (streaming) and hashed alongside: only a module whose bytes
  *  passed the check is handed on to be instantiated (run). A failed streaming compile (a wrong MIME type) compiles the
  *  verified bytes instead. */
 async function compileVerified(res) {
-  if (!SUBTLE || !WebAssembly.compileStreaming || !res.body) return WebAssembly.compile(await verified(await res.arrayBuffer(), MANIFOLD_WASM));
-  const [a, b] = res.body.tee();
+  const body = res.body ? await wasmStream(res) : null;
+  const bytesOf = () => (body ? new Response(body).arrayBuffer() : res.arrayBuffer());
+  if (!SUBTLE || !WebAssembly.compileStreaming || !body) return WebAssembly.compile(await verified(await bytesOf(), MANIFOLD_WASM));
+  const [a, b] = body.tee();
   const streamed = WebAssembly.compileStreaming(new Response(a, { headers: { 'Content-Type': 'application/wasm' } }));
   streamed.catch(() => {});
   const bytes = await verified(await new Response(b).arrayBuffer(), MANIFOLD_WASM);
   return streamed.catch(() => WebAssembly.compile(bytes));
 }
-// both files are requested the moment this worker starts, the WebAssembly (540 KB) compiling as it arrives, in parallel
-// with Manifold's JS (which would otherwise ask for it only once it has run); a document <link rel=preload> could not
-// serve a worker's fetch. A network failure is retried once; a failed integrity check is final.
+// both files are requested the moment this worker starts, the WebAssembly (540 KB, 200 KB gzipped) compiling as it
+// arrives, in parallel with Manifold's JS (which would otherwise ask for it only once it has run); a document
+// <link rel=preload> could not serve a worker's fetch. A network failure is retried once; a failed integrity check is final.
 const wasmModule = fetchOk(MANIFOLD_WASM).then(compileVerified)
   .catch((e) => (e.integrity ? Promise.reject(e) : fetchOk(MANIFOLD_WASM).then(compileVerified)));
 wasmModule.catch(() => {});

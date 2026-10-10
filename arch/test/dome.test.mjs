@@ -3,7 +3,7 @@
 // interacting flags (drum × lantern × oculus), finials, orders, materials and detail levels. For each build: every part
 // NoError with positive volume, size within tol of expected(), counts exact, triangles < 2 M, build time within budget.
 import assert from 'node:assert/strict';
-import { initKernel } from './node-kernel.mjs';
+import { initKernel, TIME_SCALE } from './node-kernel.mjs';
 import { generate } from '../js/generate.js';
 import { SCHEMA, MATERIALS } from '../js/spec.js';
 import { ORDER_KEYS } from '../js/orders.js';
@@ -11,7 +11,7 @@ import { solids } from './solid.mjs';
 
 await initKernel();
 
-const BUDGET = { dome: 1500, cupola: 1500, spire: 500 };   // dome/cupola with drum + lantern are assemblies
+const BUDGET = { dome: 1500 * TIME_SCALE, cupola: 1500 * TIME_SCALE, spire: 500 * TIME_SCALE };   // dome/cupola with drum + lantern are assemblies
 const TRI_MAX = 2e6;
 const cases = [];
 const add = (spec, label) => cases.push({ spec, label: label || Object.entries(spec).filter(([k]) => k !== 'element').map(([k, v]) => `${k}=${v}`).join(' ') });

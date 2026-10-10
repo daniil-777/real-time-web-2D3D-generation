@@ -4,7 +4,7 @@
 // generate(), every part NoError with positive volume, size within tol of expected(), counts exact, time and
 // triangle budgets met.
 import assert from 'node:assert/strict';
-import { initKernel } from './node-kernel.mjs';
+import { initKernel, TIME_SCALE } from './node-kernel.mjs';
 import { generate } from '../js/generate.js';
 import { SCHEMA } from '../js/spec.js';
 import { ORDER_KEYS } from '../js/orders.js';
@@ -64,7 +64,7 @@ add('arcade 0.3 m span 20 bays corinthian columns', { element: 'arcade', span: 0
 add('arcade wall depth 1.2', { element: 'arcade', depth: 1.2 });
 add('arch absurd values', { element: 'arch', span: -4, height: 1e6, bays: 999 });
 
-const SINGLE = 500, ASSEMBLY = 1500, TRIS = 2e6;
+const SINGLE = 500 * TIME_SCALE, ASSEMBLY = 1500 * TIME_SCALE, TRIS = 2e6;
 let fails = 0, worst = { ms: 0 }, maxTris = { tris: 0 };
 const rows = [];
 // the caller owns what build() returns: free each build (WASM memory is not collected by the JS heap's pace)

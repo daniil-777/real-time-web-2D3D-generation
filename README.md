@@ -2,7 +2,8 @@
 
 **Live:** https://daniil-777.github.io/real-time-web-2D3D-generation/
 
-Two neural networks that run entirely on your device (TensorFlow.js with WebGPU or WebGL). No server, no upload.
+Two neural networks and a CAD kernel that run entirely on your device (TensorFlow.js with WebGPU or WebGL; Manifold
+in WebAssembly with three.js). No server, no upload.
 
 - **Drawings** (`pixel-morph/`) — a small convolutional decoder turns a 48×48 grid of codes into a 384-pixel drawing and
   wanders endlessly between the codes of 88 real photographs (11 subjects), drawing every step in dots, lines or cartoon.
@@ -11,16 +12,49 @@ Two neural networks that run entirely on your device (TensorFlow.js with WebGPU 
   (3 × 64 × 64 × 8 for architecture HD); a decoder turns any code into a coloured signed-distance field, evaluated on a
   dense grid (WebGPU compute or WebGL shaders), cleaned up by a calibrated level pass and sphere-traced every frame. The
   **model** menu switches between four trained networks (below).
+- **Architecture** (`arch/`, Arch Studio) — text in English, German, French or Italian becomes a typed specification,
+  and the Manifold CAD kernel builds the element exactly, to the rules of the classical orders and at real scale:
+  columns, entablatures, porticoes, arches, balustrades, roofs, domes, spires, finials, windows, doors; parametric
+  grips, free-form transforms, a 3D paint brush, GLB / OBJ / STL export and a dimensioned A3 drawing sheet.
 
 ## Layout
 
 | path | what |
 |---|---|
-| `index.html` | the site: switches between the two apps (one runs at a time) |
+| `index.html` | the site: switches between the three apps (one runs at a time) |
 | `pixel-morph/` | the drawing app (also works on its own; `pixel-morph.html` is a single-file version) |
 | `morph3d/` | the 3D app (also works on its own); `model/` objects (default), `model-arch/` architecture, `model-arch3/` architecture HD, `model-v1/` the original objects network — the **model** menu switches between them, or link straight in with `?model=` |
+| `arch/` | Arch Studio (also works on its own): `js/` the parser, spec, generators (`gen/`), kernel, viewer, grips, paint, deform, export and drawing; `test/` its unit tests and quality tools |
+| `build.mjs`, `tools/`, `test/` | the build that writes the deployable site to `_site/`, a static server, the browser smoke test (below) |
 
-Everything is static: any static file host serves it as it is.
+Everything is static: any static file host serves the built tree (`_site/`, below) as it is.
+
+## Build, test and deploy
+
+The sources run as they are: serve the repository root (`node tools/serve.mjs . 8125`) and open `/arch/`, `/morph3d/` or
+`/pixel-morph/`. Arch Studio's page then loads its modules one by one and takes three.js and the CAD kernel from the
+jsDelivr CDN (pinned, with Subresource Integrity).
+
+What visitors get is the built tree, `_site/`, written by `npm run build` (`build.mjs`) in about a second: Arch Studio's
+thirty modules, three.js, N8AO and the Manifold kernel bundled by esbuild into a few minified, content-hashed files on
+this one origin — no import map, no third-party host — with the viewer, the parser, each generator family and the
+ambient occlusion still lazy chunks and the first screen's files preloaded from the page's head; the kernel's
+WebAssembly gzipped (GitHub Pages compresses no `.wasm`) and inflated in the worker; the 3D objects app's thirteen
+scripts in one file; each page's HTML rewritten to point at them (a rewrite that fails loudly when the markup it expects
+has moved). `npm run serve` builds and serves it at http://127.0.0.1:8123/. `npm install` first (esbuild, three, n8ao,
+manifold-3d, puppeteer-core — development only; nothing is installed on the site).
+
+- `npm test` runs every `arch/test/*.test.mjs` (the generator families, the kernel, exports, grips, paint, the parser,
+  read-backs…), each in its own process; about 10 minutes on a quiet machine. Manifold comes from the LaCie tool folder
+  (`$ARCHKIT`) when it is mounted, else from `node_modules`. The build-time budgets (500 / 1500 ms) are set for the
+  development machine: `ARCH_TIME_SCALE=3 npm test` relaxes them on a slower one (CI does).
+- `npm run smoke` opens the built site in headless Chrome and checks what a visitor's browser sees: the site shell's
+  three tabs become live, Arch Studio builds two prompts, the 3D objects and the drawings reach their first frame, and
+  nothing errors in the console. `--url https://…/` checks a deployed site instead; screenshots go to `--out DIR`.
+
+Deploy: push `main`. `.github/workflows/deploy.yml` builds, runs the smoke test and publishes `_site/` to GitHub Pages
+(the Pages source is "GitHub Actions"); the unit tests run alongside and mark the commit without holding the deploy.
+`version.json` on the live site names the commit it was built from.
 
 ## Flags (3D)
 
@@ -66,6 +100,9 @@ The frame rate is always shown in the top-right corner of the 3D view.
 - Music: the piano transformer in `pixel-morph/audio/` was trained on the [MAESTRO](https://magenta.tensorflow.org/datasets/maestro)
   dataset (CC BY-NC-SA 4.0); its weights are shared under the same licence, for non-commercial use.
 - [TensorFlow.js](https://github.com/tensorflow/tfjs) (Apache-2.0), loaded from the jsDelivr CDN.
+- Architecture: the [Manifold](https://github.com/elalish/manifold) CAD kernel (Apache-2.0), [three.js](https://threejs.org)
+  (MIT) and [N8AO](https://github.com/N8python/n8ao) (MIT), bundled into the site by `build.mjs` (their licence
+  notices in `arch/dist/*.LEGAL.txt`); the orders after Vignola.
 - Text: the text tower of [OpenCLIP](https://github.com/mlfoundations/open_clip) ViT-B/32 laion2b_s34b_b79k (MIT), exported
   to ONNX with 8-bit weights (`morph3d/clip-laion-b32/`), run by [transformers.js](https://github.com/huggingface/transformers.js)
   (Apache-2.0) and ONNX Runtime Web (MIT) from jsDelivr.

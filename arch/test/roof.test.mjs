@@ -13,7 +13,7 @@
 //   ≥ 45° and the upper when < 45° on mansard / gambrel), and the ridge rise measured on the deck = half-span × tan(pitch);
 // - cut-tile meshes built by the JS clipper (no Manifold fallback); build < 500 ms, < 2 M triangles.
 import assert from 'node:assert/strict';
-import { initKernel } from './node-kernel.mjs';
+import { initKernel, TIME_SCALE } from './node-kernel.mjs';
 import { generate } from '../js/generate.js';
 import { SCHEMA, MATERIALS } from '../js/spec.js';
 import { mat, partsBBox, instanceCount } from '../js/kernel.js';
@@ -269,7 +269,7 @@ for (const c of cases) {
     const dormer = r.parts.find((q) => q.name === 'dormer');
     if (c.dormers === false || c.roofType === 'gambrel' || (c.dormers && c.pitch === 15)) assert.ok(!dormer, 'unexpected dormers');
     else if (c.dormers === true) assert.ok(dormer && instanceCount(dormer) >= 2, 'dormers asked for, none built');
-    assert.ok(r.ms < 500, `build ${r.ms.toFixed(0)} ms ≥ 500 ms`);
+    assert.ok(r.ms < 500 * TIME_SCALE, `build ${r.ms.toFixed(0)} ms ≥ ${500 * TIME_SCALE} ms`);
     assert.ok(r.tris < 2e6, `${r.tris} triangles ≥ 2 M`);
     worstMs = Math.max(worstMs, r.ms); worstTris = Math.max(worstTris, r.tris);
     const pieces = r.parts.reduce((s, p) => s + instanceCount(p), 0);
