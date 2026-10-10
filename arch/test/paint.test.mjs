@@ -2,6 +2,7 @@
 // remap on a size change, undo snapshots, element change, the live stroke (uniforms -> live grid -> commit), pressure
 // ceiling, smoothing, spacing, mirror, bake + refinement, append-only rebuilds, dense layered painting (cells capped,
 // the newest stroke always wins), grid build time.
+import { TIME_SCALE } from './node-kernel.mjs';
 import { Paint, CellTable, partGrid, cellAt, paintAt, bakeColors, refinePainted, remapper, Smoother, spaced, mirrorDab, hexToRgb, rgbToHex, hsvToRgb,
   rgbToHsv, exportData, fromData, perCopy, LIVE_MAX, CELL_CAP, hash3, packHF, partsOf, RECENT_STROKES } from '../js/paint.js';
 
@@ -185,7 +186,7 @@ ok(bakeColors(P2.build(), 1, bal.positions, 0, [0.5, 0.5, 0.5]) === null, 'bake:
   const QB = Q.build();
   const ms = performance.now() - t0;
   console.log(`grid build, 20k dabs: ${ms.toFixed(2)} ms (${QB.stats.kept} entries, ${QB.stats.cells} cells)`);
-  ok(ms < 12, 'grid build for 20k dabs (Node)');
+  ok(ms < 12 * TIME_SCALE, 'grid build for 20k dabs (Node)');
   // a cell lookup agrees with a brute-force list
   const p = [0.5, 0.5, 0.5], [st, cnt] = cellAt(QB, 0, p);
   let brute = 0;

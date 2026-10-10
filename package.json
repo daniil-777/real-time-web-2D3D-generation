@@ -11,6 +11,7 @@
     "smoke": "node test/smoke.mjs"
   },
   "devDependencies": {
+    "@gltf-transform/core": "4.5.1",
     "esbuild": "0.25.10",
     "manifold-3d": "3.5.4",
     "n8ao": "2.0.1",

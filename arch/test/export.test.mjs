@@ -270,7 +270,8 @@ for (const spec of [{ element: 'balustrade', urns: true }, { element: 'dome', do
 
 // a third-party reader must accept the GLB
 try {
-  const { WebIO } = await import(pathToFileURL(`${ARCHKIT}/node_modules/@gltf-transform/core/dist/index.js`).href);
+  const gltfT = ARCHKIT && fs.existsSync(`${ARCHKIT}/node_modules/@gltf-transform/core`) ? pathToFileURL(`${ARCHKIT}/node_modules/@gltf-transform/core/dist/index.js`).href : import.meta.resolve('@gltf-transform/core');
+  const { WebIO } = await import(gltfT);
   const doc = await new WebIO().readBinary(new Uint8Array(prim.glb));
   const root = doc.getRoot();
   ok(root.listNodes().length === prim.json.nodes.length, `glTF-Transform reads the GLB (${root.listNodes().length} nodes, ${root.listMeshes().length} meshes)`);
