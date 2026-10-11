@@ -52,6 +52,14 @@ copy('index.html');
 copy('.nojekyll');
 for (const p of ['pixel-morph/index.html', 'pixel-morph/pixel-morph.html', 'pixel-morph/audio', 'pixel-morph/model', 'pixel-morph/model-hq', 'pixel-morph/model-ultra', 'pixel-morph/samples']) copy(p);
 
+// ---------------------------------------------------------------------------------------- the anatomy studio
+// VISCERA Studio's public copy, built by tools/build-anatomy.mjs from the viscera/ workspace and committed as anatomy/
+if (fs.existsSync(path.join(ROOT, 'anatomy/index.html'))) {
+  copy('anatomy');
+  const stamp = JSON.parse(read('anatomy/build.json'));
+  report.push(['anatomy/ (VISCERA Studio)', stamp.bytes, stamp.bytes, `${stamp.files} files, ${stamp.specimens} specimens, built ${stamp.builtAt.slice(0, 10)}`]);
+}
+
 // ---------------------------------------------------------------------------------------- the 3D objects app
 // thirteen classic scripts, each an IIFE sharing only window.* with the others: one minified file, same order
 {

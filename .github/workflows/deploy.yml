@@ -29,8 +29,9 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Smoke test in headless Chrome
-        # the runner has no GPU: the CAD app starts on software WebGL, the neural apps would not at a useful speed
-        run: node test/smoke.mjs --dir _site --only arch --budget 300000 --out smoke
+        # the runner has no GPU: the CAD app and the anatomy studio's organ page start on software WebGL, the neural
+        # apps and the whole-body scene would not at a useful speed
+        run: node test/smoke.mjs --dir _site --only arch,anatomy --budget 360000 --out smoke
         timeout-minutes: 8
         env:
           CI: "1"

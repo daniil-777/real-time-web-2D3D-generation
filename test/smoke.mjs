@@ -2,7 +2,7 @@
 // visitor's browser sees it: the site shell with its three tabs, Arch Studio building two elements from text, the 3D
 // objects and the drawings reaching their first frame, and no console errors anywhere. Exit 1 on any failure.
 //   node test/smoke.mjs [--dir _site] [--url https://host/path/] [--out DIR] [--chrome PATH] [--port 8123] [--timeout 90000]
-//                       [--only home,arch,morph3d,pixel-morph] [--budget 480000]
+//                       [--only home,arch,morph3d,pixel-morph,anatomy,anatomy-scene,anatomy-legacy] [--budget 480000]
 // --dir serves the built tree itself (tools/serve.mjs); --url checks a deployed site instead. Screenshots go to --out.
 // --only picks checks (a machine without a GPU, like a CI runner, can start the CAD app on software WebGL but not the
 // neural apps at a useful speed); --budget is the whole run's limit in ms, after which it fails instead of hanging.
@@ -42,7 +42,7 @@ const browser = await puppeteer.launch({
 
 const results = [];
 let failures = 0;
-async function check(name, fn) {
+async function check(name, fn, allow = null) {   // allow: a RegExp of request URLs whose failure is expected
   if (ONLY && !ONLY.includes(name)) return;
   const t = Date.now();
   const page = await browser.newPage();
@@ -51,7 +51,7 @@ async function check(name, fn) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e && e.message || e)));
   page.on('console', (m) => { if (m.type() === 'error' && !/favicon|Failed to load resource/i.test(m.text())) errors.push(m.text()); });
-  page.on('response', (r) => { if (r.status() >= 400 && !/favicon/i.test(r.url())) errors.push(`HTTP ${r.status()} ${r.url()}`); });
+  page.on('response', (r) => { if (r.status() >= 400 && !/favicon/i.test(r.url()) && !(allow && allow.test(r.url()))) errors.push(`HTTP ${r.status()} ${r.url()}`); });
   // a request the page itself abandoned (the shell removes a tab's frame, and its downloads with it) is no failure
   page.on('requestfailed', (r) => { const why = r.failure() && r.failure().errorText; if (!/favicon/i.test(r.url()) && why !== 'net::ERR_ABORTED') errors.push(`failed ${r.url()} (${why})`); });
   let info = '', ok = true;
@@ -114,6 +114,22 @@ await check('pixel-morph', async (page) => {
   if (m.errors.length) throw new Error(m.errors.join(' | '));
   return `backend ${m.backend}${m.fps ? ', ' + Math.round(m.fps) + ' fps' : ''}`;
 });
+
+// 5. the anatomy studio (VISCERA, a static copy without its API): the three workspaces each reach their first model;
+//    the probe of the absent API is the one request allowed to fail
+const NO_API = /\/api\//;
+const viscera = async (page, url, mode) => {
+  await page.goto(base + url, { waitUntil: 'load', timeout: T });
+  await flag(page, 'window.__viscera && (window.__viscera.ready || window.__viscera.errors.length)');
+  const v = await page.evaluate(() => ({ ...window.__viscera, notice: !!document.querySelector('.api-notice') }));
+  if (v.errors.length) throw new Error(v.errors.join(' | '));
+  if (v.mode !== mode) throw new Error(`ready in mode ${v.mode}, expected ${mode}`);
+  if (v.api === false && !v.notice) throw new Error('no API and no notice about it');
+  return `${mode}${v.api === false ? ' · bundled (no API)' : ' · API online'}`;
+};
+await check('anatomy', (page) => viscera(page, 'anatomy/', 'atlas'), NO_API);
+await check('anatomy-scene', (page) => viscera(page, 'anatomy/?mode=scene', 'scene'), NO_API);
+await check('anatomy-legacy', (page) => viscera(page, 'anatomy/?mode=legacy', 'legacy'), NO_API);
 
 await browser.close();
 if (server) server.close();

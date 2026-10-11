@@ -25,6 +25,7 @@ in WebAssembly with three.js). No server, no upload.
 | `pixel-morph/` | the drawing app (also works on its own; `pixel-morph.html` is a single-file version) |
 | `morph3d/` | the 3D app (also works on its own); `model/` objects (default), `model-arch/` architecture, `model-arch3/` architecture HD, `model-v1/` the original objects network — the **model** menu switches between them, or link straight in with `?model=` |
 | `arch/` | Arch Studio (also works on its own): `js/` the parser, spec, generators (`gen/`), kernel, viewer, grips, paint, deform, export and drawing; `test/` its unit tests and quality tools |
+| `anatomy/` | the public copy of **VISCERA Studio**, the anatomy workspace (built output, committed; its sources live in the `viscera/` workspace next to this repository, outside git) |
 | `build.mjs`, `tools/`, `test/` | the build that writes the deployable site to `_site/`, a static server, the browser smoke test (below) |
 
 Everything is static: any static file host serves the built tree (`_site/`, below) as it is.
@@ -50,8 +51,24 @@ manifold-3d, puppeteer-core — development only; nothing is installed on the si
   development machine: `ARCH_TIME_SCALE=3 npm test` relaxes them on a slower one (CI does).
 - `npm run smoke` opens the built site in headless Chrome and checks what a visitor's browser sees: the site shell's
   three tabs become live, Arch Studio builds two prompts, the 3D objects and the drawings reach their first frame, and
-  nothing errors in the console. `--url https://…/` checks a deployed site instead; screenshots go to `--out DIR`;
+  nothing errors in the console; the anatomy studio's three workspaces reach their first model without an API.
+  `--url https://…/` checks a deployed site instead; screenshots go to `--out DIR`;
   `--only arch` is what CI runs (no GPU there: the neural apps cannot start at a useful speed on software rendering).
+
+### The anatomy studio
+
+https://daniil-777.github.io/real-time-web-2D3D-generation/anatomy/ is VISCERA Studio without its Python API: a static copy. The
+organ studio opens the bundled reference specimen of every template (the API's own answer for default controls, rendered
+at build time), the whole scene loads the compressed whole-body atlas, and the procedural studio (`?mode=legacy`) its
+bundled liver; sculpting, the browser physics preview, the colour tools and the exports they make run in the browser.
+New specimens and variations, disease and learned models, text commands and photo-based colours need the API — the
+page says so in one line under its header, and every such action answers with the same sentence instead of failing
+obscurely. `VITE_API_URL` at build time points the copy at a hosted API instead.
+
+`npm run build:anatomy` rebuilds `anatomy/` from `viscera/`: it asks the running API (`npm run api` in `viscera/`) for the
+catalogue and the 24 reference specimens (`static/api/atlas/`, gzipped JSON), builds the studio with Vite for a relative
+base and without source maps, and compresses the atlas (19 MB → 5 MB: quantized, meshopt-encoded; three.js decodes it
+with the decoder it ships). `--keep-specimens` skips the API. Commit the result; the deploy copies it as is.
 
 Deploy: push `main`. `.github/workflows/deploy.yml` builds, runs the smoke test and publishes `_site/` to GitHub Pages
 (the Pages source is "GitHub Actions"); the unit tests run alongside and mark the commit without holding the deploy.
