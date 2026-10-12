@@ -67,6 +67,20 @@ materials and instruments, and the procedural studio (`?mode=legacy`). What need
 sentence wherever it is asked for: the joint shape + colour VAE and the learned samplers, disease morphology, shape
 seeds, text commands, photo-based colours, calibrating the physics from your own measurement, recorded physics
 experiments and the textured GLB / Unity exports. The male heart is refused by the API's own QA gate and is absent.
+**Photo-derived surface detail (since 2026-10-12).** The organ studio can lay real tissue detail over its procedural
+material: `viscera/pipelines/textures/photo_tiles.py` cuts, from the licensed surgical photographs the studio ships (DSAD,
+CC BY 4.0) and their reviewed organ masks, one small seamless tile per organ (liver, stomach, spleen, small and large
+intestine; the pancreas photograph has no clean square large enough) with glare and shadows excluded by the studio's
+own rule, specular spots removed, acquisition shading flattened, and writes it Gaussianised with its inverse lookup.
+In the browser (`photoDetail.ts`) the tile is projected triplanarly in the organ's rest frame, hex-tiled with random
+offsets and blended histogram-preservingly (Heitz & Neyret 2018; Mikkelsen 2022): no visible repetition, nine texture
+reads per fragment, 60 fps unchanged, and the result divides by the tile's mean so the organ's base colour, preset and
+any transferred reference colour stay exactly what they were. The Surface tab's *Photo detail* slider (100 % = the
+photograph's own contrast) names the source. It is a viewer layer of the public copy: exports do not carry it, and it
+is observed detail with its lighting flattened, not calibrated albedo. The reference-colour panels work in the public
+copy too: the API's analyses of the bundled photographs and examples are bundled, and the Oklab chroma transfer runs
+in the browser (compared with the API to 1e-7).
+
 `VITE_API_URL` at build time points the copy at a hosted API instead; hosting `services.web.app` (frontend and API
 on one origin, as the temporary tunnel did) is the way to make those features public too — it needs a Python host
 with the trained weights, which this repository does not provide.

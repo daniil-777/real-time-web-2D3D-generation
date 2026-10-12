@@ -104,6 +104,33 @@ if (opt['keep-specimens']) {
     console.log(`  ${template.id.padEnd(32)} ${mb(text.length)} → ${mb(gz.length)} gz · ${result.summary?.triangles ?? '?'} triangles`);
   }
   fs.writeFileSync(path.join(keep, 'unavailable.json'), JSON.stringify(unavailable, null, 2) + '\n');
+  // the photo panels' analyses: every bundled photograph's regions (ids as the whole-body panel sends them) and every
+  // bundled example's default region, through the API's own analysis, so the public copy answers them without it
+  const PUB = path.join(VISCERA, 'apps/studio/public');
+  const b64 = (file) => fs.readFileSync(file).toString('base64');
+  const postJson = async (route, body) => { const r = await fetch(`${API}${route}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); if (!r.ok) throw new Error(`${route}: HTTP ${r.status} ${(await r.text()).slice(0, 160)}`); return r.json(); };
+  fs.mkdirSync(path.join(keep, 'reference-material/regions'), { recursive: true });
+  fs.mkdirSync(path.join(keep, 'reference-material/examples'), { recursive: true });
+  const bodyCatalog = JSON.parse(fs.readFileSync(path.join(PUB, 'body-reference/catalog.json'), 'utf8'));
+  for (const source of bodyCatalog.sources) {
+    const regions = source.regions.filter((r) => Array.isArray(r.selection?.box) && Array.isArray(r.targets) && r.targets.length).map((region, index) => {
+      const mask = path.join(PUB, 'body-reference', `${region.id}-mask.png`);
+      return { id: `region-${index}`, organ: region.organ, selection: region.selection, ...(fs.existsSync(mask) ? { mask_base64: b64(mask) } : {}) };
+    });
+    const analysis = await postJson('/api/atlas/reference-material/analyze-regions', { image_base64: b64(path.join(PUB, 'body-reference', path.basename(source.src))), segmentation: 'local', regions });
+    fs.writeFileSync(path.join(keep, 'reference-material/regions', `${source.id}.json`), JSON.stringify(analysis));
+    console.log(`  ${(source.id + ' colours').padEnd(32)} ${analysis.results.map((r) => r.analysis ? `${r.id} ok` : `${r.id} ${r.error}`).join(', ')}`);
+  }
+  const examples = fs.readFileSync(path.join(VISCERA, 'apps/studio/src/referenceExamples.ts'), 'utf8');
+  for (const block of examples.split(/\n\s*\{\s*\n\s*id:/).slice(1)) {
+    const id = block.match(/"([^"]+)"/)[1], src = block.match(/src: "([^"]+)"/)[1];
+    const box = block.match(/box: \[([^\]]+)\]/)[1].split(',').map(Number);
+    const pairs = (text) => [...text.matchAll(/\[\s*([\d.]+)\s*,\s*([\d.]+)\s*\]/g)].map((m) => [Number(m[1]), Number(m[2])]);
+    const fg = block.slice(block.indexOf('foreground:'), block.indexOf('background:')), bg = block.slice(block.indexOf('background:')).split('}')[0];
+    const analysis = await postJson('/api/atlas/reference-material/analyze', { image_base64: b64(path.join(PUB, src.replace(/^\//, ''))), organ: 'large-intestine', segmentation: 'local', selection: { box, foreground_points: pairs(fg), background_points: pairs(bg) } });
+    fs.writeFileSync(path.join(keep, 'reference-material/examples', `${id}.json`), JSON.stringify(analysis));
+    console.log(`  ${(id + ' colour').padEnd(32)} observed ${analysis.reference_color.observed_srgb.map((v) => v.toFixed(3)).join(' ')}`);
+  }
   for (const [route, file] of [['/api/physics/status', 'status.json'], ['/api/physics/demo-observation', 'demo-observation.json']]) {
     const r = await fetch(`${API}${route}`);
     if (!r.ok) throw new Error(`${route}: HTTP ${r.status}`);
@@ -117,7 +144,7 @@ const r = spawnSync(process.execPath, ['node_modules/vite/bin/vite.js', 'build',
 if (r.status !== 0) { console.error(r.stdout, r.stderr); throw new Error('vite build failed'); }
 console.log(r.stdout.split('\n').filter((l) => /\.js|\.css|built in/.test(l) && !/woff/.test(l)).join('\n'));
 if (fs.readdirSync(path.join(OUT, 'assets')).some((f) => f.endsWith('.map'))) throw new Error('source maps were written');
-for (const f of ['index.html', 'default-scene.json', 'anatomy-scene/bodyparts3d-torso.glb', 'anatomy-scene/manifest.json', 'body-reference/catalog.json'])
+for (const f of ['index.html', 'default-scene.json', 'anatomy-scene/bodyparts3d-torso.glb', 'anatomy-scene/manifest.json', 'body-reference/catalog.json', 'textures/manifest.json', 'textures/liver/gauss.png'])
   if (!fs.existsSync(path.join(OUT, f))) throw new Error(`anatomy/${f} missing after the build`);
 fs.mkdirSync(STATIC_API, { recursive: true });
 fs.cpSync(path.dirname(keep), STATIC_API, { recursive: true });
@@ -135,7 +162,7 @@ const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })
 walk(OUT);
 const vite = JSON.parse(fs.readFileSync(path.join(VISCERA, 'node_modules/vite/package.json'), 'utf8')).version;
 const unavailable = JSON.parse(fs.readFileSync(path.join(STATIC, 'unavailable.json'), 'utf8')).map((u) => u.id);
-for (const f of ['atlas/catalog.json', 'physics/status.json', 'physics/demo-observation.json', 'physics/playground/hra-liver-female.learned.json.gz']) if (!fs.existsSync(path.join(STATIC_API, f))) throw new Error(`static/api/${f} missing`);
+for (const f of ['atlas/catalog.json', 'atlas/reference-material/examples/colon-1.json', 'atlas/reference-material/regions/dsad-25-6.json', 'physics/status.json', 'physics/demo-observation.json', 'physics/playground/hra-liver-female.learned.json.gz']) if (!fs.existsSync(path.join(STATIC_API, f))) throw new Error(`static/api/${f} missing`);
 fs.writeFileSync(path.join(OUT, 'build.json'), JSON.stringify({ builtAt: new Date().toISOString(), vite, specimens, unavailable, atlasBytes: c.bytesOut, files, bytes }, null, 2) + '\n');
 fs.rmSync(FINAL, { recursive: true, force: true });
 try { fs.renameSync(OUT, FINAL); } catch (e) { fs.cpSync(OUT, FINAL, { recursive: true }); }
