@@ -1,11 +1,11 @@
 {
-  "builtAt": "2026-10-12T18:14:57.741Z",
+  "builtAt": "2026-10-12T19:36:07.199Z",
   "vite": "6.4.4",
   "specimens": 23,
   "unavailable": [
     "hra-heart-male"
   ],
   "atlasBytes": 4976008,
-  "files": 126,
-  "bytes": 127803133
+  "files": 127,
+  "bytes": 127819348
 }

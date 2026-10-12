@@ -75,9 +75,16 @@ own rule, specular spots removed, acquisition shading flattened, and writes it G
 In the browser (`photoDetail.ts`) the tile is projected triplanarly in the organ's rest frame, hex-tiled with random
 offsets and blended histogram-preservingly (Heitz & Neyret 2018; Mikkelsen 2022): no visible repetition, nine texture
 reads per fragment, 60 fps unchanged, and the result divides by the tile's mean so the organ's base colour, preset and
-any transferred reference colour stay exactly what they were. The Surface tab's *Photo detail* slider (100 % = the
-photograph's own contrast) names the source. It is a viewer layer of the public copy: exports do not carry it, and it
-is observed detail with its lighting flattened, not calibrated albedo. The reference-colour panels work in the public
+any transferred reference colour stay exactly what they were. The Surface tab's *Photo detail* controls (strength, 100 % = the
+photograph's own contrast; relief, the photograph's shading as fine surface height; *Use this photograph's colour*, the
+region's observed colour as the studio measures it, transferred as a reference colour) name the source. The whole scene
+lays the same tiles over the structures that have one (Scene controls › Photo detail). It is a viewer layer of the
+public copy: exports do not carry it, and it is observed detail with its lighting flattened, not calibrated albedo.
+Organs without a tile stay procedural: the pancreas photograph has no clean square large enough, the DRENDS colon views
+are too specular under the endoscope light, and a search of Wikimedia Commons found no clean, healthy, compatibly
+licensed in-vivo photographs of kidney, heart, lung, brain, bladder or gallbladder; the full DSAD release (CC BY 4.0)
+is the credible next source for the abdominal organs. `textures/sources.json` adds box-selected photographs, which the
+running API segments. The reference-colour panels work in the public
 copy too: the API's analyses of the bundled photographs and examples are bundled, and the Oklab chroma transfer runs
 in the browser (compared with the API to 1e-7).
 
