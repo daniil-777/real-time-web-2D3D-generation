@@ -121,6 +121,10 @@ const NO_API = /\/api\//;
 const viscera = async (page, url, mode) => {
   await page.goto(base + url, { waitUntil: 'load', timeout: T });
   await flag(page, 'window.__viscera && (window.__viscera.ready || window.__viscera.errors.length)');
+  if (mode === 'atlas') {   // the Surface tab loads the photo tile and the example thumbnails: their paths must resolve too
+    await page.evaluate(() => { [...document.querySelectorAll('button')].find((b) => /^Surface$/.test(b.textContent.trim()))?.click(); });
+    await new Promise((r) => setTimeout(r, 2500));
+  }
   const v = await page.evaluate(() => ({ ...window.__viscera, notice: !!document.querySelector('.api-notice') }));
   if (v.errors.length) throw new Error(v.errors.join(' | '));
   if (v.mode !== mode) throw new Error(`ready in mode ${v.mode}, expected ${mode}`);

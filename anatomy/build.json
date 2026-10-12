@@ -1,5 +1,5 @@
 {
-  "builtAt": "2026-10-12T18:09:01.185Z",
+  "builtAt": "2026-10-12T18:14:57.741Z",
   "vite": "6.4.4",
   "specimens": 23,
   "unavailable": [
@@ -7,5 +7,5 @@
   ],
   "atlasBytes": 4976008,
   "files": 126,
-  "bytes": 127803129
+  "bytes": 127803133
 }
