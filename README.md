@@ -57,16 +57,23 @@ manifold-3d, puppeteer-core — development only; nothing is installed on the si
 
 ### The anatomy studio
 
-https://daniil-777.github.io/real-time-web-2D3D-generation/anatomy/ is VISCERA Studio without its Python API: a static copy. The
-organ studio opens the bundled reference specimen of every template (the API's own answer for default controls, rendered
-at build time), the whole scene loads the compressed whole-body atlas, and the procedural studio (`?mode=legacy`) its
-bundled liver; sculpting, the browser physics preview, the colour tools and the exports they make run in the browser.
-New specimens and variations, disease and learned models, text commands and photo-based colours need the API — the
-page says so in one line under its header, and every such action answers with the same sentence instead of failing
-obscurely. `VITE_API_URL` at build time points the copy at a hosted API instead.
+https://daniil-777.github.io/real-time-web-2D3D-generation/anatomy/ is VISCERA Studio without its Python API: a static copy.
+What runs there, in the browser: the organ studio with every reference template, its shape controls (the API's
+invertible deformation and bounded-deformation checks, repeated in `apps/studio/src/atlasLocal.ts` and compared with the
+API to a micrometre by `atlasLocal.test.ts`), the three appearances, the surface recipes (the same shader, its
+uniforms resolved in the browser), sculpting and surface vessels, the hands-on physics lab for the two reference livers
+(the API's cage and learned parameters, bundled; manual parameters substituted), the whole scene with its learned
+materials and instruments, and the procedural studio (`?mode=legacy`). What needs the API, and says so in one
+sentence wherever it is asked for: the joint shape + colour VAE and the learned samplers, disease morphology, shape
+seeds, text commands, photo-based colours, calibrating the physics from your own measurement, recorded physics
+experiments and the textured GLB / Unity exports. The male heart is refused by the API's own QA gate and is absent.
+`VITE_API_URL` at build time points the copy at a hosted API instead; hosting `services.web.app` (frontend and API
+on one origin, as the temporary tunnel did) is the way to make those features public too — it needs a Python host
+with the trained weights, which this repository does not provide.
 
 `npm run build:anatomy` rebuilds `anatomy/` from `viscera/`: it asks the running API (`npm run api` in `viscera/`) for the
-catalogue and the 24 reference specimens (`static/api/atlas/`, gzipped JSON), builds the studio with Vite for a relative
+catalogue (plus each template's normalisation), the 24 reference specimens in tissue and their source colours, the physics
+status, demonstration calibration and the two reference livers' hands-on cages (`static/api/`, gzipped JSON), builds the studio with Vite for a relative
 base and without source maps, and compresses the atlas (19 MB → 5 MB: quantized, meshopt-encoded; three.js decodes it
 with the decoder it ships). `--keep-specimens` skips the API. Commit the result; the deploy copies it as is.
 
