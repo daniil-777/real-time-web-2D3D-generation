@@ -144,7 +144,7 @@ const r = spawnSync(process.execPath, ['node_modules/vite/bin/vite.js', 'build',
 if (r.status !== 0) { console.error(r.stdout, r.stderr); throw new Error('vite build failed'); }
 console.log(r.stdout.split('\n').filter((l) => /\.js|\.css|built in/.test(l) && !/woff/.test(l)).join('\n'));
 if (fs.readdirSync(path.join(OUT, 'assets')).some((f) => f.endsWith('.map'))) throw new Error('source maps were written');
-for (const f of ['index.html', 'default-scene.json', 'anatomy-scene/bodyparts3d-torso.glb', 'anatomy-scene/manifest.json', 'body-reference/catalog.json', 'textures/manifest.json', 'textures/liver/gauss.png'])
+for (const f of ['index.html', 'textures.html', 'default-scene.json', 'anatomy-scene/bodyparts3d-torso.glb', 'anatomy-scene/manifest.json', 'body-reference/catalog.json', 'textures/manifest.json', 'textures/liver/gauss.png'])
   if (!fs.existsSync(path.join(OUT, f))) throw new Error(`anatomy/${f} missing after the build`);
 fs.mkdirSync(STATIC_API, { recursive: true });
 fs.cpSync(path.dirname(keep), STATIC_API, { recursive: true });

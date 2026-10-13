@@ -2,7 +2,7 @@
 // visitor's browser sees it: the site shell with its three tabs, Arch Studio building two elements from text, the 3D
 // objects and the drawings reaching their first frame, and no console errors anywhere. Exit 1 on any failure.
 //   node test/smoke.mjs [--dir _site] [--url https://host/path/] [--out DIR] [--chrome PATH] [--port 8123] [--timeout 90000]
-//                       [--only home,arch,morph3d,pixel-morph,anatomy,anatomy-scene,anatomy-legacy] [--budget 480000]
+//                       [--only home,arch,morph3d,pixel-morph,anatomy,anatomy-scene,anatomy-legacy,anatomy-textures] [--budget 480000]
 // --dir serves the built tree itself (tools/serve.mjs); --url checks a deployed site instead. Screenshots go to --out.
 // --only picks checks (a machine without a GPU, like a CI runner, can start the CAD app on software WebGL but not the
 // neural apps at a useful speed); --budget is the whole run's limit in ms, after which it fails instead of hanging.
@@ -121,19 +121,24 @@ const NO_API = /\/api\//;
 const viscera = async (page, url, mode) => {
   await page.goto(base + url, { waitUntil: 'load', timeout: T });
   await flag(page, 'window.__viscera && (window.__viscera.ready || window.__viscera.errors.length)');
-  if (mode === 'atlas') {   // the Surface tab loads the photo tile and the example thumbnails: their paths must resolve too
+  if (mode === 'atlas') {   // the Surface tab loads the example thumbnails: their paths must resolve too
     await page.evaluate(() => { [...document.querySelectorAll('button')].find((b) => /^Surface$/.test(b.textContent.trim()))?.click(); });
     await new Promise((r) => setTimeout(r, 2500));
   }
-  const v = await page.evaluate(() => ({ ...window.__viscera, notice: !!document.querySelector('.api-notice') }));
+  if (mode === 'textures') await new Promise((r) => setTimeout(r, 2500));   // opens on the Surface tab; the photo tile loads
+  const v = await page.evaluate(() => ({ ...window.__viscera, notice: !!document.querySelector('.api-notice'), photo: !!document.querySelector('.atlas-photo-detail'), tiles: performance.getEntriesByType('resource').filter((e) => /\/textures\/.*\.png$/.test(e.name)).length }));
   if (v.errors.length) throw new Error(v.errors.join(' | '));
   if (v.mode !== mode) throw new Error(`ready in mode ${v.mode}, expected ${mode}`);
+  // the photo-derived layer belongs to the texture lab alone: the organ studio neither shows its controls nor fetches a tile
+  if (mode === 'textures' && (!v.photo || !v.tiles)) throw new Error(`texture lab without its photo controls (${v.photo}) or tiles (${v.tiles})`);
+  if (mode === 'atlas' && (v.photo || v.tiles)) throw new Error(`organ studio carries the photo layer (controls ${v.photo}, tiles ${v.tiles})`);
   if (v.api === false && !v.notice) throw new Error('no API and no notice about it');
   return `${mode}${v.api === false ? ' · bundled (no API)' : ' · API online'}`;
 };
 await check('anatomy', (page) => viscera(page, 'anatomy/', 'atlas'), NO_API);
 await check('anatomy-scene', (page) => viscera(page, 'anatomy/?mode=scene', 'scene'), NO_API);
 await check('anatomy-legacy', (page) => viscera(page, 'anatomy/?mode=legacy', 'legacy'), NO_API);
+await check('anatomy-textures', (page) => viscera(page, 'anatomy/textures.html', 'textures'), NO_API);
 
 await browser.close();
 if (server) server.close();

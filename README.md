@@ -67,19 +67,25 @@ materials and instruments, and the procedural studio (`?mode=legacy`). What need
 sentence wherever it is asked for: the joint shape + colour VAE and the learned samplers, disease morphology, shape
 seeds, text commands, photo-based colours, calibrating the physics from your own measurement, recorded physics
 experiments and the textured GLB / Unity exports. The male heart is refused by the API's own QA gate and is absent.
-**Photo-derived surface detail (since 2026-10-12).** The organ studio can lay real tissue detail over its procedural
-material: `viscera/pipelines/textures/photo_tiles.py` cuts, from the licensed surgical photographs the studio ships (DSAD,
+**The texture lab (https://daniil-777.github.io/real-time-web-2D3D-generation/anatomy/textures.html, since 2026-10-13;
+the layer itself since 2026-10-12).** The photo-derived surface detail is its own page: the same studio, opened on the
+Surface tab with the layer on, in the organ studio and the whole scene. The organ studio at `anatomy/` carries neither
+the layer nor its controls (it neither fetches a tile nor changes the shader: strength 0 is the plain material, and the
+smoke test checks both pages for that), so it looks and behaves as it did before the layer existed. The lab's
+*Generate from your photograph* control explains, for now, why generation cannot run: the texture pipeline runs on the
+API host, which is not published until a Hugging Face write token is provided. The lab lays real tissue detail over the
+procedural material: `viscera/pipelines/textures/photo_tiles.py` cuts, from the licensed surgical photographs the studio ships (DSAD,
 CC BY 4.0) and their reviewed organ masks, one small seamless tile per organ (liver, stomach, spleen, small and large
 intestine; the pancreas photograph has no clean square large enough) with glare and shadows excluded by the studio's
 own rule, specular spots removed, acquisition shading flattened, and writes it Gaussianised with its inverse lookup.
 In the browser (`photoDetail.ts`) the tile is projected triplanarly in the organ's rest frame, hex-tiled with random
 offsets and blended histogram-preservingly (Heitz & Neyret 2018; Mikkelsen 2022): no visible repetition, nine texture
 reads per fragment, 60 fps unchanged, and the result divides by the tile's mean so the organ's base colour, preset and
-any transferred reference colour stay exactly what they were. The Surface tab's *Photo detail* controls (strength, 100 % = the
+any transferred reference colour stay exactly what they were. The lab's Surface tab *Photo detail* controls (strength, 100 % = the
 photograph's own contrast; relief, the photograph's shading as fine surface height; *Use this photograph's colour*, the
-region's observed colour as the studio measures it, transferred as a reference colour) name the source. The whole scene
-lays the same tiles over the structures that have one (Scene controls › Photo detail). It is a viewer layer of the
-public copy: exports do not carry it, and it is observed detail with its lighting flattened, not calibrated albedo.
+region's observed colour as the studio measures it, transferred as a reference colour) name the source. The lab's whole
+scene lays the same tiles over the structures that have one (Scene controls › Photo detail). It is a viewer layer:
+exports do not carry it, and it is observed detail with its lighting flattened, not calibrated albedo.
 Organs without a tile stay procedural: the pancreas photograph has no clean square large enough, the DRENDS colon views
 are too specular under the endoscope light, and a search of Wikimedia Commons found no clean, healthy, compatibly
 licensed in-vivo photographs of kidney, heart, lung, brain, bladder or gallbladder; the full DSAD release (CC BY 4.0)
