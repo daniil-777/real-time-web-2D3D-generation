@@ -88,9 +88,20 @@ running API segments. The reference-colour panels work in the public
 copy too: the API's analyses of the bundled photographs and examples are bundled, and the Oklab chroma transfer runs
 in the browser (compared with the API to 1e-7).
 
-`VITE_API_URL` at build time points the copy at a hosted API instead; hosting `services.web.app` (frontend and API
-on one origin, as the temporary tunnel did) is the way to make those features public too — it needs a Python host
-with the trained weights, which this repository does not provide.
+**The whole studio, API included (since 2026-10-13).** `viscera/deploy/` packages `services.web.app` (the studio and
+the API on one origin, as the temporary tunnel did) as a container for Hugging Face Spaces (Docker, free CPU tier) or
+Fly.io: `viscera/scripts/stage_deploy.py` assembles the 330 MB the server reads (code, the built studio's sources, the
+atlas, material and language datasets whose release digests the learned samplers verify, the disease recipes and the
+CC BY clinical lane, the weights and the active bundles; never the non-commercial clinical lane or the large joint
+delivery), `deploy/Dockerfile` builds the studio with the frozen lockfile and installs CPU torch plus the pinned Qwen
+base of the text adapter, and the web entry preloads that adapter at start because visitors may not trigger model
+downloads (that route answers 403, as do weight administration and the saved-project listing). `scripts/publish_space.sh
+<user>/<space>` uploads it after `hf auth login`; `scripts/probe_web_app.py <url>` then exercises every feature
+(joint VAE, disease, text commands, physics, exports, the legacy studio, the blocked routes) against the published app,
+and `scripts/verify_stage.sh` rehearses the same container entry point locally without Docker. `viscera/docs/HOSTING.md`
+has the details and the known limits (the ridge material sampler refuses with a source-drift message, there as here).
+Publishing it means pushing the TypeScript and Python sources to the Space repository; a private Space keeps them
+private.
 
 `npm run build:anatomy` rebuilds `anatomy/` from `viscera/`: it asks the running API (`npm run api` in `viscera/`) for the
 catalogue (plus each template's normalisation), the 24 reference specimens in tissue and their source colours, the physics
