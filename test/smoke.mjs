@@ -121,7 +121,18 @@ const NO_API = /\/api\//;
 const viscera = async (page, url, mode) => {
   await page.goto(base + url, { waitUntil: 'load', timeout: T });
   await flag(page, 'window.__viscera && (window.__viscera.ready || window.__viscera.errors.length)');
-  if (mode === 'atlas') {   // the Surface tab loads the example thumbnails: their paths must resolve too
+  if (mode === 'atlas') {
+    // the joint flow samples in the browser (atlasJointLocal.ts): its button must apply a variation without the API
+    await flag(page, "[...document.querySelectorAll('button')].some((b) => /^Joint flow variation$/.test(b.textContent.trim()) && !b.disabled)");
+    await page.evaluate(() => { [...document.querySelectorAll('button')].find((b) => /^Joint flow variation$/.test(b.textContent.trim()))?.click(); });
+    await flag(page, "[...document.querySelectorAll('.atlas-model-status')].some((e) => /Joint flow variation applied/.test(e.textContent)) || window.__viscera.errors.length > 0");
+    // a fresh seed next (the request seed travels into the realized specimen): the status must survive it
+    const seedInput = "document.getElementById('atlas-joint-seed')";
+    const seedBefore = await page.evaluate(`${seedInput}?.value ?? null`);
+    await page.evaluate(() => { [...document.querySelectorAll('button')].find((b) => /^New joint variation$/.test(b.textContent.trim()))?.click(); });
+    await flag(page, `(${seedInput}?.value ?? null) !== ${JSON.stringify(seedBefore)} || window.__viscera.errors.length > 0`);
+    await new Promise((r) => setTimeout(r, 3000));
+    // the Surface tab loads the example thumbnails: their paths must resolve too
     await page.evaluate(() => { [...document.querySelectorAll('button')].find((b) => /^Surface$/.test(b.textContent.trim()))?.click(); });
     await new Promise((r) => setTimeout(r, 2500));
   }
@@ -133,7 +144,9 @@ const viscera = async (page, url, mode) => {
   if (mode === 'textures' && (!v.photo || !v.tiles)) throw new Error(`texture lab without its photo controls (${v.photo}) or tiles (${v.tiles})`);
   if (mode === 'atlas' && (v.photo || v.tiles)) throw new Error(`organ studio carries the photo layer (controls ${v.photo}, tiles ${v.tiles})`);
   if (v.api === false && !v.notice) throw new Error('no API and no notice about it');
-  return `${mode}${v.api === false ? ' · bundled (no API)' : ' · API online'}`;
+  const joint = mode === 'atlas' ? await page.evaluate(() => [...document.querySelectorAll('.atlas-model-status')].some((e) => /Joint flow variation applied/.test(e.textContent))) : null;
+  if (mode === 'atlas' && !joint) throw new Error('the joint flow variation was not applied');
+  return `${mode}${v.api === false ? ' · bundled (no API)' : ' · API online'}${joint ? ' · joint flow sampled' : ''}`;
 };
 await check('anatomy', (page) => viscera(page, 'anatomy/', 'atlas'), NO_API);
 await check('anatomy-scene', (page) => viscera(page, 'anatomy/?mode=scene', 'scene'), NO_API);

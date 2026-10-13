@@ -64,9 +64,17 @@ API to a micrometre by `atlasLocal.test.ts`), the three appearances, the surface
 uniforms resolved in the browser), sculpting and surface vessels, the hands-on physics lab for the two reference livers
 (the API's cage and learned parameters, bundled; manual parameters substituted), the whole scene with its learned
 materials and instruments, and the procedural studio (`?mode=legacy`). What needs the API, and says so in one
-sentence wherever it is asked for: the joint shape + colour VAE and the learned samplers, disease morphology, shape
-seeds, text commands, photo-based colours, calibrating the physics from your own measurement, recorded physics
+sentence wherever it is asked for: the learned shape and material samplers, disease morphology (also through the joint
+flow), text commands, photo-based colours, calibrating the physics from your own measurement, recorded physics
 experiments and the textured GLB / Unity exports. The male heart is refused by the API's own QA gate and is absent.
+**The joint shape + colour flow runs in the browser (since 2026-10-13).** The API's generation-2 model is a NumPy
+conditional rational-quadratic spline flow (438k float32 parameters); `viscera/scripts/export_joint_web.py` exports its
+weights (1.75 MB) and `apps/studio/src/atlasJointLocal.ts` repeats its arithmetic, with numpy's own generator
+(`numpyRandom.ts`: SeedSequence and PCG64, bit for bit) for the renderer seeds and the 22 uniforms, so a seed gives the
+same variation here as on the API. Verified both ways: against 14 of the API's own samples (seeds and uniforms exact;
+flow, controls and recipe within 1.8e-7, float32 rounding) and end to end against `/api/atlas/sample-joint` (controls,
+recipe and provenance agree; positions within 3e-7 mm). Healthy baselines only: a disease condition still needs the
+API's disease renderer, and the button says so.
 **The texture lab (https://daniil-777.github.io/real-time-web-2D3D-generation/anatomy/textures.html, since 2026-10-13;
 the layer itself since 2026-10-12).** The photo-derived surface detail is its own page: the same studio, opened on the
 Surface tab with the layer on, in the organ studio and the whole scene. The organ studio at `anatomy/` carries neither
