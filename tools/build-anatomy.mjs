@@ -140,12 +140,18 @@ if (opt['keep-specimens']) {
   }
 }
 
+// ---- 1b. the hosted API's address, if the public copy names one: anatomy/api.json survives every rebuild
+const FINAL_API_JSON = path.join(FINAL, 'api.json');
+const apiJson = fs.existsSync(FINAL_API_JSON) ? fs.readFileSync(FINAL_API_JSON, 'utf8')
+  : JSON.stringify({ api: null, note: 'Set "api" to the https origin of a hosted VISCERA API (services.web.app) and the public copy uses it for everything; null keeps the browser-only copy.' }, null, 2) + '\n';
+
 // ---- 2. the studio, built for a relative base, without source maps
 const r = spawnSync(process.execPath, ['node_modules/vite/bin/vite.js', 'build', '--config', 'apps/studio/vite.config.ts', '--outDir', OUT, '--emptyOutDir'],
   { cwd: VISCERA, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', env: { ...process.env, VISCERA_BASE: './', VISCERA_SOURCEMAP: '0' } });
 if (r.status !== 0) { console.error(r.stdout, r.stderr); throw new Error('vite build failed'); }
 console.log(r.stdout.split('\n').filter((l) => /\.js|\.css|built in/.test(l) && !/woff/.test(l)).join('\n'));
 if (fs.readdirSync(path.join(OUT, 'assets')).some((f) => f.endsWith('.map'))) throw new Error('source maps were written');
+fs.writeFileSync(path.join(OUT, 'api.json'), apiJson);
 for (const f of ['index.html', 'textures.html', 'models/joint-v2/model.json', 'models/joint-v2/weights.bin', 'default-scene.json', 'anatomy-scene/bodyparts3d-torso.glb', 'anatomy-scene/manifest.json', 'body-reference/catalog.json', 'textures/manifest.json', 'textures/liver/gauss.png'])
   if (!fs.existsSync(path.join(OUT, f))) throw new Error(`anatomy/${f} missing after the build`);
 fs.mkdirSync(STATIC_API, { recursive: true });

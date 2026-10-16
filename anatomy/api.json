@@ -1,0 +1,4 @@
+{
+  "api": null,
+  "note": "Set \"api\" to the https origin of a hosted VISCERA API (services.web.app) and the public copy uses it for everything; null keeps the browser-only copy."
+}

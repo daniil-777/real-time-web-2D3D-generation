@@ -115,7 +115,9 @@ downloads (that route answers 403, as do weight administration and the saved-pro
 and `scripts/verify_stage.sh` rehearses the same container entry point locally without Docker. `viscera/docs/HOSTING.md`
 has the details and the known limits (the ridge material sampler refuses with a source-drift message, there as here).
 Publishing it means pushing the TypeScript and Python sources to the Space repository; a private Space keeps them
-private.
+private. Once a host exists, `anatomy/api.json` (`{"api": "https://<host>"}`, kept across rebuilds) points this public
+copy at it and every feature works on this very page; the host must allow the Pages origin
+(`VISCERA_CORS_ORIGINS=https://daniil-777.github.io`).
 
 `npm run build:anatomy` rebuilds `anatomy/` from `viscera/`: it asks the running API (`npm run api` in `viscera/`) for the
 catalogue (plus each template's normalisation), the 24 reference specimens in tissue and their source colours, the physics
