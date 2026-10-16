@@ -116,24 +116,53 @@ await check('pixel-morph', async (page) => {
 });
 
 // 5. the anatomy studio (VISCERA, a static copy without its API): the three workspaces each reach their first model;
-//    the probe of the absent API is the one request allowed to fail
+//    the probe of the absent API is the one request allowed to fail. In the organ studio every sampler that runs in the
+//    browser is pressed once — the joint flow (healthy, then with a disease), the trained shape model, a disease profile
+//    and its variation — and each must report its status without an error.
 const NO_API = /\/api\//;
+const click = (page, label) => page.evaluate((l) => { const b = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === l); if (!b || b.disabled) return false; b.click(); return true; }, label);
+const enabled = (label) => `[...document.querySelectorAll('button')].some((b) => b.textContent.trim() === ${JSON.stringify(label)} && !b.disabled)`;
+const shown = (selector, re) => `[...document.querySelectorAll(${JSON.stringify(selector)})].some((e) => ${re}.test(e.textContent)) || window.__viscera.errors.length > 0`;
 const viscera = async (page, url, mode) => {
   await page.goto(base + url, { waitUntil: 'load', timeout: T });
   await flag(page, 'window.__viscera && (window.__viscera.ready || window.__viscera.errors.length)');
+  const sampled = [];
   if (mode === 'atlas') {
     // the joint flow samples in the browser (atlasJointLocal.ts): its button must apply a variation without the API
-    await flag(page, "[...document.querySelectorAll('button')].some((b) => /^Joint flow variation$/.test(b.textContent.trim()) && !b.disabled)");
-    await page.evaluate(() => { [...document.querySelectorAll('button')].find((b) => /^Joint flow variation$/.test(b.textContent.trim()))?.click(); });
-    await flag(page, "[...document.querySelectorAll('.atlas-model-status')].some((e) => /Joint flow variation applied/.test(e.textContent)) || window.__viscera.errors.length > 0");
+    await flag(page, enabled('Joint flow variation'));
+    if (!await click(page, 'Joint flow variation')) throw new Error('joint flow button unavailable');
+    await flag(page, shown('.atlas-model-status', /Joint flow variation applied/));
+    sampled.push('joint flow');
     // a fresh seed next (the request seed travels into the realized specimen): the status must survive it
     const seedInput = "document.getElementById('atlas-joint-seed')";
     const seedBefore = await page.evaluate(`${seedInput}?.value ?? null`);
-    await page.evaluate(() => { [...document.querySelectorAll('button')].find((b) => /^New joint variation$/.test(b.textContent.trim()))?.click(); });
+    await click(page, 'New joint variation');
     await flag(page, `(${seedInput}?.value ?? null) !== ${JSON.stringify(seedBefore)} || window.__viscera.errors.length > 0`);
     await new Promise((r) => setTimeout(r, 3000));
+    // the trained shape model (atlasShapeSampler.ts): enabled once its bundled metadata is found, then applied
+    await flag(page, enabled('Learned variation'));
+    if (!await click(page, 'Learned variation')) throw new Error('learned variation button unavailable');
+    await flag(page, shown('.atlas-model-status', /Model variation applied/));
+    sampled.push('learned shape');
+    // a disease profile (atlasDiseaseLocal.ts): the first supported one of the displayed organ, previewed at once
+    await page.click('#atlas-tab-disease');
+    await page.waitForSelector('select[aria-label="Disease profile"]');
+    const profile = await page.$eval('select[aria-label="Disease profile"]', (s) => [...s.options].find((o) => o.value && !o.disabled)?.value ?? null);
+    if (!profile) throw new Error('no supported disease profile to pick');
+    await page.select('select[aria-label="Disease profile"]', profile);
+    await flag(page, shown('.atlas-stage-disease', /synthetic prototype/));
+    // its variation (a fresh seed for shape and disease together), then the joint flow with the disease condition
+    const diseaseSeed = await page.evaluate("document.getElementById('atlas-disease-seed')?.value ?? null");
+    if (!await click(page, 'Generate variation')) throw new Error('disease variation button unavailable');
+    await flag(page, `(document.getElementById('atlas-disease-seed')?.value ?? null) !== ${JSON.stringify(diseaseSeed)} || window.__viscera.errors.length > 0`);
+    await flag(page, shown('.atlas-disease-panel .atlas-recipe-state', /Preview matches this recipe/));
+    sampled.push(`disease ${profile}`);
+    if (!await click(page, 'Joint flow variation')) throw new Error('joint flow button unavailable with a disease');
+    await flag(page, shown('.atlas-model-status', /Joint flow variation applied/));
+    if (!await page.$('.atlas-stage-disease')) throw new Error('the joint flow variation dropped the disease');
+    sampled.push('joint flow with disease');
     // the Surface tab loads the example thumbnails: their paths must resolve too
-    await page.evaluate(() => { [...document.querySelectorAll('button')].find((b) => /^Surface$/.test(b.textContent.trim()))?.click(); });
+    await click(page, 'Surface');
     await new Promise((r) => setTimeout(r, 2500));
   }
   if (mode === 'textures') await new Promise((r) => setTimeout(r, 2500));   // opens on the Surface tab; the photo tile loads
@@ -144,9 +173,7 @@ const viscera = async (page, url, mode) => {
   if (mode === 'textures' && (!v.photo || !v.tiles)) throw new Error(`texture lab without its photo controls (${v.photo}) or tiles (${v.tiles})`);
   if (mode === 'atlas' && (v.photo || v.tiles)) throw new Error(`organ studio carries the photo layer (controls ${v.photo}, tiles ${v.tiles})`);
   if (v.api === false && !v.notice) throw new Error('no API and no notice about it');
-  const joint = mode === 'atlas' ? await page.evaluate(() => [...document.querySelectorAll('.atlas-model-status')].some((e) => /Joint flow variation applied/.test(e.textContent))) : null;
-  if (mode === 'atlas' && !joint) throw new Error('the joint flow variation was not applied');
-  return `${mode}${v.api === false ? ' · bundled (no API)' : ' · API online'}${joint ? ' · joint flow sampled' : ''}`;
+  return `${mode}${v.api === false ? ' · bundled (no API)' : ' · API online'}${sampled.length ? ' · sampled: ' + sampled.join(', ') : ''}`;
 };
 await check('anatomy', (page) => viscera(page, 'anatomy/', 'atlas'), NO_API);
 await check('anatomy-scene', (page) => viscera(page, 'anatomy/?mode=scene', 'scene'), NO_API);

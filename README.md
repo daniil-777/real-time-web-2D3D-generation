@@ -64,9 +64,14 @@ API to a micrometre by `atlasLocal.test.ts`), the three appearances, the surface
 uniforms resolved in the browser), sculpting and surface vessels, the hands-on physics lab for the two reference livers
 (the API's cage and learned parameters, bundled; manual parameters substituted), the whole scene with its learned
 materials and instruments, and the procedural studio (`?mode=legacy`). What needs the API, and says so in one
-sentence wherever it is asked for: the learned shape and material samplers, disease morphology (also through the joint
-flow), text commands, photo-based colours, calibrating the physics from your own measurement, recorded physics
-experiments and the textured GLB / Unity exports. The male heart is refused by the API's own QA gate and is absent.
+sentence wherever it is asked for: the trained material sampler, text commands, the analysis of your own photograph,
+calibrating the physics from your own measurement, recorded physics experiments and the textured GLB / Unity exports.
+**Since 2026-10-16 the trained samplers run in the browser too:** disease morphology (the disease-v2 renderer, within
+3e-14 mm of the API over 62 live cases), the learned shape sampler with scipy's trust-region refinement ported (1e-8
+on the controls), the disease recipe sampler (four float32 ulps), and the joint flow with a disease condition; numpy's
+generator is reproduced bit for bit (ziggurat normal, Lemire draws, permutations). The sources, the deploy packages and
+a standalone copy of this app live at https://github.com/daniil-777/surgery-anatomical-variations
+(https://daniil-777.github.io/surgery-anatomical-variations/, built by that repository's own workflow).
 **The joint shape + colour flow runs in the browser (since 2026-10-13).** The API's generation-2 model is a NumPy
 conditional rational-quadratic spline flow (438k float32 parameters); `viscera/scripts/export_joint_web.py` exports its
 weights (1.75 MB) and `apps/studio/src/atlasJointLocal.ts` repeats its arithmetic, with numpy's own generator
